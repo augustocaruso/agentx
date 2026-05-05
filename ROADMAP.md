@@ -16,7 +16,7 @@ Com o tempo, o sync deixa de ser Gemini-first e vira tool-neutral.
 
 ## Estado atual
 
-Ultima verificacao local: `ogb 0.0.23`, OpenCode `1.14.35`, dashboard
+Ultima verificacao local: `ogb 0.0.24`, OpenCode `1.14.35`, dashboard
 `PASS` na home local.
 
 Ja existe uma base funcional:

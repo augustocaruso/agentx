@@ -86,6 +86,7 @@ Update depois que o `ogb` ja esta instalado:
 ```bash
 ogb --project "$PWD" self-update
 ogb --project "$PWD" self-update --dry-run
+ogb --project "$PWD" self-update --release v0.0.24
 ```
 
 O `self-update` baixa a release escolhida, roda o bootstrap oficial e reaplica

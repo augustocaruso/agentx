@@ -397,7 +397,7 @@ program.command("self-update")
   .alias("upgrade-ogb")
   .description("Update OGB from the GitHub release pack and reapply the local UX profile")
   .option("--repo <owner/repo>", "GitHub repo that publishes OGB releases", "augustocaruso/opencode-gemini-bridge")
-  .option("--version <tag>", "Release tag to install; defaults to latest", "latest")
+  .option("--release <tag>", "Release tag to install; defaults to latest", "latest")
   .option("--prefix <path>", "Install prefix passed to the installer")
   .option("--rulesync <mode>", "Rulesync mode passed to first-run setup", "auto")
   .option("--no-setup", "Update ogb/profile only; skip import/setup/doctor validation")
@@ -410,7 +410,7 @@ program.command("self-update")
     const { project } = commonProjectOptions();
     const report = runSelfUpdate({
       repo: opts.repo,
-      version: opts.version,
+      version: opts.release,
       projectRoot: project,
       prefix: opts.prefix,
       rulesync: opts.rulesync,
