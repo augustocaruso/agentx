@@ -198,6 +198,7 @@ export interface SetupUxOptions {
   force?: boolean;
   installPlugins?: boolean;
   installOpenCode?: boolean;
+  installShellLauncher?: boolean;
   writeProjectProfile?: boolean;
 }
 
@@ -222,6 +223,7 @@ export interface SetupUxReport {
   agentsDir: string;
   fallbackConfigPath: string;
   ogbConfigPath?: string;
+  shellLauncherPath?: string;
   writes: SetupUxWrite[];
   commands: SetupUxCommand[];
   warnings: string[];
@@ -422,6 +424,55 @@ function projectConfigText(): string {
   return `${JSON.stringify(OGB_UX_PROJECT_CONFIG, null, 2)}\n`;
 }
 
+const SHELL_LAUNCHER_BEGIN = "OGB OpenCode launcher";
+const POSIX_SHELL_LAUNCHER = `# >>> ${SHELL_LAUNCHER_BEGIN} >>>
+# Plain \`opencode\` opens through OGB so YOLO is forced unless the project has
+# another local default_agent. Subcommands still go to the real OpenCode CLI.
+opencode() {
+  if [ "$#" -eq 0 ]; then
+    command ogb open
+  else
+    command opencode "$@"
+  fi
+}
+# <<< ${SHELL_LAUNCHER_BEGIN} <<<
+`;
+
+const POWERSHELL_LAUNCHER = `# >>> ${SHELL_LAUNCHER_BEGIN} >>>
+# Plain opencode opens through OGB so YOLO is forced unless the project has
+# another local default_agent. Subcommands still go to the real OpenCode CLI.
+function opencode {
+  if ($args.Count -eq 0) {
+    ogb open
+  } else {
+    $realOpenCode = Get-Command opencode -CommandType Application | Select-Object -First 1
+    & $realOpenCode.Source @args
+  }
+}
+# <<< ${SHELL_LAUNCHER_BEGIN} <<<
+`;
+
+function shellLauncherPath(homeDir: string): string {
+  if (process.platform === "win32") return path.join(homeDir, "Documents", "PowerShell", "Microsoft.PowerShell_profile.ps1");
+  const shell = path.basename(process.env.SHELL || "");
+  return shell.includes("bash") ? path.join(homeDir, ".bashrc") : path.join(homeDir, ".zshrc");
+}
+
+function shellLauncherText(): string {
+  return process.platform === "win32" ? POWERSHELL_LAUNCHER : POSIX_SHELL_LAUNCHER;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function upsertManagedBlock(current: string, block: string): string {
+  const pattern = new RegExp(`# >>> ${escapeRegExp(SHELL_LAUNCHER_BEGIN)} >>>[\\s\\S]*?# <<< ${escapeRegExp(SHELL_LAUNCHER_BEGIN)} <<<\\n?`);
+  if (pattern.test(current)) return current.replace(pattern, block);
+  const prefix = current && !current.endsWith("\n") ? `${current}\n` : current;
+  return `${prefix}${prefix ? "\n" : ""}${block}`;
+}
+
 function writeText(options: {
   filePath: string;
   text: string;
@@ -436,6 +487,17 @@ function writeText(options: {
   if (options.dryRun) return { path: options.filePath, status: "preview" };
   fs.mkdirSync(path.dirname(options.filePath), { recursive: true });
   fs.writeFileSync(options.filePath, options.text, "utf8");
+  return { path: options.filePath, status: exists ? "updated" : "created" };
+}
+
+function writeManagedShellLauncher(options: { filePath: string; text: string; dryRun?: boolean }): SetupUxWrite {
+  const exists = fs.existsSync(options.filePath);
+  const current = exists ? fs.readFileSync(options.filePath, "utf8") : "";
+  const next = upsertManagedBlock(current, options.text);
+  if (current === next) return { path: options.filePath, status: "unchanged" };
+  if (options.dryRun) return { path: options.filePath, status: "preview" };
+  fs.mkdirSync(path.dirname(options.filePath), { recursive: true });
+  fs.writeFileSync(options.filePath, next, "utf8");
   return { path: options.filePath, status: exists ? "updated" : "created" };
 }
 
@@ -495,6 +557,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const dcpConfigPath = path.join(root, "dcp.jsonc");
   const fallbackConfigPath = path.join(root, "plugins", "fallback.json");
   const ogbConfigPath = projectRoot ? path.join(projectRoot, ".opencode", "ogb.config.jsonc") : undefined;
+  const launcherPath = shellLauncherPath(homeDir);
   const writes: SetupUxWrite[] = [];
   const commands: SetupUxCommand[] = [];
   const warnings: string[] = [];
@@ -543,6 +606,13 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     text: yoloAgentContent(),
     dryRun: options.dryRun,
   }));
+  if (options.installShellLauncher !== false) {
+    writes.push(writeManagedShellLauncher({
+      filePath: launcherPath,
+      text: shellLauncherText(),
+      dryRun: options.dryRun,
+    }));
+  }
 
   if (ogbConfigPath && options.writeProjectProfile !== false) {
     writes.push(writeText({
@@ -583,6 +653,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     agentsDir,
     fallbackConfigPath,
     ogbConfigPath,
+    shellLauncherPath: options.installShellLauncher === false ? undefined : launcherPath,
     writes,
     commands,
     warnings,

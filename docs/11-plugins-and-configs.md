@@ -59,8 +59,11 @@ pessoa preferir abrir no agente conservador, troque para `"agent"`.
 
 O `setup-ux` tambem grava esse default no config global do OpenCode, para o
 YOLO ser usado fora de projetos OGB. Um projeto ainda pode sobrescrever com seu
-proprio `default_agent`; nesses casos, `opencode --agent YOLO` ou
-`ogb launch --yolo` forcam o agente.
+proprio `default_agent`; `ogb open` respeita esse override e, quando nao existe
+override local, passa `--agent YOLO` para evitar sessoes antigas salvas como
+`agent`. O `setup-ux` tambem instala uma funcao de shell para `opencode` sem
+argumentos usar esse launcher sem quebrar `opencode run`, `opencode --version`
+e outros subcomandos.
 
 Arquivos principais:
 

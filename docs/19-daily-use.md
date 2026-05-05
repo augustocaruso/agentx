@@ -5,10 +5,11 @@
 Na maioria dos dias:
 
 ```bash
-opencode
+ogb open
 ```
 
-O plugin de startup tenta rodar `ogb sync` quando o OpenCode abre.
+Esse comando abre o OpenCode no YOLO quando nao existe `default_agent` local
+diferente. O plugin de startup tenta rodar `ogb sync` quando o OpenCode abre.
 
 Quando quiser o caminho mais confiavel:
 

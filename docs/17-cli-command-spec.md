@@ -203,7 +203,7 @@ Atualiza o OGB a partir do GitHub Release oficial e reaplica o perfil local.
 ```bash
 ogb --project "$PWD" self-update
 ogb --project "$PWD" self-update --dry-run
-ogb --project "$PWD" self-update --release v0.0.28
+ogb --project "$PWD" self-update --release v0.0.29
 ogb --project "$PWD" self-update --no-setup
 ```
 
@@ -263,6 +263,26 @@ ogb adopt-agent-sync --json
 Este comando nao instala daemon e nao muda arquivos de regras. Ele so lista
 candidatos a sync, observacao ou exclusao.
 
+### `ogb open`
+
+Abre a TUI do OpenCode sem rodar sync/doctor antes.
+
+```bash
+ogb open
+ogb open --agent YOLO
+ogb open --yolo
+```
+
+Regra do agente:
+
+```text
+--agent/--yolo explicito -> default_agent do projeto -> openCode.defaultAgent do OGB -> YOLO
+```
+
+O comando sempre passa `--agent <nome>` para o OpenCode. Isso evita depender
+apenas de `default_agent`, porque a TUI pode reabrir uma sessao antiga que foi
+salva com outro agente.
+
 ### `ogb launch`
 
 Prepara e abre OpenCode.
@@ -278,7 +298,7 @@ ogb launch --yolo
 Fluxo:
 
 ```text
-inventory → flatten → sync → doctor → opencode [--agent <name>]
+inventory → flatten → sync → doctor → opencode --agent <resolved-agent>
 ```
 
 ### Agente `yolo`
@@ -329,6 +349,7 @@ Deve:
 - gravar config global de DCP e `plugins/fallback.json`;
 - instalar `YOLO.md` como agente global OpenCode;
 - definir o agente padrao global a partir de `openCode.defaultAgent` do perfil OGB;
+- instalar uma funcao de shell que faz `opencode` sem argumentos abrir via `ogb open`, preservando subcomandos do OpenCode;
 - gravar `.opencode/ogb.config.jsonc` no projeto com as regras de fallback/subagente do OGB;
 - não substituir `.opencode/ogb.config.jsonc` divergente sem `--force`.
 

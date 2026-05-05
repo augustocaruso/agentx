@@ -88,13 +88,15 @@ menos perguntas.
 Para abrir direto no agente YOLO:
 
 ```bash
+ogb open
 opencode --agent YOLO
 ogb launch --yolo
 ```
 
 Depois do `setup-ux`, o config global do OpenCode ja fica com
-`default_agent: "YOLO"`, entao `opencode` abre no YOLO em qualquer pasta que nao
-tenha um override local diferente.
+`default_agent: "YOLO"`. Para evitar que a TUI reabra uma sessao antiga salva
+como `agent`, prefira `ogb open`: ele passa `--agent YOLO`, exceto quando o
+projeto tem outro `default_agent` local.
 
 Para deixar o YOLO como padrao do projeto:
 
