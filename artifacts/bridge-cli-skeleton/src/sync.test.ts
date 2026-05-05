@@ -168,18 +168,38 @@ test("syncToOpenCode removes old lowercase YOLO agent when it was managed by ogb
 test("syncToOpenCode projects Gemini extension skills into OpenCode skills", () => {
   const projectRoot = tempProject();
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
-  const skillDir = path.join(homeDir, ".gemini", "extensions", "study-pack", "skills", "review-notes");
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const skillDir = path.join(extensionDir, "skills", "review-notes");
   fs.mkdirSync(skillDir, { recursive: true });
-  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: review-notes\ndescription: Review notes.\n---\n# Review\n");
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), `---\nname: review-notes\ndescription: Review notes.\n---\n# Review\nRead ${"${extensionPath}"}${"${/}"}references${"${/}"}guide.md\n`);
   fs.mkdirSync(path.join(skillDir, "references"), { recursive: true });
-  fs.writeFileSync(path.join(skillDir, "references", "guide.md"), "# Guide\n");
+  fs.writeFileSync(path.join(skillDir, "references", "guide.md"), `# Guide\nBundle: ${"${extensionPath}"}\n`);
 
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   const projected = path.join(projectRoot, ".opencode", "skills", "review-notes");
+  const projectedSkill = fs.readFileSync(path.join(projected, "SKILL.md"), "utf8");
+  const projectedGuide = fs.readFileSync(path.join(projected, "references", "guide.md"), "utf8");
 
   assert.ok(report.projectedSkills.includes(".opencode/skills/review-notes"));
   assert.equal(fs.existsSync(path.join(projected, "SKILL.md")), true);
   assert.equal(fs.existsSync(path.join(projected, "references", "guide.md")), true);
+  assert.match(projectedSkill, new RegExp(path.join(extensionDir, "references", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(projectedSkill, /\$\{extensionPath\}/);
+  assert.match(projectedGuide, new RegExp(extensionDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("syncToOpenCode resolves extension placeholders in expanded Gemini context", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  fs.mkdirSync(extensionDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "GEMINI.md"), `Use ${"${extensionPath}"}${"${/}"}docs${"${/}"}guide.md\n`);
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
+  const expanded = fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "GEMINI.expanded.md"), "utf8");
+
+  assert.match(expanded, new RegExp(path.join(extensionDir, "docs", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(expanded, /\$\{extensionPath\}/);
 });
 
 test("syncToOpenCode projects Gemini extension TOML commands and maps risky resources", () => {
