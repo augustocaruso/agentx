@@ -50,20 +50,20 @@ try {
     Fail "Nao encontrei install.ps1 no pacote baixado do GitHub."
   }
 
-  $Args = @("-Force")
+  $InstallerArgs = @("-Force")
   if ($Project -and $Project.Trim()) {
     $Project = [System.IO.Path]::GetFullPath($Project.Trim('" '))
     if (-not (Test-Path $Project)) {
       Fail "Esse caminho de projeto nao existe: $Project"
     }
-    $Args = @("-Project", $Project, "-Force")
+    $InstallerArgs = @("-Project", $Project, "-Force")
   } else {
-    $Args = @("-NoSetup", "-Force")
+    $InstallerArgs = @("-NoSetup", "-Force")
   }
 
   Write-Host ""
   Write-Host "Rodando instalador..."
-  & $Installer.FullName @Args
+  & $Installer.FullName @InstallerArgs
 
   Write-Host ""
   Write-Host "Pronto. Abra um PowerShell novo e rode: ogb --version" -ForegroundColor Green

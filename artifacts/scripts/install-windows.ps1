@@ -32,22 +32,59 @@ function Resolve-DefaultPrefix {
   return Join-Path $HOME "AppData\Roaming\npm"
 }
 
+function Normalize-PathForCompare($PathValue) {
+  try {
+    return [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($PathValue))
+  } catch {
+    return $PathValue
+  }
+}
+
 function Add-UserPath($Dir) {
   if (-not $Dir) {
     return
   }
-  $FullDir = [System.IO.Path]::GetFullPath($Dir)
+  $FullDir = Normalize-PathForCompare $Dir
   $CurrentParts = @($env:Path -split ";" | Where-Object { $_ })
-  if ($CurrentParts -notcontains $FullDir) {
+  if (($CurrentParts | ForEach-Object { Normalize-PathForCompare $_ }) -notcontains $FullDir) {
     $env:Path = "$FullDir;$env:Path"
   }
 
   $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
   $UserParts = @($UserPath -split ";" | Where-Object { $_ })
-  if ($UserParts -notcontains $FullDir) {
+  if (($UserParts | ForEach-Object { Normalize-PathForCompare $_ }) -notcontains $FullDir) {
     $NextUserPath = if ($UserPath) { "$FullDir;$UserPath" } else { $FullDir }
     [Environment]::SetEnvironmentVariable("Path", $NextUserPath, "User")
     Write-Host "Added $FullDir to your user PATH. Open a new terminal to use ogb directly."
+  }
+}
+
+function Remove-UserPath($Dir) {
+  if (-not $Dir) {
+    return
+  }
+  $FullDir = Normalize-PathForCompare $Dir
+  $env:Path = (@($env:Path -split ";" | Where-Object {
+    $_ -and ((Normalize-PathForCompare $_) -ne $FullDir)
+  }) -join ";")
+
+  $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  $NextUserPath = (@($UserPath -split ";" | Where-Object {
+    $_ -and ((Normalize-PathForCompare $_) -ne $FullDir)
+  }) -join ";")
+  if ($NextUserPath -ne $UserPath) {
+    [Environment]::SetEnvironmentVariable("Path", $NextUserPath, "User")
+    Write-Host "Removed broken PATH entry: $FullDir"
+  }
+}
+
+function Repair-BrokenForceInstall {
+  $BrokenPrefix = Join-Path $HOME "-Force"
+  $BrokenShim = Join-Path $BrokenPrefix "ogb.cmd"
+  $BrokenPackage = Join-Path $BrokenPrefix "node_modules\opencode-gemini-bridge"
+  if ((Test-Path $BrokenShim) -or (Test-Path $BrokenPackage)) {
+    Remove-UserPath $BrokenPrefix
+    Remove-Item -Recurse -Force $BrokenPrefix -ErrorAction SilentlyContinue
   }
 }
 
@@ -58,9 +95,11 @@ $CliDir = Join-Path $ArtifactsDir "bridge-cli-skeleton"
 Require-Command "node"
 Require-Command "npm"
 
-if (-not $Prefix) {
+if ((-not $Prefix) -or $Prefix.Trim().StartsWith("-")) {
   $Prefix = Resolve-DefaultPrefix
 }
+
+Repair-BrokenForceInstall
 
 New-Item -ItemType Directory -Force (Join-Path $HOME ".config\opencode") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $HOME ".agents\skills") | Out-Null
