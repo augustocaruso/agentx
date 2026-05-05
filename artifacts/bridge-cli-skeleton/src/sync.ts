@@ -4,7 +4,7 @@ import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES, REMOV
 import { projectGeminiExtensionCommands } from "./extension-projection.js";
 import { externalOpenCodePlugins, externalTuiPlugins, projectExternalIntegrations } from "./external-integrations.js";
 import { buildInventory } from "./inventory.js";
-import { readOgbConfig } from "./ogb-config.js";
+import { defaultOpenCodeAgent, readOgbConfig } from "./ogb-config.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import { ensureProjectConfig } from "./project-config.js";
 import { projectRulesyncProjection, type RulesyncMode, type RulesyncProjectionResult } from "./rulesync.js";
@@ -304,6 +304,7 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
       force: options.force,
       mcp,
       plugins: openCodePlugins,
+      defaultAgent: defaultOpenCodeAgent(ogbConfig),
     });
     if (configResult.status === "conflict") warnings.push(configResult.message ?? "opencode.jsonc conflict");
   }

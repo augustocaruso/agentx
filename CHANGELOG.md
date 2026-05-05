@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.27 - default agent profile
+
+- Adiciona `openCode.defaultAgent` ao perfil OGB para escolher o agente padrao projetado em `opencode.jsonc`.
+- Define o perfil distribuivel do OGB para abrir com `YOLO` por padrao, mantendo permissoes globais conservadoras.
+- Adiciona `ogb launch --agent <name>` e o atalho `ogb launch --yolo`.
+
 ## 0.0.26 - restore quota refresh
 
 - Restaura a coleta de quota Anthropic e Gemini quando os access tokens do OpenCode expiraram.

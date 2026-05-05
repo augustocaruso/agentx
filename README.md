@@ -86,7 +86,7 @@ Update depois que o `ogb` ja esta instalado:
 ```bash
 ogb --project "$PWD" self-update
 ogb --project "$PWD" self-update --dry-run
-ogb --project "$PWD" self-update --release v0.0.26
+ogb --project "$PWD" self-update --release v0.0.27
 ```
 
 O `self-update` baixa a release escolhida, roda o bootstrap oficial e reaplica
@@ -100,6 +100,8 @@ ogb sync
 ogb doctor
 ogb dashboard
 opencode
+opencode --agent YOLO
+ogb launch --yolo
 ```
 
 O Rulesync entra como auxiliar opcional no `ogb import` e no `ogb sync`: o bridge roda a conversão em staging temporário, promove apenas arquivos seguros/gerenciados e mantém `GEMINI.md` como fonte de verdade.
@@ -110,7 +112,27 @@ O modo YOLO e instalado como agente separado do OpenCode:
 .opencode/agents/YOLO.md
 ```
 
-Ele libera `edit` e `bash` apenas quando voce escolhe o agente `YOLO`; as permissoes globais continuam conservadoras.
+Ele libera `edit` e `bash` quando o agente ativo e `YOLO`; as permissoes globais continuam conservadoras.
+
+Para abrir diretamente no YOLO:
+
+```bash
+opencode --agent YOLO
+ogb launch --yolo
+```
+
+Para deixar o YOLO como agente padrao do projeto distribuido pelo OGB:
+
+```jsonc
+{
+  "openCode": {
+    "defaultAgent": "YOLO"
+  }
+}
+```
+
+Esse bloco fica em `.opencode/ogb.config.jsonc`; o `ogb sync` traduz isso para
+`default_agent` no `opencode.jsonc`.
 
 O sync tambem instala comandos de uso diario dentro do OpenCode:
 

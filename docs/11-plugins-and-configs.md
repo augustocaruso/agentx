@@ -44,6 +44,19 @@ Ele grava somente configuracoes, plugins, comandos globais, DCP, YOLO e as
 politicas de fallback/subagente. O conteudo unico do Gemini CLI de cada pessoa
 continua local e entra no OpenCode pelo `ogb sync`.
 
+O agente padrao tambem fica no perfil OGB:
+
+```jsonc
+{
+  "openCode": {
+    "defaultAgent": "YOLO"
+  }
+}
+```
+
+`ogb sync` projeta esse valor para `default_agent` no `opencode.jsonc`. Se a
+pessoa preferir abrir no agente conservador, troque para `"agent"`.
+
 Arquivos principais:
 
 - macOS/Linux: `~/.config/opencode/opencode.json`;

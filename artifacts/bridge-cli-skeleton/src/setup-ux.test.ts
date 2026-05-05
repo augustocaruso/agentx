@@ -36,7 +36,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.deepEqual(globalConfig.plugin, OGB_UX_PLUGINS);
   assert.equal(globalConfig.share, "manual");
-  assert.equal(globalConfig.default_agent, "agent");
+  assert.equal(globalConfig.default_agent, "YOLO");
   assert.equal(globalConfig.agent.build.disable, true);
   assert.equal(globalConfig.agent.agent.permission.question, "allow");
   assert.equal(globalConfig.agent.compaction.model, "openai/gpt-5.4-mini");
@@ -58,6 +58,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fallback.agentFallbacks["med-chat-triager"][0].reasoningEffort, "medium");
 
   const projectConfig = parseJsonc(fs.readFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), "utf8"));
+  assert.equal(projectConfig.openCode.defaultAgent, "YOLO");
   assert.equal(projectConfig.externalPlugins.autoFallback.installProjectPlugin, false);
   assert.equal(projectConfig.modelFallbacks.agents["med-knowledge-architect"].model.variant, "high");
   assert.equal(projectConfig.modelFallbacks.agents["med-chat-triager"].model.variant, "high");

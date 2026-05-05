@@ -33,6 +33,15 @@ test("ensureProjectConfig creates a conservative OpenCode config and avoids manu
   assert.equal(configReferencesExpandedGemini(projectRoot), false);
 });
 
+test("ensureProjectConfig can choose a default OpenCode agent", () => {
+  const projectRoot = tempProject();
+  const created = ensureProjectConfig({ projectRoot, defaultAgent: "YOLO" });
+
+  assert.equal(created.status, "created");
+  const parsed = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
+  assert.equal(parsed.default_agent, "YOLO");
+});
+
 test("ensureProjectConfig includes external plugin specs when configured", () => {
   const projectRoot = tempProject();
   const created = ensureProjectConfig({

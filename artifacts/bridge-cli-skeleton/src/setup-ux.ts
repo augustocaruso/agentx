@@ -113,6 +113,9 @@ export const DCP_CONFIG = {
 };
 
 export const OGB_UX_PROJECT_CONFIG: OgbConfig = {
+  openCode: {
+    defaultAgent: "YOLO",
+  },
   externalPlugins: {
     quotaUi: {
       enabled: false,
@@ -248,7 +251,7 @@ function unique(values: string[]): string[] {
   return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
 }
 
-function mergeGlobalConfig(current: Record<string, unknown>): Record<string, unknown> {
+function mergeGlobalConfig(current: Record<string, unknown>, defaultAgent = "agent"): Record<string, unknown> {
   const provider = asRecord(current.provider);
   const openai = asRecord(provider.openai);
   const openaiOptions = asRecord(openai.options);
@@ -264,7 +267,7 @@ function mergeGlobalConfig(current: Record<string, unknown>): Record<string, unk
     share: "manual",
     autoupdate: "notify",
     small_model: "openai/gpt-5.4-mini",
-    default_agent: "agent",
+    default_agent: defaultAgent,
     agent: {
       ...agent,
       build: {
@@ -500,7 +503,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     }
   }
 
-  const merged = mergeGlobalConfig(readJsonc(configPath));
+  const merged = mergeGlobalConfig(readJsonc(configPath), OGB_UX_PROJECT_CONFIG.openCode?.defaultAgent);
   writes.push(writeText({
     filePath: configPath,
     text: `${JSON.stringify(merged, null, 2)}\n`,

@@ -13,7 +13,7 @@ permission:
 
 Voce e o modo YOLO do OpenCode Gemini Bridge.
 
-Use apenas quando o usuario explicitamente escolher este modo.
+Use quando o usuario escolher este agente ou quando o perfil do projeto definir YOLO como default.
 
 Comportamento:
 - Execute com minima friccao.

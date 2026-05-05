@@ -41,9 +41,26 @@ test("syncToOpenCode writes bridge-native generated config without Rulesync", ()
   assert.deepEqual(generated.instructions, [".opencode/generated/GEMINI.expanded.md"]);
   assert.deepEqual(generated.mcp.local.command, ["node", "server.js"]);
   assert.deepEqual(projectConfig.mcp.local.command, ["node", "server.js"]);
+  assert.equal(projectConfig.default_agent, "agent");
   assert.ok(report.projectedTuiFiles.includes(TUI_SIDEBAR_PLUGIN_PATH));
   assert.ok(report.projectedTuiFiles.includes(TUI_CONFIG_PATH));
   assert.deepEqual(tuiConfig.plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
+});
+
+test("syncToOpenCode projects default OpenCode agent from OGB config", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+    openCode: {
+      defaultAgent: "YOLO",
+    },
+  }, null, 2) + "\n");
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
+  const projectConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
+
+  assert.equal(projectConfig.default_agent, "YOLO");
 });
 
 test("syncToOpenCode projects built-in YOLO agent", () => {

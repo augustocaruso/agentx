@@ -7,7 +7,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { externalOpenCodePlugins, externalTuiPlugins } from "./external-integrations.js";
 import { sha256Text } from "./file-hash.js";
-import { readOgbConfig } from "./ogb-config.js";
+import { defaultOpenCodeAgent, readOgbConfig } from "./ogb-config.js";
 import { resolveProjectPaths, toPosixRelative } from "./paths.js";
 import { ensureProjectConfig, type ProjectConfigResult } from "./project-config.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
@@ -632,6 +632,7 @@ export function setupOpenCode(options: SetupOpenCodeOptions = {}): SetupOpenCode
     force: options.force,
     mcp: currentMcpConfig(paths.projectRoot),
     plugins: externalOpenCodePlugins(ogbConfig),
+    defaultAgent: defaultOpenCodeAgent(ogbConfig),
   });
   if (opencodeConfig.status === "conflict") warnings.push(opencodeConfig.message ?? "opencode.jsonc conflict");
 

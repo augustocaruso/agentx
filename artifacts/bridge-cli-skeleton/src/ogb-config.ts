@@ -33,6 +33,9 @@ export interface ModelFallbackPolicy extends ModelRuntimeOptions {
 }
 
 export interface OgbConfig {
+  openCode?: {
+    defaultAgent?: string;
+  };
   externalPlugins?: {
     quotaUi?: {
       enabled?: boolean;
@@ -75,6 +78,11 @@ export interface OgbConfig {
     extensions?: Record<string, ModelFallbackPolicy | ModelFallbackEntry[]>;
     agents?: Record<string, ModelFallbackPolicy | ModelFallbackEntry[]>;
   };
+}
+
+export function defaultOpenCodeAgent(config: OgbConfig | undefined, fallback = "agent"): string {
+  const raw = config?.openCode?.defaultAgent;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
 }
 
 export interface ResolvedAgentFallback {

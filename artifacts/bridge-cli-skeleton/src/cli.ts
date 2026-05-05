@@ -10,6 +10,7 @@ import { formatCommand, installGeminiExtension, updateGeminiExtensions } from ".
 import { flattenGeminiMd } from "./flatten.js";
 import { buildInventory, writeInventory } from "./inventory.js";
 import { formatLimits, refreshLimits } from "./limits.js";
+import { buildOpenCodeLaunchArgs } from "./launch.js";
 import { readOgbConfig } from "./ogb-config.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import { ensureProjectConfig } from "./project-config.js";
@@ -330,6 +331,8 @@ program.command("launch")
   .option("--doctor <mode>", "Doctor mode: normal or strict", "normal")
   .option("--rulesync <mode>", "Rulesync mode: auto, off, require", "auto")
   .option("--no-rulesync", "Disable Rulesync")
+  .option("--agent <name>", "Start OpenCode with a specific agent")
+  .option("--yolo", "Start OpenCode with the YOLO agent")
   .action((opts) => {
     const { project } = commonProjectOptions();
     const paths = resolveProjectPaths(project);
@@ -337,7 +340,8 @@ program.command("launch")
       runImportWorkflow({ rulesync: opts.rulesync });
     }
     runDoctor({ projectRoot: paths.projectRoot, strict: opts.doctor === "strict" });
-    const child = spawn("opencode", { cwd: paths.projectRoot, stdio: "inherit", shell: true });
+    const args = buildOpenCodeLaunchArgs({ agent: opts.agent, yolo: opts.yolo });
+    const child = spawn("opencode", args, { cwd: paths.projectRoot, stdio: "inherit", shell: process.platform === "win32" });
     child.on("exit", (code) => process.exit(code ?? 0));
   });
 

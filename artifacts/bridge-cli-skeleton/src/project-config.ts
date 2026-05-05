@@ -18,17 +18,19 @@ export interface ProjectConfigOptions {
   force?: boolean;
   mcp?: Record<string, unknown>;
   plugins?: string[];
+  defaultAgent?: string;
 }
 
 function normalizePluginSpecs(plugins: string[] | undefined): string[] {
   return [...new Set((plugins ?? []).map((item) => item.trim()).filter(Boolean))];
 }
 
-export function projectConfigText(options: { mcp?: Record<string, unknown>; plugins?: string[] } = {}): string {
+export function projectConfigText(options: { mcp?: Record<string, unknown>; plugins?: string[]; defaultAgent?: string } = {}): string {
+  const defaultAgent = typeof options.defaultAgent === "string" && options.defaultAgent.trim() ? options.defaultAgent.trim() : "agent";
   const config: Record<string, unknown> = {
     $schema: "https://opencode.ai/config.json",
     instructions: [".opencode/generated/GEMINI.expanded.md"],
-    default_agent: "agent",
+    default_agent: defaultAgent,
     agent: {
       build: {
         disable: true,
@@ -66,7 +68,7 @@ export function ensureProjectConfig(options: ProjectConfigOptions = {}): Project
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const configPath = path.join(projectRoot, "opencode.jsonc");
   const relPath = "opencode.jsonc";
-  const desiredText = projectConfigText({ mcp: options.mcp, plugins: options.plugins });
+  const desiredText = projectConfigText({ mcp: options.mcp, plugins: options.plugins, defaultAgent: options.defaultAgent });
   const desiredHash = sha256Text(desiredText);
 
   if (options.dryRun) {

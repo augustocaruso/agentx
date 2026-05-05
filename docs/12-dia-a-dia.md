@@ -83,7 +83,26 @@ Procure as linhas `Runtime fallback` e `Model resolution`.
 ## Quando usar YOLO
 
 Use `YOLO` apenas em workspace confiavel, quando voce quer execucao direta com
-menos perguntas. Para trabalho normal, fique no agente principal `agent`.
+menos perguntas.
+
+Para abrir direto no agente YOLO:
+
+```bash
+opencode --agent YOLO
+ogb launch --yolo
+```
+
+Para deixar o YOLO como padrao do projeto:
+
+```jsonc
+{
+  "openCode": {
+    "defaultAgent": "YOLO"
+  }
+}
+```
+
+Esse bloco vai em `.opencode/ogb.config.jsonc`; depois rode `ogb sync`.
 
 ## Antes de publicar ou entregar
 
