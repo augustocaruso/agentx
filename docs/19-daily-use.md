@@ -5,14 +5,12 @@
 Na maioria dos dias:
 
 ```bash
-ogb open
-ogb open .
+opencode
 ```
 
-Esse comando abre o OpenCode no YOLO quando nao existe `default_agent` local
-diferente. Depois do `setup-ux`, `opencode` e `opencode <pasta>` tambem passam
-por esse launcher. O plugin de startup tenta rodar `ogb sync` quando o OpenCode
-abre.
+Depois do `setup-ux`, esse comando abre o OpenCode no YOLO quando nao existe
+`default_agent` local diferente. O plugin de startup tenta rodar `ogb sync`
+quando o OpenCode abre.
 
 Quando quiser o caminho mais confiavel:
 

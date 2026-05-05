@@ -10,7 +10,7 @@ import { formatCommand, installGeminiExtension, updateGeminiExtensions } from ".
 import { flattenGeminiMd } from "./flatten.js";
 import { buildInventory, writeInventory } from "./inventory.js";
 import { formatLimits, refreshLimits } from "./limits.js";
-import { buildOpenCodeOpenArgs } from "./launch.js";
+import { buildOpenCodeLaunchArgs } from "./launch.js";
 import { readOgbConfig } from "./ogb-config.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import { ensureProjectConfig } from "./project-config.js";
@@ -92,15 +92,6 @@ function printExtensionReport(report: { status: string; command: string[]; inspe
   console.log(`Gemini extension command: ${report.status}`);
   console.log(formatCommand(report.command));
   for (const warning of report.inspection?.warnings ?? []) console.log(`Warning: ${warning}`);
-}
-
-function spawnOpenCode(projectRoot: string, args: string[]) {
-  const child = spawn("opencode", args, { cwd: projectRoot, stdio: "inherit", shell: process.platform === "win32" });
-  child.on("error", (error) => {
-    console.error(`Failed to start opencode: ${error.message}`);
-    process.exit(1);
-  });
-  child.on("exit", (code) => process.exit(code ?? 0));
 }
 
 program
@@ -334,18 +325,6 @@ program.command("adopt-agent-sync")
     runAgentSyncAdoption({ projectRoot: project, json: opts.json });
   });
 
-program.command("open")
-  .description("Open OpenCode with YOLO unless this project defines another default_agent")
-  .argument("[projectPath]", "Project root to open")
-  .option("--agent <name>", "Start OpenCode with a specific agent")
-  .option("--yolo", "Start OpenCode with the YOLO agent")
-  .action((projectPath: string | undefined, opts) => {
-    const { project } = commonProjectOptions();
-    const paths = resolveProjectPaths(projectPath ?? project);
-    const args = buildOpenCodeOpenArgs({ projectRoot: paths.projectRoot, agent: opts.agent, yolo: opts.yolo });
-    spawnOpenCode(paths.projectRoot, args);
-  });
-
 program.command("launch")
   .description("Import/sync, doctor, then launch OpenCode")
   .option("--skip-sync", "Skip import/sync before launching")
@@ -361,8 +340,9 @@ program.command("launch")
       runImportWorkflow({ rulesync: opts.rulesync });
     }
     runDoctor({ projectRoot: paths.projectRoot, strict: opts.doctor === "strict" });
-    const args = buildOpenCodeOpenArgs({ projectRoot: paths.projectRoot, agent: opts.agent, yolo: opts.yolo });
-    spawnOpenCode(paths.projectRoot, args);
+    const args = buildOpenCodeLaunchArgs({ agent: opts.agent, yolo: opts.yolo });
+    const child = spawn("opencode", args, { cwd: paths.projectRoot, stdio: "inherit", shell: process.platform === "win32" });
+    child.on("exit", (code) => process.exit(code ?? 0));
   });
 
 program.command("setup-opencode")

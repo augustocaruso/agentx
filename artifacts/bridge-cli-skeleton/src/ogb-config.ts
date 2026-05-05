@@ -80,7 +80,7 @@ export interface OgbConfig {
   };
 }
 
-export function defaultOpenCodeAgent(config: OgbConfig | undefined, fallback = "agent"): string {
+export function defaultOpenCodeAgent(config: OgbConfig | undefined, fallback = "YOLO"): string {
   const raw = config?.openCode?.defaultAgent;
   return typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
 }

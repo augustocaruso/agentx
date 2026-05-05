@@ -32,8 +32,6 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(report.writes.some((write) => write.path.endsWith("opencode.json") && write.status === "created"), true);
   assert.equal(report.writes.some((write) => write.path.endsWith("agents/YOLO.md") && write.status === "created"), true);
   assert.equal(report.writes.some((write) => write.path.endsWith(".opencode/ogb.config.jsonc") && write.status === "created"), true);
-  assert.ok(report.shellLauncherPath);
-  assert.equal(report.writes.some((write) => write.path === report.shellLauncherPath && write.status === "created"), true);
 
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.deepEqual(globalConfig.plugin, OGB_UX_PLUGINS);
@@ -70,9 +68,6 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fs.existsSync(path.join(configDir, "commands", "upgrade-ogb.md")), true);
   assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /ogb self-update --project/);
   assert.equal(fs.existsSync(path.join(configDir, "dcp.jsonc")), true);
-  const shellLauncher = fs.readFileSync(report.shellLauncherPath, "utf8");
-  assert.match(shellLauncher, /command ogb open/);
-  assert.match(shellLauncher, /command ogb --project "\$1" open/);
 });
 
 test("setupUx dry-run previews without writing files", () => {
@@ -92,7 +87,6 @@ test("setupUx dry-run previews without writing files", () => {
   assert.equal(report.writes.every((write) => write.status === "preview"), true);
   assert.equal(fs.existsSync(configDir), false);
   assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc")), false);
-  assert.equal(report.shellLauncherPath ? fs.existsSync(report.shellLauncherPath) : false, false);
 });
 
 test("setupUx preserves existing project profile unless forced", () => {

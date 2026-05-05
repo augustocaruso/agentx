@@ -41,7 +41,7 @@ test("syncToOpenCode writes bridge-native generated config without Rulesync", ()
   assert.deepEqual(generated.instructions, [".opencode/generated/GEMINI.expanded.md"]);
   assert.deepEqual(generated.mcp.local.command, ["node", "server.js"]);
   assert.deepEqual(projectConfig.mcp.local.command, ["node", "server.js"]);
-  assert.equal(projectConfig.default_agent, "agent");
+  assert.equal(projectConfig.default_agent, "YOLO");
   assert.ok(report.projectedTuiFiles.includes(TUI_SIDEBAR_PLUGIN_PATH));
   assert.ok(report.projectedTuiFiles.includes(TUI_CONFIG_PATH));
   assert.deepEqual(tuiConfig.plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
