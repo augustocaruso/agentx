@@ -74,6 +74,14 @@ function readJson(filePath: string): any | undefined {
   }
 }
 
+function readText(filePath: string): string | undefined {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
 function writeJson(filePath: string, value: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
@@ -200,17 +208,74 @@ function resolveOpenAIOAuth(homeDir: string): { accessToken?: string; accountId?
   return { message: "OpenAI OAuth do OpenCode nao encontrado." };
 }
 
-function resolveAnthropicOAuth(homeDir: string): { accessToken?: string; expires?: number; message?: string } {
+function extractExportedString(text: string | undefined, name: string): string | undefined {
+  if (!text) return undefined;
+  const match = text.match(new RegExp(`(?:export\\s+)?const\\s+${name}\\s*=\\s*["']([^"']+)["']`));
+  return match?.[1];
+}
+
+function anthropicOAuthClientId(homeDir: string): string | undefined {
+  if (process.env.OGB_ANTHROPIC_CLIENT_ID) return process.env.OGB_ANTHROPIC_CLIENT_ID;
+  const candidates = [
+    path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", "opencode-anthropic-auth@latest", "node_modules", "@ex-machina", "opencode-anthropic-auth", "dist", "constants.js"),
+    path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", "opencode-anthropic-auth@latest", "node_modules", "@ex-machina", "opencode-anthropic-auth", "src", "constants.ts"),
+  ];
+  for (const filePath of candidates) {
+    const clientId = extractExportedString(readText(filePath), "CLIENT_ID");
+    if (clientId) return clientId;
+  }
+  return undefined;
+}
+
+async function refreshAnthropicOAuth(homeDir: string, auth: any): Promise<any | undefined> {
+  const refresh = typeof auth?.refresh === "string" ? auth.refresh.trim() : "";
+  const clientId = anthropicOAuthClientId(homeDir);
+  if (!refresh || !clientId) return undefined;
+
+  const response = await fetch("https://platform.claude.com/v1/oauth/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/plain, */*",
+      "User-Agent": "axios/1.13.6",
+    },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      refresh_token: refresh,
+      client_id: clientId,
+    }),
+  });
+  if (!response.ok) return undefined;
+  const payload = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+  if (!payload.access_token) return undefined;
+
+  const authFile = readJson(authPath(homeDir)) ?? {};
+  const updated = {
+    ...auth,
+    type: "oauth",
+    access: payload.access_token,
+    refresh: payload.refresh_token ?? refresh,
+    expires: Date.now() + Math.max(1, Number(payload.expires_in ?? 3600)) * 1000,
+  };
+  writeJson(authPath(homeDir), { ...authFile, anthropic: updated });
+  return updated;
+}
+
+async function resolveAnthropicOAuth(homeDir: string): Promise<{ accessToken?: string; expires?: number; message?: string }> {
   const auth = readJson(authPath(homeDir));
   const keys = ["anthropic", "claude"];
   for (const key of keys) {
     const entry = auth?.[key];
     if (!entry || entry.type !== "oauth") continue;
-    const accessToken = typeof entry.access === "string" ? entry.access.trim() : "";
-    if (!accessToken) continue;
+    let effective = entry;
     const expires = typeof entry.expires === "number" ? entry.expires : undefined;
-    if (expires && expires < Date.now()) return { expires, message: "Anthropic OAuth token expired. Reauthenticate OpenCode." };
-    return { accessToken, expires };
+    if (expires && expires < Date.now()) {
+      effective = await refreshAnthropicOAuth(homeDir, entry);
+      if (!effective) return { expires, message: "Anthropic OAuth token expired. Reauthenticate OpenCode." };
+    }
+    const accessToken = typeof effective.access === "string" ? effective.access.trim() : "";
+    if (!accessToken) continue;
+    return { accessToken, expires: typeof effective.expires === "number" ? effective.expires : expires };
   }
   return { message: "Anthropic OAuth do OpenCode nao encontrado." };
 }
@@ -316,7 +381,7 @@ function anthropicUsageLine(label: string, window: unknown): UsageLine | undefin
 }
 
 async function fetchAnthropicClaudeUsage(homeDir: string): Promise<ProviderUsage | undefined> {
-  const auth = resolveAnthropicOAuth(homeDir);
+  const auth = await resolveAnthropicOAuth(homeDir);
   if (!auth.accessToken) throw new Error(auth.message || "Anthropic OAuth unavailable");
 
   const response = await fetch(ANTHROPIC_USAGE_URL, {

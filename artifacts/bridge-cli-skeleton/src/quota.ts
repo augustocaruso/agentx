@@ -110,6 +110,14 @@ function readJson(filePath: string): any | undefined {
   }
 }
 
+function readText(filePath: string): string | undefined {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
 function writeJson(filePath: string, value: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
@@ -142,16 +150,36 @@ function buildGeminiCliUserAgent(): string {
   return `GeminiCLI/${GEMINI_CLI_VERSION}/gemini-code-assist (${process.platform}; ${process.arch}; terminal)`;
 }
 
-function geminiOAuthClient(): { id: string; secret: string } | undefined {
-  const id = process.env.OGB_GEMINI_CLIENT_ID || process.env.GEMINI_OAUTH_CLIENT_ID;
-  const secret = process.env.OGB_GEMINI_CLIENT_SECRET || process.env.GEMINI_OAUTH_CLIENT_SECRET;
-  if (!id || !secret) return undefined;
-  return { id, secret };
+function extractExportedString(text: string | undefined, name: string): string | undefined {
+  if (!text) return undefined;
+  const match = text.match(new RegExp(`(?:export\\s+)?const\\s+${name}\\s*=\\s*["']([^"']+)["']`));
+  return match?.[1];
 }
 
-async function refreshAccessToken(auth: OAuthAuthRecord): Promise<string | undefined> {
+function geminiOAuthClientFromPlugin(homeDir: string): { id: string; secret: string } | undefined {
+  const candidates = [
+    path.join(homeDir, ".cache", "opencode", "packages", "opencode-gemini-auth@latest", "node_modules", "opencode-gemini-auth", "src", "constants.ts"),
+    path.join(homeDir, ".cache", "opencode", "packages", "opencode-gemini-auth@latest", "node_modules", "opencode-gemini-auth", "dist", "constants.js"),
+  ];
+  for (const filePath of candidates) {
+    const text = readText(filePath);
+    const id = extractExportedString(text, "GEMINI_CLIENT_ID");
+    const secret = extractExportedString(text, "GEMINI_CLIENT_SECRET");
+    if (id && secret) return { id, secret };
+  }
+  return undefined;
+}
+
+function geminiOAuthClient(homeDir: string): { id: string; secret: string } | undefined {
+  const id = process.env.OGB_GEMINI_CLIENT_ID || process.env.GEMINI_OAUTH_CLIENT_ID;
+  const secret = process.env.OGB_GEMINI_CLIENT_SECRET || process.env.GEMINI_OAUTH_CLIENT_SECRET;
+  if (id && secret) return { id, secret };
+  return geminiOAuthClientFromPlugin(homeDir);
+}
+
+async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promise<OAuthAuthRecord | undefined> {
   const parts = parseRefreshParts(auth.refresh);
-  const client = geminiOAuthClient();
+  const client = geminiOAuthClient(homeDir);
   if (!parts.refreshToken) return undefined;
   if (!client) return undefined;
 
@@ -167,8 +195,23 @@ async function refreshAccessToken(auth: OAuthAuthRecord): Promise<string | undef
   });
 
   if (!response.ok) return undefined;
-  const payload = await response.json() as { access_token?: string };
-  return payload.access_token;
+  const payload = await response.json() as { access_token?: string; expires_in?: number; refresh_token?: string };
+  if (!payload.access_token) return undefined;
+
+  const authFile = readJson(authPath(homeDir)) as OpenCodeAuthFile | undefined;
+  const nextParts = {
+    refreshToken: payload.refresh_token ?? parts.refreshToken,
+    projectId: parts.projectId,
+    managedProjectId: parts.managedProjectId,
+  };
+  const updated: OAuthAuthRecord = {
+    ...auth,
+    access: payload.access_token,
+    expires: Date.now() + Math.max(1, Number(payload.expires_in ?? 3600)) * 1000,
+    refresh: [nextParts.refreshToken, nextParts.projectId ?? "", nextParts.managedProjectId ?? ""].join("|"),
+  };
+  writeJson(authPath(homeDir), { ...(authFile ?? {}), google: updated });
+  return updated;
 }
 
 async function resolveAuth(options: { homeDir: string }): Promise<{ accessToken?: string; projectId?: string; message?: string }> {
@@ -180,7 +223,8 @@ async function resolveAuth(options: { homeDir: string }): Promise<{ accessToken?
 
   const parts = parseRefreshParts(auth.refresh);
   const projectId = parts.managedProjectId ?? parts.projectId ?? process.env.OPENCODE_GEMINI_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT;
-  const accessToken = accessTokenExpired(auth) ? await refreshAccessToken(auth) : auth.access;
+  const refreshed = accessTokenExpired(auth) ? await refreshAccessToken(auth, options.homeDir) : auth;
+  const accessToken = refreshed?.access;
   if (!accessToken) {
     return { projectId, message: "Token Google indisponivel. Rode /gquota ou refaca opencode auth login." };
   }

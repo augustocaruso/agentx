@@ -9,6 +9,12 @@ function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+function writeAnthropicAuthConstants(homeDir: string): void {
+  const constants = path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", "opencode-anthropic-auth@latest", "node_modules", "@ex-machina", "opencode-anthropic-auth", "dist", "constants.js");
+  fs.mkdirSync(path.dirname(constants), { recursive: true });
+  fs.writeFileSync(constants, "export const CLIENT_ID = 'anthropic-client-id';\n", "utf8");
+}
+
 test("refreshLimits stores OpenUsage providers in a safe cache", async () => {
   const projectRoot = tempDir("ogb-limits-project-");
   const homeDir = tempDir("ogb-limits-home-");
@@ -169,6 +175,72 @@ test("refreshLimits uses native Anthropic OAuth fallback when OpenUsage is unava
       ["Weekly", 21],
     ]);
     assert.ok(report.warnings.some((warning) => warning.includes("native Anthropic OAuth fallback")));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("refreshLimits refreshes expired Anthropic OAuth before reading usage", async () => {
+  const projectRoot = tempDir("ogb-limits-project-");
+  const homeDir = tempDir("ogb-limits-home-");
+  const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
+  writeAnthropicAuthConstants(homeDir);
+  fs.mkdirSync(path.dirname(authFile), { recursive: true });
+  fs.writeFileSync(authFile, JSON.stringify({
+    anthropic: {
+      type: "oauth",
+      access: "expired_anthropic_token",
+      refresh: "anthropic_refresh",
+      expires: Date.now() - 60_000,
+    },
+  }), "utf8");
+
+  const calls: string[] = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push(String(input));
+    if (String(input) === "http://127.0.0.1:6736/v1/usage") {
+      throw new Error("offline");
+    }
+    if (String(input) === "https://platform.claude.com/v1/oauth/token") {
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        grant_type: "refresh_token",
+        refresh_token: "anthropic_refresh",
+        client_id: "anthropic-client-id",
+      });
+      return new Response(JSON.stringify({
+        access_token: "fresh_anthropic_token",
+        refresh_token: "rotated_anthropic_refresh",
+        expires_in: 3600,
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    assert.equal(String(input), "https://api.anthropic.com/api/oauth/usage");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer fresh_anthropic_token");
+    return new Response(JSON.stringify({
+      five_hour: { utilization: 12, resets_at: "2026-05-04T22:50:00.000Z" },
+      seven_day: { utilization: 3, resets_at: "2026-05-07T04:00:00.000Z" },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const report = await refreshLimits({
+      projectRoot,
+      homeDir,
+      force: true,
+      includeGeminiFallback: false,
+      includeOpenAIFallback: false,
+    });
+    const stored = JSON.parse(fs.readFileSync(authFile, "utf8"));
+
+    assert.equal(report.sources.anthropicClaude?.status, "ok");
+    assert.equal(report.providers.find((provider) => provider.providerId === "anthropic")?.lines?.[0]?.used, 12);
+    assert.equal(stored.anthropic.access, "fresh_anthropic_token");
+    assert.equal(stored.anthropic.refresh, "rotated_anthropic_refresh");
+    assert.deepEqual(calls, [
+      "http://127.0.0.1:6736/v1/usage",
+      "https://platform.claude.com/v1/oauth/token",
+      "https://api.anthropic.com/api/oauth/usage",
+    ]);
   } finally {
     globalThis.fetch = previousFetch;
   }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.26 - restore quota refresh
+
+- Restaura a coleta de quota Anthropic e Gemini quando os access tokens do OpenCode expiraram.
+- Reusa os plugins globais de auth instalados pelo `setup-ux` para descobrir dados OAuth publicos, sem embutir segredos no repo.
+- Mantem Anthropic e Gemini visiveis na sidebar; se falharem, o problema real continua aparecendo em vez de ser escondido.
+
 ## Unreleased - external quota UI and runtime fallback
 
 - Adiciona `externalPlugins.quotaUi` para carregar `@slkiser/opencode-quota` no servidor/TUI e esconder o bloco `USAGE LIMITS` do OGB quando a UI externa estiver ativa.
