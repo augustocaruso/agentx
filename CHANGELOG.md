@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.47 - Windows reset cleanup and command runner
+
+- Corrige o runner Windows para executar `.cmd` via `cmd /c call` sem aspas escapadas como texto literal, e executa `.exe` diretamente.
+- Faz `ogb reset` limpar diretorios antigos de projeto em `~/.opencode`, incluindo skills duplicadas que conflitam com o perfil global.
+- Limpa status antigo de startup sync durante reset, para falhas de instalacoes anteriores nao continuarem aparecendo depois de um reset bem-sucedido.
+- Ajusta doctor/dashboard no modo home para mostrar a config global como o config esperado, em vez de reportar `missing config` de projeto.
+
 ## 0.0.46 - Windows self-update bootstrap fix
 
 - Faz o instalador Windows chamar `npm.cmd` explicitamente, evitando que warnings do `npm.ps1` no PowerShell sejam tratados como erro fatal.

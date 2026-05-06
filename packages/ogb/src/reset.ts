@@ -105,6 +105,12 @@ function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; dr
   );
 }
 
+function clearStartupSyncStatus(homeDir: string): void {
+  const paths = resolveProjectPaths(homeDir, homeDir);
+  fs.rmSync(paths.pluginStatusPath, { force: true });
+  fs.rmSync(path.join(paths.generatedDir, "ogb-startup-sync.lock"), { force: true });
+}
+
 async function promptResetConfirmation(plan: ResetPlan): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new ResetConfirmationError("ogb reset precisa de confirmacao interativa. Rode em um terminal ou use --yes se voce ja revisou o plano.");
@@ -219,6 +225,7 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
     silent: true,
     rulesyncMode: options.rulesyncMode ?? "auto",
   });
+  clearStartupSyncStatus(paths.homeDir);
   const doctor = runDoctor({ projectRoot: paths.homeDir, homeDir: paths.homeDir, silent: true });
   warnings.push(...cleanup.warnings, ...setup.warnings, ...sync.warnings, ...doctor.warnings);
 

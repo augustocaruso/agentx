@@ -50,7 +50,15 @@ test("commandForPlatform runs Windows commands through cmd without shell true", 
   const command = commandForPlatform("C:\\Users\\leona\\AppData\\Roaming\\npm\\opencode.cmd", ["models"], "win32");
 
   assert.match(command.command, /cmd\.exe$/i);
-  assert.deepEqual(command.args.slice(0, 4), ["/d", "/v:off", "/s", "/c"]);
-  assert.match(command.args[4], /opencode\.cmd/);
-  assert.match(command.args[4], /"models"/);
+  assert.deepEqual(command.args.slice(0, 3), ["/d", "/v:off", "/c"]);
+  assert.match(command.args[3], /^call /);
+  assert.match(command.args[3], /opencode\.cmd/);
+  assert.match(command.args[3], /models/);
+});
+
+test("commandForPlatform runs Windows exe commands directly", () => {
+  const command = commandForPlatform("C:\\Program Files\\nodejs\\node.exe", ["--version"], "win32");
+
+  assert.equal(command.command, "C:\\Program Files\\nodejs\\node.exe");
+  assert.deepEqual(command.args, ["--version"]);
 });

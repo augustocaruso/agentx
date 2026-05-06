@@ -89,6 +89,10 @@ test("runReset cleans home project artifacts and recreates global config", async
   }, null, 2));
   writeFile(path.join(homeDir, ".config", "opencode", "AGENTS.md"), "User AGENTS\n");
   writeFile(path.join(homeDir, ".config", "opencode", "commands", "dev-server.md"), "old dev server command\n");
+  writeFile(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json"), JSON.stringify({
+    state: "fail",
+    exitCode: null,
+  }) + "\n");
 
   const report = await runReset({
     homeDir,
@@ -121,6 +125,8 @@ test("runReset cleans home project artifacts and recreates global config", async
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "tui-plugins", "ogb-sidebar.js")), true);
   assert.deepEqual(readJson(path.join(homeDir, ".config", "opencode", "tui.json")).plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
   assert.match(fs.readFileSync(path.join(homeDir, ".config", "zsh", ".zshrc"), "utf8"), /OPENCODE_ENABLE_EXA=1/);
+  assert.equal(report.doctor?.warnings.some((warning) => warning.includes("Last OpenCode startup sync failed")), false);
 });

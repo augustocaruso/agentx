@@ -36,7 +36,8 @@ test("cleanupHomeProjectArtifacts backs up and removes old home project files", 
   const report = cleanupHomeProjectArtifacts({ homeDir });
 
   assert.ok(report.actions.some((action) => action.relPath === "opencode.jsonc" && action.status === "removed"));
-  assert.ok(report.actions.some((action) => action.relPath === ".opencode/commands/custom.md" && action.status === "removed"));
+  assert.ok(report.actions.some((action) => action.relPath === ".opencode/commands" && action.status === "removed"));
+  assert.ok(report.actions.some((action) => action.relPath === ".opencode/skills" && action.status === "removed"));
   assert.equal(fs.existsSync(path.join(homeDir, "opencode.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands", "sync.md")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands", "custom.md")), false);

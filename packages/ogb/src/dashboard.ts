@@ -419,7 +419,9 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
       lastConflicts: Number(rulesync.lastConflicts ?? 0),
     },
     startupSync: {
-      installed: Boolean(startupSync.projectPlugin && startupSync.projectConfig),
+      installed: paths.homeMode
+        ? Boolean(startupSync.globalPlugin && startupSync.globalConfig)
+        : Boolean(startupSync.projectPlugin && startupSync.projectConfig),
       projectPlugin: Boolean(startupSync.projectPlugin),
       projectConfig: Boolean(startupSync.projectConfig),
       globalPlugin: Boolean(startupSync.globalPlugin),

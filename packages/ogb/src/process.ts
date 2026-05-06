@@ -10,19 +10,29 @@ import {
 
 function cmdQuote(value: string): string {
   const escaped = value
-    .replace(/"/g, '\\"')
+    .replace(/"/g, '""')
     .replace(/\^/g, "^^")
     .replace(/%/g, "^%");
   return `"${escaped}"`;
 }
 
+function cmdToken(value: string, command = false): string {
+  if (command && /^[A-Za-z0-9_.-]+$/.test(value)) return value;
+  if (!command && /^[A-Za-z0-9_./:@+=-]+$/.test(value)) return value;
+  return cmdQuote(value);
+}
+
 export function commandForPlatform(command: string, args: readonly string[] = [], platform: NodeJS.Platform = process.platform): { command: string; args: string[] } {
   if (platform !== "win32") return { command, args: [...args] };
 
+  const ext = command.split(/[\\/]/).pop()?.toLowerCase().match(/\.[^.]+$/)?.[0];
+  if (ext === ".exe") return { command, args: [...args] };
+
   const comspec = process.env.ComSpec || "cmd.exe";
+  const commandLine = ["call", cmdToken(command, true), ...args.map((arg) => cmdToken(arg))].join(" ");
   return {
     command: comspec,
-    args: ["/d", "/v:off", "/s", "/c", [command, ...args].map(cmdQuote).join(" ")],
+    args: ["/d", "/v:off", "/c", commandLine],
   };
 }
 

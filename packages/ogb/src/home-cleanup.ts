@@ -65,6 +65,15 @@ const PROJECT_FILES = [
   ".opencode/tui-plugins/ogb-sidebar.js",
 ];
 
+const PROJECT_DIRS = [
+  ".opencode/agents",
+  ".opencode/commands",
+  ".opencode/generated",
+  ".opencode/plugins",
+  ".opencode/skills",
+  ".opencode/tui-plugins",
+];
+
 function normalizeRelPath(relPath: string): string {
   return relPath.split(/[\\/]+/).filter(Boolean).join("/");
 }
@@ -129,6 +138,7 @@ function collectCandidates(homeDir: string, warnings: string[]): Candidate[] {
   }
   for (const relPath of GENERATED_FILES) addCandidate(candidates, relPath, "arquivo gerado pelo OGB na home");
   for (const relPath of PROJECT_FILES) addCandidate(candidates, relPath, "arquivo de projeto OGB criado na home");
+  for (const relPath of PROJECT_DIRS) addCandidate(candidates, relPath, "diretorio de projeto OpenCode antigo criado na home");
   for (const agent of BUILT_IN_AGENTS) addCandidate(candidates, `.opencode/agents/${agent.name}.md`, "agente OGB projetado na home");
   for (const command of BUILT_IN_COMMANDS) addCandidate(candidates, `.opencode/commands/${command.name}.md`, "comando OGB projetado na home");
 
