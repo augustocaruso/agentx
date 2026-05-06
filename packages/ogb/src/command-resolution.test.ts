@@ -63,25 +63,36 @@ test("resolveCommand strips accidental quotes from Windows command paths", () =>
 
 test("normalizeCommandInput strips only surrounding command quotes", () => {
   assert.equal(normalizeCommandInput(` '"C:\\Program Files\\nodejs\\npm.cmd"' `), "C:\\Program Files\\nodejs\\npm.cmd");
+  assert.equal(normalizeCommandInput(`\\"C:\\Program Files\\nodejs\\npm.cmd\\"`), "C:\\Program Files\\nodejs\\npm.cmd");
+  assert.equal(normalizeCommandInput(`'\\"C:\\Program Files\\nodejs\\npm.cmd\\"'`), "C:\\Program Files\\nodejs\\npm.cmd");
+  assert.equal(normalizeCommandInput(`"C:\\Tools\\node'\\"js\\npm.cmd"`), `C:\\Tools\\node'\\"js\\npm.cmd`);
   assert.equal(normalizeCommandInput(`C:\\Program Files\\node"js\\npm.cmd`), `C:\\Program Files\\node"js\\npm.cmd`);
 });
 
-test("commandForPlatform runs Windows commands through cmd without shell true", () => {
+test("commandForPlatform runs Windows cmd shims through cmd without call", () => {
   const command = commandForPlatform("C:\\Users\\leona\\AppData\\Roaming\\npm\\opencode.cmd", ["models"], "win32");
 
   assert.match(command.command, /cmd\.exe$/i);
-  assert.deepEqual(command.args.slice(0, 3), ["/d", "/v:off", "/c"]);
-  assert.match(command.args[3], /^call /);
-  assert.match(command.args[3], /opencode\.cmd/);
-  assert.match(command.args[3], /models/);
+  assert.deepEqual(command.args.slice(0, 3), ["/d", "/s", "/c"]);
+  assert.equal(command.args[3], '"C:\\Users\\leona\\AppData\\Roaming\\npm\\opencode.cmd" models');
+  assert.doesNotMatch(command.args[3], /^call /);
 });
 
-test("commandForPlatform strips accidental quotes before wrapping Windows cmd shims", () => {
+test("commandForPlatform quotes Windows cmd shims with spaces without call", () => {
   const command = commandForPlatform('"C:\\Program Files\\nodejs\\npm.cmd"', ["--version"], "win32");
 
   assert.match(command.command, /cmd\.exe$/i);
-  assert.equal(command.args[3], 'call "C:\\Program Files\\nodejs\\npm.cmd" --version');
+  assert.equal(command.args[3], '"C:\\Program Files\\nodejs\\npm.cmd" --version');
   assert.doesNotMatch(command.args[3], /"""C:/);
+});
+
+test("commandForPlatform strips escaped accidental quotes before wrapping Windows cmd shims", () => {
+  const command = commandForPlatform('\\"C:\\Program Files\\nodejs\\npm.cmd\\"', ["--version"], "win32");
+
+  assert.match(command.command, /cmd\.exe$/i);
+  assert.deepEqual(command.args.slice(0, 3), ["/d", "/s", "/c"]);
+  assert.equal(command.args[3], '"C:\\Program Files\\nodejs\\npm.cmd" --version');
+  assert.doesNotMatch(command.args[3], /\\"/);
 });
 
 test("commandForPlatform runs Windows exe commands directly", () => {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.56 - Windows validate sem falso FAIL pos-update
+
+- Troca o runner Windows para executar shims `.cmd/.bat` via `cmd.exe /d /s /c "<shim.cmd>" ...`, sem `call`, mantendo `.exe` direto.
+- Normaliza tambem aspas externas escapadas, como `\"C:\...\opencode.cmd\"`, antes de resolver ou executar comandos.
+- Atualiza o plugin de startup gerado para usar o mesmo runner sem `call`.
+- Adiciona `generatedAt` aos relatorios de `validate` e `security-check`.
+- Faz o dashboard tratar relatorios antigos ou gerados antes do ultimo `self-update` como aviso para regenerar, nao como FAIL atual.
+- Ajusta a mensagem de `self-update` para pedir restart do OpenCode e `ogb validate`, sem pedir reset.
+
 ## 0.0.55 - Windows valida comandos sem aspas literais
 
 - Normaliza caminhos de comandos antes de resolver/executar `npm.cmd`, `gemini.cmd`, `opencode.cmd` e `ogb.cmd`, removendo aspas externas acidentais vindas do PATH/where/npm prefix.

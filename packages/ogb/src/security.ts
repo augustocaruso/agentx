@@ -25,6 +25,7 @@ export interface SecurityFinding {
 export interface SecurityReport {
   version: string;
   projectRoot: string;
+  generatedAt: string;
   outcome: "pass" | "warn" | "fail";
   findings: SecurityFinding[];
 }
@@ -333,6 +334,7 @@ export function runSecurityCheck(options: SecurityOptions = {}): SecurityReport 
   const report: SecurityReport = {
     version: OGB_VERSION,
     projectRoot: paths.projectRoot,
+    generatedAt: new Date().toISOString(),
     outcome,
     findings,
   };

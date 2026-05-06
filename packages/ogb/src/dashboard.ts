@@ -157,6 +157,7 @@ export interface ReportSummary {
 
 interface ReportSummaryContext {
   homeMode?: boolean;
+  updateStatus?: Record<string, any>;
 }
 
 function emptyCounts(): StatusCounts {
@@ -198,14 +199,62 @@ function firstFailedReportDetail(kind: "validation" | "security", report: Record
   return name || message;
 }
 
+function reportItems(kind: "validation" | "security", report: Record<string, any>): any[] {
+  return kind === "validation"
+    ? (Array.isArray(report.checks) ? report.checks : [])
+    : (Array.isArray(report.findings) ? report.findings : []);
+}
+
+function staleReportCommand(kind: "validation" | "security"): string {
+  return kind === "validation" ? "validate" : "security-check";
+}
+
+function updateRequiresRestart(updateStatus: Record<string, any> | undefined): boolean {
+  return updateStatus?.status === "updated" && updateStatus.restartRequired === true;
+}
+
+function timestampMs(value: unknown): number | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+function updateFinishedMs(updateStatus: Record<string, any> | undefined): number | undefined {
+  return timestampMs(updateStatus?.finishedAt) ?? timestampMs(updateStatus?.checkedAt);
+}
+
+function reportGeneratedMs(report: Record<string, any>): number | undefined {
+  return timestampMs(report.generatedAt);
+}
+
+function hasKnownWindowsQuotedCommandFailure(kind: "validation" | "security", report: Record<string, any>): boolean {
+  return reportItems(kind, report).some((item: any) => {
+    const text = [item?.name, item?.message, item?.details].map((value) =>
+      typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value)
+    ).join("\n");
+    return /\\?"[A-Za-z]:\\[^\r\n"]+\.cmd\\?"/i.test(text) && /(not recognized|reconhecid|n.o . reconhecid)/i.test(text);
+  });
+}
+
 function staleReportMessage(kind: "validation" | "security", report: Record<string, any>, context: ReportSummaryContext): string | undefined {
   const version = typeof report.version === "string" ? report.version : undefined;
   if (version && version !== OGB_VERSION) {
-    return `${kind} foi gerado pelo ogb ${version}; rode \`ogb ${kind === "validation" ? "validate" : "security-check"}\` para atualizar.`;
+    return `${kind} foi gerado pelo ogb ${version}; rode \`ogb ${staleReportCommand(kind)}\` para atualizar.`;
+  }
+
+  if (updateRequiresRestart(context.updateStatus)) {
+    const updateMs = updateFinishedMs(context.updateStatus);
+    const generatedMs = reportGeneratedMs(report);
+    if (!generatedMs || (updateMs !== undefined && generatedMs < updateMs)) {
+      return `${kind} foi gerado antes do ultimo self-update; rode \`ogb ${staleReportCommand(kind)}\` para atualizar.`;
+    }
+    if (hasKnownWindowsQuotedCommandFailure(kind, report)) {
+      return `${kind} encontrou um erro conhecido de comando Windows antes do OpenCode reiniciar; rode \`ogb ${staleReportCommand(kind)}\` depois de reiniciar.`;
+    }
   }
 
   if (context.homeMode && kind === "validation") {
-    const checks = Array.isArray(report.checks) ? report.checks : [];
+    const checks = reportItems(kind, report);
     const hasProjectConfigMarkerFailure = checks.some((check: any) =>
       check?.status === "fail"
       && check?.name === "Generated config marker"
@@ -218,7 +267,7 @@ function staleReportMessage(kind: "validation" | "security", report: Record<stri
   }
 
   if (context.homeMode && kind === "security") {
-    const findings = Array.isArray(report.findings) ? report.findings : [];
+    const findings = reportItems(kind, report);
     const hasProjectYoloFailure = findings.some((finding: any) =>
       finding?.status === "fail"
       && finding?.name === "YOLO guardrails"
@@ -448,8 +497,8 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
   const updateStatus = readJson(paths.updateStatusPath);
   const telemetry = publicTelemetryStatus(telemetryStatus({ homeDir: paths.homeDir }));
   const doctorSummary = reportSummary("doctor", doctor);
-  const validationSummary = reportSummary("validation", validation, { homeMode: paths.homeMode });
-  const securitySummary = reportSummary("security", security, { homeMode: paths.homeMode });
+  const validationSummary = reportSummary("validation", validation, { homeMode: paths.homeMode, updateStatus });
+  const securitySummary = reportSummary("security", security, { homeMode: paths.homeMode, updateStatus });
   const pluginState = typeof doctor?.startupSync?.lastState === "string"
     ? doctor.startupSync.lastState
     : typeof pluginStatus?.state === "string"

@@ -354,6 +354,15 @@ function normalizeCommandInput(value) {
     if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
       normalized = normalized.slice(1, -1).trim();
       changed = true;
+      continue;
+    }
+    if (normalized.length >= 4) {
+      const escapedFirst = normalized.slice(0, 2);
+      const escapedLast = normalized.slice(-2);
+      if ((escapedFirst === '\\"' && escapedLast === '\\"') || (escapedFirst === "\\'" && escapedLast === "\\'")) {
+        normalized = normalized.slice(2, -2).trim();
+        changed = true;
+      }
     }
   }
   return normalized;
@@ -374,10 +383,10 @@ function commandForPlatform(command, args) {
   if (ext === ".exe") return { command: normalizedCommand, args };
 
   const comspec = process.env.ComSpec || process.env.COMSPEC || "cmd.exe";
-  const commandLine = ["call", cmdToken(normalizedCommand, true), ...args.map((arg) => cmdToken(arg))].join(" ");
+  const commandLine = [cmdToken(normalizedCommand, true), ...args.map((arg) => cmdToken(arg))].join(" ");
   return {
     command: comspec,
-    args: ["/d", "/v:off", "/c", commandLine],
+    args: ["/d", "/s", "/c", commandLine],
   };
 }
 

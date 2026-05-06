@@ -5,9 +5,12 @@ import { STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
 test("startup plugin wraps Windows cmd shims before spawning", () => {
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function commandForPlatform/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function normalizeCommandInput/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /escapedFirst ===/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /normalized\.slice\(2, -2\)/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /process\.platform !== "win32"/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /cmd\.exe/);
-  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /\["call", cmdToken\(normalizedCommand, true\)/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /\["\/d", "\/s", "\/c", commandLine\]/);
+  assert.doesNotMatch(STARTUP_SYNC_PLUGIN_SOURCE, /\["call", cmdToken\(normalizedCommand, true\)/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /spawn\(normalized\.command, normalized\.args/);
 });
 

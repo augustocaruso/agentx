@@ -96,6 +96,8 @@ test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   assert.equal(saved.status, "updated");
   assert.equal(saved.latestTag, "v0.0.53");
   assert.equal(saved.restartRequired, true);
+  assert.match(saved.message, /run ogb validate/);
+  assert.doesNotMatch(saved.message, /reset --yes/);
   assert.doesNotMatch(saved.message, /old failure/);
 });
 

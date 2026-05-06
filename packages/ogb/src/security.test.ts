@@ -67,6 +67,7 @@ test("runSecurityCheck passes a clean generated bridge surface", () => {
   const report = runSecurityCheck({ projectRoot, json: true });
 
   assert.equal(report.outcome, "pass");
+  assert.match(report.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
 test("runSecurityCheck allows user-tuned YOLO task and external directory permissions", () => {

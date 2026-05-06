@@ -154,8 +154,8 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
     finishedAt: checkedAt,
     restartRequired: true,
     message: latestTag
-      ? `OGB self-update completed for ${latestTag}. Restart OpenCode and run ogb reset --yes.`
-      : "OGB self-update completed. Restart OpenCode and run ogb reset --yes.",
+      ? `OGB self-update completed for ${latestTag}. Restart OpenCode and run ogb validate.`
+      : "OGB self-update completed. Restart OpenCode and run ogb validate.",
     check,
   };
   writeUpdateReport(options.projectRoot, report);

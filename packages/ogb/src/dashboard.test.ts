@@ -182,6 +182,216 @@ test("runDashboard warns when auto-update requires an OpenCode restart", () => {
   assert.ok(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")));
 });
 
+test("runDashboard treats validation/security reports without generatedAt as stale after self-update", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.doctorPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    warnings: [],
+    errors: [],
+    counts: {},
+    startupSync: {
+      projectPlugin: true,
+      projectConfig: true,
+      lastState: "pass",
+    },
+  });
+  writeJson(paths.validationPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    outcome: "fail",
+    checks: [
+      { name: "OpenCode resolved config", status: "fail", message: "old failure" },
+    ],
+  });
+  writeJson(paths.securityPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    outcome: "fail",
+    findings: [
+      { name: "YOLO guardrails", status: "fail", message: "old failure" },
+    ],
+  });
+  writeJson(paths.updateStatusPath, {
+    version: 1,
+    status: "updated",
+    currentVersion: "0.0.55",
+    latestVersion: OGB_VERSION,
+    latestTag: `v${OGB_VERSION}`,
+    checkedAt: "2026-05-06T20:10:00.000Z",
+    finishedAt: "2026-05-06T20:11:00.000Z",
+    restartRequired: true,
+    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+  });
+
+  const report = runDashboard({ projectRoot, refresh: false, silent: true });
+
+  assert.equal(report.outcome, "warn");
+  assert.equal(report.reports.validation.status, "warn");
+  assert.equal(report.reports.security.status, "warn");
+  assert.deepEqual(report.errors, []);
+  assert.ok(report.warnings.some((warning) => warning.includes("validation foi gerado antes do ultimo self-update")));
+  assert.ok(report.warnings.some((warning) => warning.includes("security foi gerado antes do ultimo self-update")));
+});
+
+test("runDashboard treats validation/security reports generated before self-update as stale", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.doctorPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    warnings: [],
+    errors: [],
+    counts: {},
+    startupSync: {
+      projectPlugin: true,
+      projectConfig: true,
+      lastState: "pass",
+    },
+  });
+  writeJson(paths.validationPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    generatedAt: "2026-05-06T20:00:00.000Z",
+    outcome: "fail",
+    checks: [
+      { name: "OpenCode resolved config", status: "fail", message: "old failure" },
+    ],
+  });
+  writeJson(paths.securityPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    generatedAt: "2026-05-06T20:00:00.000Z",
+    outcome: "fail",
+    findings: [
+      { name: "YOLO guardrails", status: "fail", message: "old failure" },
+    ],
+  });
+  writeJson(paths.updateStatusPath, {
+    version: 1,
+    status: "updated",
+    currentVersion: "0.0.55",
+    latestVersion: OGB_VERSION,
+    latestTag: `v${OGB_VERSION}`,
+    checkedAt: "2026-05-06T20:10:00.000Z",
+    finishedAt: "2026-05-06T20:11:00.000Z",
+    restartRequired: true,
+    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+  });
+
+  const report = runDashboard({ projectRoot, refresh: false, silent: true });
+
+  assert.equal(report.outcome, "warn");
+  assert.equal(report.reports.validation.status, "warn");
+  assert.equal(report.reports.security.status, "warn");
+  assert.deepEqual(report.errors, []);
+});
+
+test("runDashboard keeps fresh validation failures as failures after self-update", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.doctorPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    warnings: [],
+    errors: [],
+    counts: {},
+    startupSync: {
+      projectPlugin: true,
+      projectConfig: true,
+      lastState: "pass",
+    },
+  });
+  writeJson(paths.validationPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    generatedAt: "2026-05-06T20:12:00.000Z",
+    outcome: "fail",
+    checks: [
+      { name: "OpenCode resolved config", status: "fail", message: "debug config returned invalid JSON" },
+    ],
+  });
+  writeJson(paths.securityPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    generatedAt: "2026-05-06T20:12:00.000Z",
+    outcome: "pass",
+    findings: [],
+  });
+  writeJson(paths.updateStatusPath, {
+    version: 1,
+    status: "updated",
+    currentVersion: "0.0.55",
+    latestVersion: OGB_VERSION,
+    latestTag: `v${OGB_VERSION}`,
+    checkedAt: "2026-05-06T20:10:00.000Z",
+    finishedAt: "2026-05-06T20:11:00.000Z",
+    restartRequired: true,
+    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+  });
+
+  const report = runDashboard({ projectRoot, refresh: false, silent: true });
+
+  assert.equal(report.outcome, "fail");
+  assert.equal(report.reports.validation.status, "fail");
+  assert.ok(report.errors.some((error) => error.includes("debug config returned invalid JSON")));
+});
+
+test("runDashboard softens known Windows quoted-command failures while OpenCode restart is pending", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.doctorPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    warnings: [],
+    errors: [],
+    counts: {},
+    startupSync: {
+      projectPlugin: true,
+      projectConfig: true,
+      lastState: "pass",
+    },
+  });
+  writeJson(paths.validationPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    generatedAt: "2026-05-06T20:12:00.000Z",
+    outcome: "fail",
+    checks: [
+      { name: "OpenCode resolved config", status: "fail", message: `'\\"C:\\Users\\leona\\AppData\\Roaming\\npm\\opencode.cmd\\"' nao e reconhecido como um comando interno` },
+    ],
+  });
+  writeJson(paths.securityPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    generatedAt: "2026-05-06T20:12:00.000Z",
+    outcome: "pass",
+    findings: [],
+  });
+  writeJson(paths.updateStatusPath, {
+    version: 1,
+    status: "updated",
+    currentVersion: "0.0.55",
+    latestVersion: OGB_VERSION,
+    latestTag: `v${OGB_VERSION}`,
+    checkedAt: "2026-05-06T20:10:00.000Z",
+    finishedAt: "2026-05-06T20:11:00.000Z",
+    restartRequired: true,
+    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+  });
+
+  const report = runDashboard({ projectRoot, refresh: false, silent: true });
+
+  assert.equal(report.outcome, "warn");
+  assert.equal(report.reports.validation.status, "warn");
+  assert.deepEqual(report.errors, []);
+});
+
 test("runDashboard surfaces startup sync failure details", () => {
   const projectRoot = tempProject();
   const paths = resolveProjectPaths(projectRoot);

@@ -30,6 +30,7 @@ export interface ValidationCheck {
 export interface ValidationReport {
   version: string;
   projectRoot: string;
+  generatedAt: string;
   outcome: "pass" | "warn" | "fail";
   checks: ValidationCheck[];
 }
@@ -469,6 +470,7 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
   const report: ValidationReport = {
     version: OGB_VERSION,
     projectRoot: paths.projectRoot,
+    generatedAt: new Date().toISOString(),
     outcome,
     checks,
   };

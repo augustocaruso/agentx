@@ -35,6 +35,7 @@ test("runValidation validates home/global OpenCode files without project artifac
     const failed = report.checks.filter((check) => check.status === "fail");
 
     assert.equal(report.outcome, "warn");
+    assert.match(report.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
     assert.deepEqual(failed, []);
     assert.equal(report.checks.find((check) => check.name === "Global expanded Gemini context")?.status, "pass");
     assert.equal(report.checks.find((check) => check.name === "Global OpenCode config")?.status, "pass");
