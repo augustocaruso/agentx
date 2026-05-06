@@ -745,7 +745,6 @@ function readPanel(root) {
   const inventory = safeReadJson(path.join(generated, "ogb-inventory.json"));
   const pluginStatus = safeReadJson(path.join(generated, "ogb-plugin-status.json"));
   const updateStatus = dashboard?.update || safeReadJson(path.join(generated, "ogb-update-status.json")) || {};
-  const telemetryStatus = dashboard?.telemetry || safeReadJson(path.join(generated, "ogb-telemetry-status.json")) || {};
   const limits = readLimits(root);
 
   if (!dashboard && !doctor && !inventory) {
@@ -783,10 +782,6 @@ function readPanel(root) {
     updateStatus: String(updateStatus.status || "missing"),
     updateLatest: String(updateStatus.latestTag || updateStatus.latestVersion || ""),
     updateRestartRequired: updateStatus.restartRequired === true,
-    telemetryReady: telemetryStatus.ready === true,
-    telemetryEnabled: telemetryStatus.enabled === true,
-    telemetryPayloadLevel: String(telemetryStatus.payloadLevel || ""),
-    telemetryOutboxCount: Number(telemetryStatus.outboxCount ?? 0),
     warnings: Array.isArray(dashboard?.warnings) ? dashboard.warnings.length : Array.isArray(doctor?.warnings) ? doctor.warnings.length : 0,
     errors: Array.isArray(dashboard?.errors) ? dashboard.errors.length : Array.isArray(doctor?.errors) ? doctor.errors.length : 0,
     generatedAt: dashboard?.generatedAt,
@@ -848,13 +843,6 @@ function updateText(data) {
   return "";
 }
 
-function telemetryText(data) {
-  if (data.telemetryReady) return "telemetry ready · outbox " + String(data.telemetryOutboxCount || 0);
-  if (data.telemetryEnabled) return "telemetry pending config";
-  if (data.telemetryOutboxCount > 0) return "telemetry local · outbox " + String(data.telemetryOutboxCount);
-  return "";
-}
-
 function BridgeRows(props) {
   const data = () => props.panel();
   return box({ gap: 0 },
@@ -871,12 +859,6 @@ function BridgeRows(props) {
       const text = updateText(current);
       if (!text) return undefined;
       return line({ fg: current.updateRestartRequired || current.updateStatus === "error" ? props.theme().warning : props.theme().textMuted }, text);
-    },
-    () => {
-      const current = data();
-      const text = telemetryText(current);
-      if (!text) return undefined;
-      return line({ fg: current.telemetryReady ? props.theme().textMuted : props.theme().warning }, text);
     },
     () => {
       const current = data();
