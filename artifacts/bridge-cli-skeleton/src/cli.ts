@@ -468,11 +468,12 @@ telemetry.command("send")
   .description("Send queued and unsent telemetry records, keeping failures in the outbox")
   .option("--since <duration>", "Include records since duration or date", "7d")
   .option("--limit <n>", "Maximum run records", (value) => Number.parseInt(value, 10))
+  .option("--include-pass", "Also send clean pass records for manual debugging")
   .option("--json", "Print JSON result")
   .action(async (opts) => {
     const { project } = commonProjectOptions();
     const paths = resolveProjectPaths(project);
-    const result = await sendTelemetry({ homeDir: paths.homeDir, since: opts.since, limit: opts.limit });
+    const result = await sendTelemetry({ homeDir: paths.homeDir, since: opts.since, limit: opts.limit, includePass: opts.includePass });
     printTelemetrySendResult(result, opts.json);
     if (!result.ok && result.reason !== "telemetry_not_enabled") process.exitCode = 1;
   });

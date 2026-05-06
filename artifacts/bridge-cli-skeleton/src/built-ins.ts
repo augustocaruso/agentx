@@ -179,6 +179,8 @@ Se o usuario pedir envio manual, execute:
 
 ogb telemetry send --since 7d --project "$PWD"
 
+Esse envio normal manda remotamente apenas problemas acionaveis. Passes limpos continuam no preview/local. Use --include-pass somente se o mantenedor pedir explicitamente um teste/debug do canal remoto.
+
 Se o usuario quiser desligar, execute:
 
 ogb telemetry disable --project "$PWD"

@@ -40,7 +40,7 @@ async function loadWorker(): Promise<any> {
   return mod.default;
 }
 
-function envelope() {
+function envelope(records: Array<Record<string, unknown>> = [actionableRecord()]) {
   return {
     schema: "opencode-gemini-bridge.workflow-telemetry-envelope.v1",
     envelopeId: "env-1",
@@ -50,17 +50,43 @@ function envelope() {
     client: { app: "opencode-gemini-bridge" },
     limits: { maxEnvelopeBytes: 262144 },
     truncated: false,
-    records: [
-      {
-        runId: "run-1",
-        workflow: "doctor",
-        status: "completed",
-        outcome: "pass",
-        recordedAt: "2026-05-06T12:00:00.000Z",
-        diagnosticContext: { rootCauseLabel: "Nenhum problema detectado" },
-        payloadSummary: { warnings: [], errors: [] },
-      },
-    ],
+    records,
+  };
+}
+
+function actionableRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    runId: "run-1",
+    workflow: "dashboard",
+    status: "completed_with_warnings",
+    outcome: "warn",
+    recordedAt: "2026-05-06T12:00:00.000Z",
+    diagnosticContext: {
+      rootCauseCode: "plugin_inactive",
+      rootCauseLabel: "Plugin OpenCode configurado mas inativo",
+      recoveryCommand: "Rode ogb sync e reinicie o OpenCode se o aviso continuar.",
+    },
+    payloadSummary: {
+      warnings: ["opencode-auto-fallback is enabled in OGB config, but the OpenCode plugin is not active."],
+      errors: [],
+    },
+    ...overrides,
+  };
+}
+
+function cleanRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    runId: "run-clean",
+    workflow: "sync",
+    status: "completed",
+    outcome: "pass",
+    recordedAt: "2026-05-06T12:00:00.000Z",
+    diagnosticContext: {
+      rootCauseCode: "no_issue_detected",
+      rootCauseLabel: "Nenhum problema detectado",
+    },
+    payloadSummary: { warnings: [], errors: [] },
+    ...overrides,
   };
 }
 
@@ -113,9 +139,28 @@ test("telemetry email worker accepts an OGB envelope", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(body.accepted, 1);
+  assert.equal(body.actionable, 1);
   assert.equal(body.queued, true);
   assert.match(body.bufferKey, /^pending:/);
   assert.equal(kv.size, 1);
+});
+
+test("telemetry email worker accepts clean pass without queueing email", async () => {
+  const worker = await loadWorker();
+  const kv = new MemoryKv();
+  const response = await worker.fetch(request("/v1/telemetry/workflow-runs", {
+    method: "POST",
+    headers: { authorization: "Bearer secret" },
+    body: JSON.stringify(envelope([cleanRecord()])),
+  }), { OGB_TELEMETRY_TOKEN: "secret", TELEMETRY_BUFFER: kv });
+  const body = await response.json() as any;
+
+  assert.equal(response.status, 200);
+  assert.equal(body.accepted, 1);
+  assert.equal(body.actionable, 0);
+  assert.equal(body.queued, false);
+  assert.equal(body.reason, "no_actionable_records");
+  assert.equal(kv.size, 0);
 });
 
 test("telemetry email worker sends immediate email without KV", async () => {
@@ -141,8 +186,12 @@ test("telemetry email worker sends immediate email without KV", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(body.queued, false);
+    assert.equal(body.actionable, 1);
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /\[OGB\]/);
+    assert.match(sent[0].subject, /\[OGB\]\[medium\] 1 issue\(s\): Plugin OpenCode configurado mas inativo/);
+    assert.doesNotMatch(sent[0].text, /Envelope JSON/);
+    assert.doesNotMatch(sent[0].text, /"schema"/);
+    assert.doesNotMatch(sent[0].html, /<pre/);
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -193,6 +242,29 @@ test("telemetry email worker keeps digest buffer when Resend fails", async () =>
   }
 });
 
+test("telemetry email worker drops pass-only digest entries", async () => {
+  const worker = await loadWorker();
+  const kv = new MemoryKv();
+  await kv.put("pending:clean", JSON.stringify(envelope([cleanRecord()])));
+
+  const response = await worker.fetch(request("/v1/telemetry/digest/send", {
+    method: "POST",
+    headers: { authorization: "Bearer secret" },
+  }), {
+    OGB_TELEMETRY_TOKEN: "secret",
+    TELEMETRY_BUFFER: kv,
+    RESEND_API_KEY: "resend-secret",
+    RESEND_FROM: "ogb@example.test",
+    RESEND_TO: "maintainer@example.test",
+  });
+  const body = await response.json() as any;
+
+  assert.equal(response.status, 200);
+  assert.equal(body.sent, false);
+  assert.equal(body.reason, "no_actionable_records");
+  assert.equal(kv.size, 0);
+});
+
 test("telemetry email worker scheduled digest sends and clears KV", async () => {
   const worker = await loadWorker();
   const kv = new MemoryKv();
@@ -220,8 +292,52 @@ test("telemetry email worker scheduled digest sends and clears KV", async () => 
     await Promise.all(pending);
 
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /\[digest\]/);
+    assert.match(sent[0].subject, /\[OGB\]\[digest\]\[medium\] 1 issue\(s\): Plugin OpenCode configurado mas inativo/);
     assert.equal(kv.size, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("telemetry email worker groups repeated fingerprints in digest subject and body", async () => {
+  const worker = await loadWorker();
+  const kv = new MemoryKv();
+  const previousFetch = globalThis.fetch;
+  const sent: Array<any> = [];
+  globalThis.fetch = (async (_url, init) => {
+    sent.push(JSON.parse(String(init?.body || "{}")));
+    return new Response('{"id":"email_1"}', { status: 200 });
+  }) as typeof fetch;
+  try {
+    await worker.fetch(request("/v1/telemetry/workflow-runs", {
+      method: "POST",
+      headers: { authorization: "Bearer secret" },
+      body: JSON.stringify(envelope([
+        cleanRecord(),
+        actionableRecord({ runId: "run-1", recordedAt: "2026-05-06T12:00:00.000Z" }),
+        actionableRecord({ runId: "run-2", recordedAt: "2026-05-06T12:05:00.000Z" }),
+      ])),
+    }), { OGB_TELEMETRY_TOKEN: "secret", TELEMETRY_BUFFER: kv });
+
+    const response = await worker.fetch(request("/v1/telemetry/digest/send", {
+      method: "POST",
+      headers: { authorization: "Bearer secret" },
+    }), {
+      OGB_TELEMETRY_TOKEN: "secret",
+      TELEMETRY_BUFFER: kv,
+      RESEND_API_KEY: "resend-secret",
+      RESEND_FROM: "ogb@example.test",
+      RESEND_TO: "maintainer@example.test",
+    });
+    const body = await response.json() as any;
+
+    assert.equal(response.status, 200);
+    assert.equal(body.sent, true);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].subject, /\[OGB\]\[digest\]\[medium\] 1 issue\(s\): Plugin OpenCode configurado mas inativo/);
+    assert.match(sent[0].text, /2x \[medium\] Plugin OpenCode configurado mas inativo/);
+    assert.doesNotMatch(sent[0].text, /sync: pass/);
+    assert.doesNotMatch(sent[0].text, /Envelope JSON/);
   } finally {
     globalThis.fetch = previousFetch;
   }

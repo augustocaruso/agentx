@@ -275,6 +275,12 @@ quando o pacote foi montado pelo mantenedor com defaults privados. `disable`
 bloqueia esses defaults para aquela instalacao. O dashboard escreve
 `.opencode/generated/ogb-telemetry-status.json`, sem token.
 
+O envio remoto e action-first: `pass` limpo continua no historico local e no
+`preview`, mas nao entra no email/digest. `failed`,
+`completed_with_warnings`, warnings/errors e updates que exigem restart sao
+enviados. Para depurar o canal remoto com passes limpos, use
+`ogb telemetry send --since 7d --include-pass`.
+
 Para receber emails como no Medical Notes Workbench, rode
 `ogb telemetry setup-email`. Ele usa o Wrangler logado na maquina, cria/sube um
 Cloudflare Worker, coloca os secrets no Worker, configura Resend e grava um

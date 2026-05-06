@@ -200,8 +200,14 @@ ogb telemetry enable --endpoint https://worker.example/v1/telemetry/workflow-run
 ogb telemetry disable
 ogb telemetry preview --since 7d
 ogb telemetry send --since 7d
+ogb telemetry send --since 7d --include-pass
 ogb telemetry record --workflow startup-plugin --status completed --payload -
 ```
+
+`preview` mostra o historico local completo. `send` normal envia remotamente
+apenas problemas acionaveis: falhas, warnings, errors e updates que exigem
+restart. Passes limpos ficam locais. `--include-pass` existe apenas para debug
+manual do canal remoto.
 
 Arquivos locais:
 

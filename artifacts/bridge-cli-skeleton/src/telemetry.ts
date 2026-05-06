@@ -143,6 +143,7 @@ export interface TelemetryOptions {
 export interface TelemetrySendOptions extends TelemetryOptions {
   since?: string;
   limit?: number;
+  includePass?: boolean;
 }
 
 export interface TelemetrySendResult {
@@ -518,6 +519,10 @@ function looksLikePathValue(value: string): boolean {
 function pathLabel(value: string): string {
   const home = os.homedir();
   const normalized = value.startsWith(home) ? `~${value.slice(home.length)}` : value;
+  const lower = normalized.replace(/\\/g, "/").toLowerCase();
+  if (lower.endsWith("telemetry.defaults.json") || lower.includes("opencode-gemini-bridge/telemetry/config.json")) {
+    return "telemetry-config";
+  }
   const parts = normalized.split(/[\\/]+/).filter(Boolean);
   if (parts.length >= 3) return parts.slice(-3).join("/");
   return parts.join("/") || normalized;
@@ -598,25 +603,53 @@ function summarizePayload(payload: unknown): Record<string, unknown> {
   };
 }
 
+function payloadRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function payloadBoolean(value: unknown, key: string, depth = 0): boolean {
+  if (!value || typeof value !== "object" || depth > 5) return false;
+  if (Array.isArray(value)) return value.some((item) => payloadBoolean(item, key, depth + 1));
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    if (entryKey === key && entryValue === true) return true;
+    if (entryValue && typeof entryValue === "object" && payloadBoolean(entryValue, key, depth + 1)) return true;
+  }
+  return false;
+}
+
+function includesAny(text: string, needles: string[]): boolean {
+  return needles.some((needle) => text.includes(needle));
+}
+
 function diagnosticContext(payload: unknown, summary: Record<string, unknown>, status: string): Record<string, unknown> {
   const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
   const errors = Array.isArray(summary.errors) ? summary.errors : [];
-  const text = JSON.stringify([payload, warnings, errors]).toLowerCase();
+  const messagesText = [...warnings, ...errors].join("\n").toLowerCase();
+  const record = payloadRecord(payload);
+  const payloadOutcome = String(record.outcome ?? record.status ?? record.state ?? "").toLowerCase();
   let code = "no_issue_detected";
   let label = "Nenhum problema detectado";
   let recovery = "";
-  if (text.includes("restart") || text.includes("reinicie")) {
-    code = "restart_required";
-    label = "OpenCode precisa reiniciar para carregar mudancas";
-    recovery = "Reinicie o OpenCode e rode /bridge novamente.";
-  } else if (text.includes("hook needs review") || text.includes("needs_review")) {
-    code = "trust_review_required";
-    label = "Hooks/scripts precisam de revisao";
-    recovery = "Revise o recurso e rode ogb trust-extension ou ogb pass --accept-hooks quando for seguro.";
-  } else if (status === "failed" || errors.length > 0) {
+  if (status === "failed" || errors.length > 0) {
     code = "workflow_failed";
     label = "Workflow OGB falhou";
     recovery = "Rode ogb bridge ou o comando indicado com --json para ver o diagnostico.";
+  } else if (includesAny(messagesText, ["opencode-auto-fallback is enabled", "plugin is not active", "plugin inactive"])) {
+    code = "plugin_inactive";
+    label = "Plugin OpenCode configurado mas inativo";
+    recovery = "Rode ogb sync e reinicie o OpenCode se o aviso continuar.";
+  } else if (includesAny(messagesText, ["agent conflict", "exists or was edited manually", "managed file conflict"])) {
+    code = "managed_file_conflict";
+    label = "Arquivo gerenciado foi editado manualmente";
+    recovery = "Revise o arquivo apontado; use --force apenas se quiser sobrescrever a edicao local.";
+  } else if (includesAny(messagesText, ["hook needs review", "needs_review", "trusted hook/script changed", "trusted hook", "hooks/scripts"])) {
+    code = "trust_review_required";
+    label = "Hooks/scripts precisam de revisao";
+    recovery = "Revise o recurso e rode ogb trust-extension ou ogb pass --accept-hooks quando for seguro.";
+  } else if (payloadBoolean(payload, "restartRequired") || payloadOutcome === "updated") {
+    code = "restart_required";
+    label = "OpenCode precisa reiniciar para carregar mudancas";
+    recovery = "Reinicie o OpenCode e rode /bridge novamente.";
   } else if (status === "completed_with_warnings" || warnings.length > 0) {
     code = "workflow_warn";
     label = "Workflow OGB terminou com avisos";
@@ -629,6 +662,25 @@ function diagnosticContext(payload: unknown, summary: Record<string, unknown>, s
     warningCount: warnings.length,
     errorCount: errors.length,
   };
+}
+
+function messagesFromSummary(summary: Record<string, unknown>, key: "warnings" | "errors"): string[] {
+  const value = summary[key];
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+export function isActionableTelemetryRecord(record: WorkflowRunRecord | Record<string, unknown>): boolean {
+  const value = record as Record<string, unknown>;
+  if (Number(value.exitCode ?? 0) !== 0) return true;
+  if (value.status === "failed" || value.status === "completed_with_warnings") return true;
+  if (value.outcome === "fail" || value.outcome === "warn") return true;
+  const summary = payloadRecord(value.payloadSummary);
+  if (messagesFromSummary(summary, "warnings").length > 0) return true;
+  if (messagesFromSummary(summary, "errors").length > 0) return true;
+  const diagnostic = payloadRecord(value.diagnosticContext);
+  const rootCauseCode = String(diagnostic.rootCauseCode ?? "");
+  if (rootCauseCode && rootCauseCode !== "no_issue_detected") return true;
+  return false;
 }
 
 function redactObject(value: unknown, depth = 0): unknown {
@@ -865,7 +917,7 @@ async function postEnvelope(envelope: TelemetryEnvelope, config: TelemetryConfig
   }
 }
 
-export async function flushTelemetryOutbox(options: TelemetryOptions & { limit?: number } = {}): Promise<TelemetrySendResult> {
+export async function flushTelemetryOutbox(options: TelemetrySendOptions = {}): Promise<TelemetrySendResult> {
   const config = readTelemetryConfig(options);
   if (!ready(config)) {
     return { ok: false, sent: 0, failed: 0, queued: 0, reason: "telemetry_not_enabled", errors: [], status: telemetryStatus(options) };
@@ -887,9 +939,16 @@ export async function flushTelemetryOutbox(options: TelemetryOptions & { limit?:
       try { fs.unlinkSync(filePath); } catch {}
       continue;
     }
+    const records = Array.isArray(envelope.records) ? envelope.records : [];
+    const sendableRecords = options.includePass ? records : records.filter(isActionableTelemetryRecord);
+    if (sendableRecords.length === 0) {
+      try { fs.unlinkSync(filePath); } catch {}
+      continue;
+    }
+    const sendableEnvelope = sendableRecords.length === records.length ? envelope : { ...envelope, records: sendableRecords };
     try {
-      await postEnvelope(envelope, config, options);
-      markSent(envelope, options);
+      await postEnvelope(sendableEnvelope, config, options);
+      markSent(sendableEnvelope, options);
       fs.unlinkSync(filePath);
       sent += 1;
     } catch (error) {
@@ -912,7 +971,7 @@ export async function sendTelemetry(options: TelemetrySendOptions = {}): Promise
   }
   const first = await flushTelemetryOutbox(options);
   if (first.failed > 0) return first;
-  const records = unsentRecords(options);
+  const records = unsentRecords(options).filter((record) => options.includePass || isActionableTelemetryRecord(record));
   let queued = 0;
   if (records.length > 0) {
     enqueueEnvelope(buildTelemetryEnvelope(records, options), options);
@@ -930,6 +989,7 @@ async function safeAutoSendRecord(record: WorkflowRunRecord, options: TelemetryO
   try {
     const config = readTelemetryConfig(options);
     if (!ready(config)) return;
+    if (!isActionableTelemetryRecord(record)) return;
     const envelope = buildTelemetryEnvelope([record], {
       ...options,
       rawPayloads: options.rawPayload === undefined ? undefined : { [record.runId]: options.rawPayload },

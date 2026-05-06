@@ -81,9 +81,21 @@ function recordedAt(record) {
   return record.recordedAt || record.recorded_at || "";
 }
 
+function diagnosticContext(record) {
+  return record.diagnosticContext || record.diagnostic_context || {};
+}
+
+function payloadSummary(record) {
+  return record.payloadSummary || record.payload_summary || {};
+}
+
+function summaryMessages(summary, key) {
+  return Array.isArray(summary[key]) ? summary[key].map((item) => String(item || "")).filter(Boolean) : [];
+}
+
 function compactRecord(record) {
-  const diagnostic = record.diagnosticContext || record.diagnostic_context || {};
-  const summary = record.payloadSummary || record.payload_summary || {};
+  const diagnostic = diagnosticContext(record);
+  const summary = payloadSummary(record);
   return {
     runId: runId(record),
     workflow: record.workflow,
@@ -96,8 +108,32 @@ function compactRecord(record) {
     rootCauseCode: diagnostic.rootCauseCode || "",
     rootCauseLabel: diagnostic.rootCauseLabel || "",
     recoveryCommand: diagnostic.recoveryCommand || "",
-    warnings: Array.isArray(summary.warnings) ? summary.warnings.slice(0, 5) : [],
-    errors: Array.isArray(summary.errors) ? summary.errors.slice(0, 5) : [],
+    warnings: summaryMessages(summary, "warnings").slice(0, 5),
+    errors: summaryMessages(summary, "errors").slice(0, 5),
+  };
+}
+
+function isActionableRecord(record) {
+  const summary = payloadSummary(record);
+  const diagnostic = diagnosticContext(record);
+  const status = String(record.status || "").toLowerCase();
+  const outcome = String(record.outcome || "").toLowerCase();
+  const exitCode = Number(record.exitCode ?? record.exit_code ?? 0);
+  const warnings = summaryMessages(summary, "warnings");
+  const errors = summaryMessages(summary, "errors");
+  const rootCauseCode = String(diagnostic.rootCauseCode || diagnostic.root_cause_code || "");
+  if (exitCode !== 0) return true;
+  if (status === "failed" || status === "completed_with_warnings") return true;
+  if (outcome === "fail" || outcome === "warn") return true;
+  if (warnings.length > 0 || errors.length > 0) return true;
+  if (rootCauseCode && rootCauseCode !== "no_issue_detected") return true;
+  return false;
+}
+
+function actionableEnvelope(envelope) {
+  return {
+    ...envelope,
+    records: Array.isArray(envelope.records) ? envelope.records.filter(isActionableRecord) : [],
   };
 }
 
@@ -163,6 +199,7 @@ function buildDigestEnvelope(entries, env, reason) {
   const records = [];
   for (const envelope of envelopes) {
     for (const record of envelope.records || []) {
+      if (!isActionableRecord(record)) continue;
       records.push({
         ...record,
         installId: record.installId || record.install_id || installId(envelope),
@@ -196,55 +233,134 @@ function buildDigestEnvelope(entries, env, reason) {
   };
 }
 
-function digestText(records) {
+function normalizeProblemText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\[[^\]]+\]/g, "")
+    .replace(/[0-9a-f]{8,}/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
+function severityOf(record) {
+  if (record.outcome === "fail" || record.status === "failed" || Number(record.exitCode || 0) !== 0) return "high";
+  if (record.rootCauseCode === "setup_test" || record.workflow === "telemetry") return "low";
+  if (record.outcome === "warn" || record.status === "completed_with_warnings" || record.warnings.length || record.rootCauseCode) return "medium";
+  return "low";
+}
+
+function severityRank(value) {
+  return value === "high" ? 3 : value === "medium" ? 2 : value === "low" ? 1 : 0;
+}
+
+function problemLabel(record) {
+  if (record.rootCauseLabel) return record.rootCauseLabel;
+  if (record.errors[0]) return record.errors[0];
+  if (record.warnings[0]) return record.warnings[0];
+  return record.workflow || "workflow issue";
+}
+
+function problemFingerprint(record) {
+  const basis = record.rootCauseCode || record.errors[0] || record.warnings[0] || record.status || record.outcome;
+  return [record.workflow, record.rootCauseCode || "unknown", normalizeProblemText(basis)].join("|");
+}
+
+function groupProblems(records) {
+  const groups = new Map();
+  for (const record of records) {
+    const key = problemFingerprint(record);
+    const severity = severityOf(record);
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        key,
+        count: 1,
+        severity,
+        workflows: new Set([record.workflow]),
+        label: problemLabel(record),
+        nextAction: record.recoveryCommand || "",
+        firstAt: record.recordedAt || "",
+        lastAt: record.recordedAt || "",
+        sampleWarnings: record.warnings.slice(0, 2),
+        sampleErrors: record.errors.slice(0, 2),
+      });
+      continue;
+    }
+    existing.count += 1;
+    existing.workflows.add(record.workflow);
+    if (severityRank(severity) > severityRank(existing.severity)) existing.severity = severity;
+    if (!existing.nextAction && record.recoveryCommand) existing.nextAction = record.recoveryCommand;
+    if (record.recordedAt && (!existing.firstAt || record.recordedAt < existing.firstAt)) existing.firstAt = record.recordedAt;
+    if (record.recordedAt && (!existing.lastAt || record.recordedAt > existing.lastAt)) existing.lastAt = record.recordedAt;
+    for (const warning of record.warnings) if (existing.sampleWarnings.length < 2 && !existing.sampleWarnings.includes(warning)) existing.sampleWarnings.push(warning);
+    for (const error of record.errors) if (existing.sampleErrors.length < 2 && !existing.sampleErrors.includes(error)) existing.sampleErrors.push(error);
+  }
+  return [...groups.values()].sort((a, b) => severityRank(b.severity) - severityRank(a.severity) || b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function digestText(envelope, records) {
+  const groups = groupProblems(records);
+  const severityCounts = Object.fromEntries(countBy(groups, (group) => group.severity));
   const lines = [
-    "OGB telemetry digest",
+    envelope.digest ? "OGB actionable telemetry digest" : "OGB actionable telemetry",
     "",
-    `Runs: ${records.length}`,
+    `Actionable runs: ${records.length}`,
+    `Problems: ${groups.length}`,
+    `Severity: high=${severityCounts.high || 0}, medium=${severityCounts.medium || 0}, low=${severityCounts.low || 0}`,
+    `Generated: ${generatedAt(envelope)}`,
+    "",
+    "Problems",
     "",
   ];
-  for (const record of records.slice(0, 80)) {
-    lines.push(`- ${record.workflow}: ${record.outcome} (${record.status})`);
-    if (record.rootCauseLabel) lines.push(`  Cause: ${record.rootCauseLabel}`);
-    if (record.recoveryCommand) lines.push(`  Next: ${record.recoveryCommand}`);
-    for (const warning of record.warnings || []) lines.push(`  Warning: ${warning}`);
-    for (const error of record.errors || []) lines.push(`  Error: ${error}`);
+  for (const group of groups.slice(0, 12)) {
+    lines.push(`- ${group.count}x [${group.severity}] ${group.label}`);
+    lines.push(`  Workflows: ${[...group.workflows].sort().join(", ")}`);
+    if (group.nextAction) lines.push(`  Next: ${group.nextAction}`);
+    if (group.firstAt || group.lastAt) lines.push(`  Window: ${group.firstAt || "?"} -> ${group.lastAt || "?"}`);
+    for (const warning of group.sampleWarnings) lines.push(`  Warning sample: ${warning}`);
+    for (const error of group.sampleErrors) lines.push(`  Error sample: ${error}`);
   }
-  if (records.length > 80) lines.push("", `...${records.length - 80} more run(s) omitted from this email.`);
+  if (groups.length > 12) lines.push("", `...${groups.length - 12} more problem group(s) omitted.`);
+  lines.push("", "Debug");
+  lines.push("Run `ogb telemetry preview --since 24h` on the affected machine for full local context.");
   return lines.join("\n");
 }
 
 function digestHtml(envelope, records) {
-  const rows = records.slice(0, 80).map((record) => (
-    `<tr><td>${escapeHtml(record.workflow)}</td><td>${escapeHtml(record.outcome)}</td><td>${escapeHtml(record.status)}</td><td>${escapeHtml(record.rootCauseLabel || "")}</td></tr>`
+  const groups = groupProblems(records);
+  const rows = groups.slice(0, 20).map((group) => (
+    `<tr><td>${escapeHtml(String(group.count))}x</td><td>${escapeHtml(group.severity)}</td><td>${escapeHtml(group.label)}</td><td>${escapeHtml([...group.workflows].sort().join(", "))}</td><td>${escapeHtml(group.nextAction || "")}</td></tr>`
   )).join("");
   return `<!doctype html>
 <html>
   <body style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; color: #1f2937;">
-    <h2>OGB telemetry${envelope.digest ? " digest" : ""}</h2>
-    <p><strong>Runs:</strong> ${records.length}</p>
+    <h2>OGB actionable telemetry${envelope.digest ? " digest" : ""}</h2>
+    <p><strong>Actionable runs:</strong> ${records.length}</p>
+    <p><strong>Problems:</strong> ${groups.length}</p>
     <p><strong>Generated:</strong> ${escapeHtml(generatedAt(envelope))}</p>
     <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse;">
-      <thead><tr><th>Workflow</th><th>Outcome</th><th>Status</th><th>Cause</th></tr></thead>
+      <thead><tr><th>Count</th><th>Severity</th><th>Problem</th><th>Workflows</th><th>Next action</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <pre style="white-space: pre-wrap; background: #f3f4f6; padding: 12px;">${escapeHtml(JSON.stringify(sanitizeForEmail(envelope), null, 2)).slice(0, 50000)}</pre>
+    <p style="color: #6b7280;">For full local context, run <code>ogb telemetry preview --since 24h</code> on the affected machine.</p>
   </body>
 </html>`;
 }
 
 function renderEmail(envelope) {
   const safeEnvelope = sanitizeForEmail(envelope);
-  const records = (safeEnvelope.records || []).map(compactRecord);
-  const failed = records.filter((record) => record.outcome === "fail" || record.status === "failed").length;
-  const warned = records.filter((record) => record.outcome === "warn" || record.status === "completed_with_warnings").length;
-  const severity = failed > 0 ? "high" : warned > 0 ? "medium" : "low";
+  const records = (safeEnvelope.records || []).filter(isActionableRecord).map(compactRecord);
+  const groups = groupProblems(records);
+  const severity = groups.reduce((current, group) => severityRank(group.severity) > severityRank(current) ? group.severity : current, "low");
   const digestLabel = safeEnvelope.digest ? "[digest]" : "";
-  const focus = records[0]?.workflow || "workflow";
+  const focus = groups.slice(0, 3).map((group) => group.label).join(", ") || "no actionable issues";
   return {
-    subject: `[OGB]${digestLabel}[${severity}] ${records.length} run(s): ${focus}`.slice(0, 180),
-    text: `${digestText(records)}\n\nEnvelope JSON\n\n${JSON.stringify(safeEnvelope, null, 2)}`,
+    subject: `[OGB]${digestLabel}[${severity}] ${groups.length} issue(s): ${focus}`.slice(0, 180),
+    text: digestText(safeEnvelope, records),
     html: digestHtml(safeEnvelope, records),
+    actionableCount: records.length,
+    problemCount: groups.length,
   };
 }
 
@@ -282,24 +398,38 @@ async function acceptWorkflowRuns(request, env) {
   const error = validateEnvelope(parsed.body);
   if (error) return json({ error }, 400);
 
+  const actionable = actionableEnvelope(parsed.body);
+  if (actionable.records.length === 0) {
+    return json({
+      ok: true,
+      queued: false,
+      accepted: parsed.body.records.length,
+      actionable: 0,
+      reason: "no_actionable_records",
+      schema: OGB_ENVELOPE_SCHEMA,
+    });
+  }
+
   if (hasTelemetryBuffer(env)) {
-    const key = await appendEnvelope(env, parsed.body);
+    const key = await appendEnvelope(env, actionable);
     return json({
       ok: true,
       queued: true,
       accepted: parsed.body.records.length,
+      actionable: actionable.records.length,
       bufferKey: key,
       digestWindowMinutes: digestWindowMinutes(env),
       schema: OGB_ENVELOPE_SCHEMA,
     });
   }
 
-  const email = renderEmail(parsed.body);
+  const email = renderEmail(actionable);
   await sendResendEmail(env, email);
   return json({
     ok: true,
     queued: false,
     accepted: parsed.body.records.length,
+    actionable: actionable.records.length,
     subject: email.subject,
     schema: OGB_ENVELOPE_SCHEMA,
   });
@@ -310,6 +440,11 @@ async function flushDigest(env, reason = "manual") {
   const entries = await readBufferedEnvelopes(env);
   if (entries.length === 0) return { ok: true, sent: false, reason: "empty_digest", records: 0 };
   const digestEnvelope = buildDigestEnvelope(entries, env, reason);
+  if (!digestEnvelope.records.length) {
+    const buffer = telemetryBuffer(env);
+    if (typeof buffer.delete === "function") await Promise.all(entries.map((entry) => buffer.delete(entry.key)));
+    return { ok: true, sent: false, reason: "no_actionable_records", records: 0 };
+  }
   const email = renderEmail(digestEnvelope);
 
   try {

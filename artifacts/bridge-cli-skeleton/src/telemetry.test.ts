@@ -8,6 +8,7 @@ import {
   buildTelemetryEnvelope,
   disableTelemetry,
   enableTelemetry,
+  isActionableTelemetryRecord,
   previewTelemetryEnvelope,
   recordWorkflowRun,
   redactSnippet,
@@ -184,6 +185,51 @@ test("envelope respects max byte limit by truncating without breaking schema", (
   });
 });
 
+test("diagnostic classification avoids false positives and names actionable causes", () => {
+  withEnv({ OGB_TELEMETRY_DEFAULTS_DISABLED: "1", OGB_TELEMETRY_CONFIG: undefined }, () => {
+    const homeDir = tempHome();
+    const currentUpdate = recordWorkflowRun({
+      workflow: "auto-update",
+      status: "completed",
+      payload: { status: "current", message: "No restart required today." },
+    }, { homeDir });
+    const dashboardPass = recordWorkflowRun({
+      workflow: "dashboard",
+      status: "completed",
+      payload: { status: "pass", nextAction: "Reinicie only appears in old prose, not structured restartRequired." },
+    }, { homeDir });
+    const pluginInactive = recordWorkflowRun({
+      workflow: "dashboard",
+      status: "completed_with_warnings",
+      payload: { warnings: ["opencode-auto-fallback is enabled in OGB config, but the OpenCode plugin is not active. Run ogb sync."] },
+    }, { homeDir });
+    const doctorPass = recordWorkflowRun({
+      workflow: "doctor",
+      status: "completed",
+      payload: { warnings: [], relevantPaths: ["~/opencode.jsonc", "opencode/plugins/fallback.json"] },
+    }, { homeDir });
+    const hookReview = recordWorkflowRun({
+      workflow: "doctor",
+      status: "completed",
+      payload: { warnings: ["Hook needs review: BeforeTool in extension settings"] },
+    }, { homeDir });
+    const restart = recordWorkflowRun({
+      workflow: "auto-update",
+      status: "completed",
+      payload: { status: "updated", restartRequired: true },
+    }, { homeDir });
+
+    assert.equal(currentUpdate.diagnosticContext.rootCauseCode, "no_issue_detected");
+    assert.equal(dashboardPass.diagnosticContext.rootCauseCode, "no_issue_detected");
+    assert.equal(pluginInactive.diagnosticContext.rootCauseCode, "plugin_inactive");
+    assert.equal(doctorPass.diagnosticContext.rootCauseCode, "no_issue_detected");
+    assert.equal(hookReview.diagnosticContext.rootCauseCode, "trust_review_required");
+    assert.equal(restart.diagnosticContext.rootCauseCode, "restart_required");
+    assert.equal(isActionableTelemetryRecord(currentUpdate), false);
+    assert.equal(isActionableTelemetryRecord(pluginInactive), true);
+  });
+});
+
 test("outbox preserves envelopes when endpoint fails", async () => {
   await withEnv({ OGB_TELEMETRY_DEFAULTS_DISABLED: "1", OGB_TELEMETRY_CONFIG: undefined }, async () => {
     const homeDir = tempHome();
@@ -192,7 +238,7 @@ test("outbox preserves envelopes when endpoint fails", async () => {
       endpointUrl: "https://telemetry.example.test/v1/telemetry/workflow-runs",
       authToken: "secret",
     });
-    recordWorkflowRun({ workflow: "sync", status: "completed", payload: { outcome: "pass" } }, { homeDir });
+    recordWorkflowRun({ workflow: "sync", status: "completed_with_warnings", payload: { warnings: ["Agent conflict: .opencode/agents/YOLO.md exists or was edited manually; use --force to overwrite"] } }, { homeDir });
 
     const result = await sendTelemetry({
       homeDir,
@@ -214,7 +260,7 @@ test("send uses Bearer token and marks runs as sent", async () => {
       endpointUrl: "https://telemetry.example.test/v1/telemetry/workflow-runs",
       authToken: "bearer-secret",
     });
-    recordWorkflowRun({ workflow: "doctor", status: "completed", payload: { outcome: "pass" } }, { homeDir });
+    recordWorkflowRun({ workflow: "doctor", status: "completed_with_warnings", payload: { warnings: ["Hook needs review: BeforeTool"] } }, { homeDir });
 
     const result = await sendTelemetry({
       homeDir,
@@ -232,6 +278,78 @@ test("send uses Bearer token and marks runs as sent", async () => {
     assert.match(seen.body ?? "", /"workflow":"doctor"|\"workflow\": \"doctor\"/);
     assert.equal(telemetryStatus({ homeDir }).outboxCount, 0);
     assert.equal(telemetryStatus({ homeDir }).sentRunCount, 1);
+  });
+});
+
+test("clean pass records stay local unless includePass is requested", async () => {
+  await withEnv({ OGB_TELEMETRY_DEFAULTS_DISABLED: "1", OGB_TELEMETRY_CONFIG: undefined }, async () => {
+    const homeDir = tempHome();
+    let calls = 0;
+    enableTelemetry({
+      homeDir,
+      endpointUrl: "https://telemetry.example.test/v1/telemetry/workflow-runs",
+      authToken: "bearer-secret",
+    });
+    recordWorkflowRun({ workflow: "sync", status: "completed", payload: { status: "pass" } }, { homeDir });
+
+    const skipped = await sendTelemetry({
+      homeDir,
+      since: "7d",
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: true, status: 202, text: async () => "" };
+      },
+    });
+
+    assert.equal(skipped.ok, true);
+    assert.equal(skipped.sent, 0);
+    assert.equal(calls, 0);
+    assert.equal(telemetryStatus({ homeDir }).runCount, 1);
+
+    const forced = await sendTelemetry({
+      homeDir,
+      since: "7d",
+      includePass: true,
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: true, status: 202, text: async () => "" };
+      },
+    });
+
+    assert.equal(forced.ok, true);
+    assert.equal(forced.sent, 1);
+    assert.equal(calls, 1);
+  });
+});
+
+test("pass-only outbox envelopes are discarded without remote send", async () => {
+  await withEnv({ OGB_TELEMETRY_DEFAULTS_DISABLED: "1", OGB_TELEMETRY_CONFIG: undefined }, async () => {
+    const homeDir = tempHome();
+    let calls = 0;
+    enableTelemetry({
+      homeDir,
+      endpointUrl: "https://telemetry.example.test/v1/telemetry/workflow-runs",
+      authToken: "bearer-secret",
+    });
+    const record = recordWorkflowRun({ workflow: "dashboard", status: "completed", payload: { outcome: "pass" } }, { homeDir });
+    const paths = telemetryPaths({ homeDir });
+    fs.mkdirSync(paths.outboxDir, { recursive: true });
+    fs.writeFileSync(path.join(paths.outboxDir, "old-pass.json"), JSON.stringify(buildTelemetryEnvelope([record], { homeDir })));
+
+    const result = await sendTelemetry({
+      homeDir,
+      since: "7d",
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: true, status: 202, text: async () => "" };
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.sent, 0);
+    assert.equal(calls, 0);
+    assert.equal(telemetryStatus({ homeDir }).outboxCount, 0);
+    assert.equal(telemetryStatus({ homeDir }).sentRunCount, 0);
   });
 });
 
