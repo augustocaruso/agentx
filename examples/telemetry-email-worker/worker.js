@@ -93,9 +93,139 @@ function summaryMessages(summary, key) {
   return Array.isArray(summary[key]) ? summary[key].map((item) => String(item || "")).filter(Boolean) : [];
 }
 
-function compactRecord(record) {
+const NON_ACTIONABLE_ROOT_CAUSES = new Set(["no_issue_detected", "dashboard_echo", "rulesync_disabled"]);
+const GENERIC_ROOT_CAUSES = new Set(["", "no_issue_detected", "workflow_warn", "workflow_failed"]);
+const CAUSE_DETAILS = {
+  dashboard_echo: {
+    label: "Dashboard repetiu aviso de outro workflow",
+    recovery: "Abra o workflow de origem no preview local para ver o aviso real.",
+  },
+  global_binary_mismatch: {
+    label: "Binario global do OGB esta desatualizado",
+    recovery: "Atualize o OGB global ou rode o comando pelo pacote local esperado.",
+  },
+  managed_file_conflict: {
+    label: "Arquivo gerenciado foi editado manualmente",
+    recovery: "Revise o arquivo apontado; use --force apenas se quiser sobrescrever a edicao local.",
+  },
+  missing_builtin_commands: {
+    label: "Comandos built-in do OpenCode estao faltando",
+    recovery: "Rode ogb sync para regenerar os comandos do OpenCode.",
+  },
+  no_issue_detected: {
+    label: "Nenhum problema detectado",
+    recovery: "",
+  },
+  plugin_inactive: {
+    label: "Plugin OpenCode configurado mas inativo",
+    recovery: "Rode ogb sync e reinicie o OpenCode se o aviso continuar.",
+  },
+  restart_required: {
+    label: "OpenCode precisa reiniciar para carregar mudancas",
+    recovery: "Reinicie o OpenCode e rode /bridge novamente.",
+  },
+  rulesync_disabled: {
+    label: "Rulesync esta desativado",
+    recovery: "Nenhuma acao se rulesync foi desativado de proposito; rode ogb sync --rulesync auto para reativar.",
+  },
+  stale_generated_files: {
+    label: "Arquivos gerados estao desatualizados",
+    recovery: "Rode ogb sync para regenerar arquivos com a versao atual.",
+  },
+  trust_review_required: {
+    label: "Hooks/scripts precisam de revisao",
+    recovery: "Revise o recurso e rode ogb trust-extension ou ogb pass --accept-hooks quando for seguro.",
+  },
+  validation_warn: {
+    label: "Validacao OGB terminou com avisos",
+    recovery: "Rode ogb validate --json para ver quais checks avisaram.",
+  },
+};
+
+function includesAny(text, needles) {
+  return needles.some((needle) => text.includes(needle));
+}
+
+function workflowDisplayName(workflow) {
+  return {
+    "auto-update": "Auto-update",
+    dashboard: "Dashboard",
+    doctor: "Doctor",
+    pass: "Pass",
+    "security-check": "Security-check",
+    "setup-opencode": "Setup OpenCode",
+    startup: "Plugin de startup",
+    "startup-plugin": "Plugin de startup",
+    sync: "Sync",
+    validate: "Validacao OGB",
+  }[workflow] || workflow || "Workflow OGB";
+}
+
+function workflowRecoveryCommand(workflow) {
+  return {
+    dashboard: "ogb dashboard",
+    doctor: "ogb doctor",
+    pass: "ogb pass",
+    "security-check": "ogb security-check",
+    "setup-opencode": "ogb setup-opencode",
+    sync: "ogb sync",
+    validate: "ogb validate",
+  }[workflow] || "ogb bridge";
+}
+
+function causeResult(code, diagnostic, fallback = {}) {
+  const details = CAUSE_DETAILS[code] || {};
+  const diagnosticCode = String(diagnostic.rootCauseCode || diagnostic.root_cause_code || "");
+  const useDiagnostic = diagnosticCode === code && !GENERIC_ROOT_CAUSES.has(diagnosticCode);
+  return {
+    code,
+    label: String((useDiagnostic && (diagnostic.rootCauseLabel || diagnostic.root_cause_label)) || fallback.label || details.label || code || "Workflow issue"),
+    recovery: String((useDiagnostic && (diagnostic.recoveryCommand || diagnostic.recovery_command)) || fallback.recovery || details.recovery || ""),
+  };
+}
+
+function classifyTelemetryCause(record) {
   const diagnostic = diagnosticContext(record);
   const summary = payloadSummary(record);
+  const status = String(record.status || "").toLowerCase();
+  const outcome = String(record.outcome || "").toLowerCase();
+  const exitCode = Number(record.exitCode ?? record.exit_code ?? 0);
+  const warnings = summaryMessages(summary, "warnings");
+  const errors = summaryMessages(summary, "errors");
+  const rawCode = String(diagnostic.rootCauseCode || diagnostic.root_cause_code || "");
+  const rawLabel = String(diagnostic.rootCauseLabel || diagnostic.root_cause_label || "");
+  const rawRecovery = String(diagnostic.recoveryCommand || diagnostic.recovery_command || "");
+  const messagesText = [...warnings, ...errors, rawLabel, rawRecovery].join("\n").toLowerCase();
+
+  if (rawCode && !GENERIC_ROOT_CAUSES.has(rawCode)) return causeResult(rawCode, diagnostic);
+  if (includesAny(messagesText, ["opencode-auto-fallback is enabled", "plugin is not active", "plugin inactive"])) return causeResult("plugin_inactive", diagnostic);
+  if (includesAny(messagesText, ["agent conflict", "exists or was edited manually", "managed file conflict"])) return causeResult("managed_file_conflict", diagnostic);
+  if (includesAny(messagesText, ["hook needs review", "needs_review", "trusted hook/script changed", "trusted hook", "hooks/scripts"])) return causeResult("trust_review_required", diagnostic);
+  if (includesAny(messagesText, ["opencode precisa reiniciar para carregar mudancas", "ogb foi atualizado automaticamente"])) return causeResult("restart_required", diagnostic);
+  if (record.workflow === "dashboard" && includesAny(messagesText, ["validation passou com avisos", "doctor passou com avisos", "security passou com avisos"])) return causeResult("dashboard_echo", diagnostic);
+  if (includesAny(messagesText, ["rulesync disabled"])) return causeResult("rulesync_disabled", diagnostic);
+  if (messagesText.includes("generated by ogb") && messagesText.includes("current ogb")) return causeResult("stale_generated_files", diagnostic);
+  if (includesAny(messagesText, ["missing built-in opencode commands"])) return causeResult("missing_builtin_commands", diagnostic);
+  if (includesAny(messagesText, ["ogb global binary", "ogb resolves to"]) && messagesText.includes("expected")) return causeResult("global_binary_mismatch", diagnostic);
+  if (record.workflow === "validate" && (status === "completed_with_warnings" || outcome === "warn")) return causeResult("validation_warn", diagnostic);
+  if (exitCode !== 0 || status === "failed" || outcome === "fail" || errors.length > 0) {
+    return causeResult("workflow_failed", diagnostic, {
+      label: `${workflowDisplayName(record.workflow)} falhou`,
+      recovery: `Rode ${workflowRecoveryCommand(record.workflow)} --json para ver o diagnostico.`,
+    });
+  }
+  if (status === "completed_with_warnings" || outcome === "warn" || warnings.length > 0) {
+    return causeResult("workflow_warn", diagnostic, {
+      label: `${workflowDisplayName(record.workflow)} terminou com avisos`,
+      recovery: `Rode ${workflowRecoveryCommand(record.workflow)} --json para ver os proximos passos.`,
+    });
+  }
+  return causeResult("no_issue_detected", diagnostic);
+}
+
+function compactRecord(record) {
+  const summary = payloadSummary(record);
+  const cause = classifyTelemetryCause(record);
   return {
     runId: runId(record),
     workflow: record.workflow,
@@ -105,9 +235,9 @@ function compactRecord(record) {
     recordedAt: recordedAt(record),
     durationMs: Number(record.durationMs || 0),
     exitCode: Number(record.exitCode || 0),
-    rootCauseCode: diagnostic.rootCauseCode || "",
-    rootCauseLabel: diagnostic.rootCauseLabel || "",
-    recoveryCommand: diagnostic.recoveryCommand || "",
+    rootCauseCode: cause.code,
+    rootCauseLabel: cause.label,
+    recoveryCommand: cause.recovery,
     warnings: summaryMessages(summary, "warnings").slice(0, 5),
     errors: summaryMessages(summary, "errors").slice(0, 5),
   };
@@ -115,18 +245,19 @@ function compactRecord(record) {
 
 function isActionableRecord(record) {
   const summary = payloadSummary(record);
-  const diagnostic = diagnosticContext(record);
+  const cause = classifyTelemetryCause(record);
   const status = String(record.status || "").toLowerCase();
   const outcome = String(record.outcome || "").toLowerCase();
   const exitCode = Number(record.exitCode ?? record.exit_code ?? 0);
   const warnings = summaryMessages(summary, "warnings");
   const errors = summaryMessages(summary, "errors");
-  const rootCauseCode = String(diagnostic.rootCauseCode || diagnostic.root_cause_code || "");
   if (exitCode !== 0) return true;
-  if (status === "failed" || status === "completed_with_warnings") return true;
-  if (outcome === "fail" || outcome === "warn") return true;
-  if (warnings.length > 0 || errors.length > 0) return true;
-  if (rootCauseCode && rootCauseCode !== "no_issue_detected") return true;
+  if (status === "failed" || outcome === "fail") return true;
+  if (errors.length > 0) return true;
+  if (NON_ACTIONABLE_ROOT_CAUSES.has(cause.code)) return false;
+  if (status === "completed_with_warnings" || outcome === "warn") return true;
+  if (warnings.length > 0) return true;
+  if (cause.code && cause.code !== "no_issue_detected") return true;
   return false;
 }
 
@@ -262,8 +393,10 @@ function problemLabel(record) {
 }
 
 function problemFingerprint(record) {
-  const basis = record.rootCauseCode || record.errors[0] || record.warnings[0] || record.status || record.outcome;
-  return [record.workflow, record.rootCauseCode || "unknown", normalizeProblemText(basis)].join("|");
+  const code = record.rootCauseCode || "unknown";
+  if (code && code !== "unknown" && code !== "workflow_warn" && code !== "workflow_failed") return code;
+  const basis = record.errors[0] || record.warnings[0] || record.rootCauseLabel || record.status || record.outcome;
+  return [record.workflow, code, normalizeProblemText(basis)].join("|");
 }
 
 function groupProblems(records) {
@@ -275,6 +408,7 @@ function groupProblems(records) {
     if (!existing) {
       groups.set(key, {
         key,
+        code: record.rootCauseCode || "unknown",
         count: 1,
         severity,
         workflows: new Set([record.workflow]),
@@ -315,6 +449,7 @@ function digestText(envelope, records) {
   ];
   for (const group of groups.slice(0, 12)) {
     lines.push(`- ${group.count}x [${group.severity}] ${group.label}`);
+    if (group.code && group.code !== "unknown") lines.push(`  Cause: ${group.code}`);
     lines.push(`  Workflows: ${[...group.workflows].sort().join(", ")}`);
     if (group.nextAction) lines.push(`  Next: ${group.nextAction}`);
     if (group.firstAt || group.lastAt) lines.push(`  Window: ${group.firstAt || "?"} -> ${group.lastAt || "?"}`);
@@ -330,7 +465,7 @@ function digestText(envelope, records) {
 function digestHtml(envelope, records) {
   const groups = groupProblems(records);
   const rows = groups.slice(0, 20).map((group) => (
-    `<tr><td>${escapeHtml(String(group.count))}x</td><td>${escapeHtml(group.severity)}</td><td>${escapeHtml(group.label)}</td><td>${escapeHtml([...group.workflows].sort().join(", "))}</td><td>${escapeHtml(group.nextAction || "")}</td></tr>`
+    `<tr><td>${escapeHtml(String(group.count))}x</td><td>${escapeHtml(group.severity)}</td><td>${escapeHtml(group.label)}${group.code && group.code !== "unknown" ? `<br><code>${escapeHtml(group.code)}</code>` : ""}</td><td>${escapeHtml([...group.workflows].sort().join(", "))}</td><td>${escapeHtml(group.nextAction || "")}</td></tr>`
   )).join("");
   return `<!doctype html>
 <html>

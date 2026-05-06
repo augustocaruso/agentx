@@ -568,6 +568,26 @@ function collectMessages(value: unknown, warnings: string[], errors: string[]): 
   }
 }
 
+function collectStatusMessages(value: unknown, warnings: string[], errors: string[], depth = 0): void {
+  if (!value || typeof value !== "object" || depth > 6) return;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 50)) collectStatusMessages(item, warnings, errors, depth + 1);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  const status = String(record.status ?? record.outcome ?? "").toLowerCase();
+  const message = typeof record.message === "string" ? record.message : "";
+  const name = typeof record.name === "string" ? record.name : "";
+  if (message && (status === "warn" || status === "warning" || status === "completed_with_warnings")) {
+    warnings.push(redactSnippet(name ? `${name}: ${message}` : message));
+  } else if (message && (status === "fail" || status === "failed" || status === "error")) {
+    errors.push(redactSnippet(name ? `${name}: ${message}` : message));
+  }
+  for (const item of Object.values(record)) {
+    if (item && typeof item === "object") collectStatusMessages(item, warnings, errors, depth + 1);
+  }
+}
+
 function collectPaths(value: unknown, paths: string[], key = ""): void {
   if (paths.length >= MAX_PATHS) return;
   if (typeof value === "string" && looksLikePathKey(key) && looksLikePathValue(value)) {
@@ -589,6 +609,7 @@ function summarizePayload(payload: unknown): Record<string, unknown> {
   const rawPaths: string[] = [];
   collectCounts(payload, counts);
   collectMessages(payload, warnings, errors);
+  collectStatusMessages(payload, warnings, errors);
   collectPaths(payload, rawPaths);
   const labels = [...new Set(rawPaths.map(pathLabel))].slice(0, MAX_PATHS);
   const pathHashes: Record<string, string> = {};
@@ -596,8 +617,8 @@ function summarizePayload(payload: unknown): Record<string, unknown> {
   return {
     status: payloadStatus(payload),
     counts,
-    warnings: warnings.slice(0, 20),
-    errors: errors.slice(0, 20),
+    warnings: [...new Set(warnings)].slice(0, 20),
+    errors: [...new Set(errors)].slice(0, 20),
     relevantPaths: labels,
     pathHashes,
   };
@@ -621,7 +642,38 @@ function includesAny(text: string, needles: string[]): boolean {
   return needles.some((needle) => text.includes(needle));
 }
 
-function diagnosticContext(payload: unknown, summary: Record<string, unknown>, status: string): Record<string, unknown> {
+const NON_ACTIONABLE_ROOT_CAUSES = new Set(["no_issue_detected", "dashboard_echo", "rulesync_disabled"]);
+
+function workflowDisplayName(workflow: string): string {
+  const names: Record<string, string> = {
+    "auto-update": "Auto-update",
+    dashboard: "Dashboard",
+    doctor: "Doctor",
+    pass: "Pass",
+    "security-check": "Security-check",
+    "setup-opencode": "Setup OpenCode",
+    startup: "Plugin de startup",
+    "startup-plugin": "Plugin de startup",
+    sync: "Sync",
+    validate: "Validacao OGB",
+  };
+  return names[workflow] || workflow || "Workflow OGB";
+}
+
+function workflowRecoveryCommand(workflow: string): string {
+  const commands: Record<string, string> = {
+    dashboard: "ogb dashboard",
+    doctor: "ogb doctor",
+    pass: "ogb pass",
+    "security-check": "ogb security-check",
+    "setup-opencode": "ogb setup-opencode",
+    sync: "ogb sync",
+    validate: "ogb validate",
+  };
+  return commands[workflow] || "ogb bridge";
+}
+
+function diagnosticContext(workflow: string, payload: unknown, summary: Record<string, unknown>, status: string): Record<string, unknown> {
   const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
   const errors = Array.isArray(summary.errors) ? summary.errors : [];
   const messagesText = [...warnings, ...errors].join("\n").toLowerCase();
@@ -630,11 +682,7 @@ function diagnosticContext(payload: unknown, summary: Record<string, unknown>, s
   let code = "no_issue_detected";
   let label = "Nenhum problema detectado";
   let recovery = "";
-  if (status === "failed" || errors.length > 0) {
-    code = "workflow_failed";
-    label = "Workflow OGB falhou";
-    recovery = "Rode ogb bridge ou o comando indicado com --json para ver o diagnostico.";
-  } else if (includesAny(messagesText, ["opencode-auto-fallback is enabled", "plugin is not active", "plugin inactive"])) {
+  if (includesAny(messagesText, ["opencode-auto-fallback is enabled", "plugin is not active", "plugin inactive"])) {
     code = "plugin_inactive";
     label = "Plugin OpenCode configurado mas inativo";
     recovery = "Rode ogb sync e reinicie o OpenCode se o aviso continuar.";
@@ -650,10 +698,38 @@ function diagnosticContext(payload: unknown, summary: Record<string, unknown>, s
     code = "restart_required";
     label = "OpenCode precisa reiniciar para carregar mudancas";
     recovery = "Reinicie o OpenCode e rode /bridge novamente.";
+  } else if (workflow === "dashboard" && includesAny(messagesText, ["validation passou com avisos", "doctor passou com avisos", "security passou com avisos"])) {
+    code = "dashboard_echo";
+    label = "Dashboard repetiu aviso de outro workflow";
+    recovery = "Abra o workflow de origem no preview local para ver o aviso real.";
+  } else if (includesAny(messagesText, ["rulesync disabled"])) {
+    code = "rulesync_disabled";
+    label = "Rulesync esta desativado";
+    recovery = "Nenhuma acao se rulesync foi desativado de proposito; rode ogb sync --rulesync auto para reativar.";
+  } else if (messagesText.includes("generated by ogb") && messagesText.includes("current ogb")) {
+    code = "stale_generated_files";
+    label = "Arquivos gerados estao desatualizados";
+    recovery = "Rode ogb sync para regenerar arquivos com a versao atual.";
+  } else if (includesAny(messagesText, ["missing built-in opencode commands"])) {
+    code = "missing_builtin_commands";
+    label = "Comandos built-in do OpenCode estao faltando";
+    recovery = "Rode ogb sync para regenerar os comandos do OpenCode.";
+  } else if (includesAny(messagesText, ["ogb global binary", "ogb resolves to"]) && messagesText.includes("expected")) {
+    code = "global_binary_mismatch";
+    label = "Binario global do OGB esta desatualizado";
+    recovery = "Atualize o OGB global ou rode o comando pelo pacote local esperado.";
+  } else if (workflow === "validate" && (status === "completed_with_warnings" || payloadOutcome === "warn")) {
+    code = "validation_warn";
+    label = "Validacao OGB terminou com avisos";
+    recovery = "Rode ogb validate --json para ver quais checks avisaram.";
+  } else if (status === "failed" || errors.length > 0) {
+    code = "workflow_failed";
+    label = `${workflowDisplayName(workflow)} falhou`;
+    recovery = `Rode ${workflowRecoveryCommand(workflow)} --json para ver o diagnostico.`;
   } else if (status === "completed_with_warnings" || warnings.length > 0) {
     code = "workflow_warn";
-    label = "Workflow OGB terminou com avisos";
-    recovery = "Rode ogb bridge para ver os proximos passos.";
+    label = `${workflowDisplayName(workflow)} terminou com avisos`;
+    recovery = `Rode ${workflowRecoveryCommand(workflow)} --json para ver os proximos passos.`;
   }
   return {
     rootCauseCode: code,
@@ -671,14 +747,16 @@ function messagesFromSummary(summary: Record<string, unknown>, key: "warnings" |
 
 export function isActionableTelemetryRecord(record: WorkflowRunRecord | Record<string, unknown>): boolean {
   const value = record as Record<string, unknown>;
-  if (Number(value.exitCode ?? 0) !== 0) return true;
-  if (value.status === "failed" || value.status === "completed_with_warnings") return true;
-  if (value.outcome === "fail" || value.outcome === "warn") return true;
   const summary = payloadRecord(value.payloadSummary);
-  if (messagesFromSummary(summary, "warnings").length > 0) return true;
-  if (messagesFromSummary(summary, "errors").length > 0) return true;
   const diagnostic = payloadRecord(value.diagnosticContext);
   const rootCauseCode = String(diagnostic.rootCauseCode ?? "");
+  const errors = messagesFromSummary(summary, "errors");
+  if (Number(value.exitCode ?? 0) !== 0) return true;
+  if (value.status === "failed" || value.outcome === "fail") return true;
+  if (errors.length > 0) return true;
+  if (NON_ACTIONABLE_ROOT_CAUSES.has(rootCauseCode)) return false;
+  if (value.status === "completed_with_warnings" || value.outcome === "warn") return true;
+  if (messagesFromSummary(summary, "warnings").length > 0) return true;
   if (rootCauseCode && rootCauseCode !== "no_issue_detected") return true;
   return false;
 }
@@ -734,7 +812,7 @@ export function recordWorkflowRun(input: WorkflowRecordInput, options: Telemetry
       pathHash: sha256(path.resolve(input.projectRoot)).slice(0, 16),
     } : undefined,
     payloadSummary: summary,
-    diagnosticContext: diagnosticContext(payload, summary, status),
+    diagnosticContext: diagnosticContext(input.workflow, payload, summary, status),
     environmentContext: {
       appVersion: OGB_VERSION,
       platform: process.platform,
