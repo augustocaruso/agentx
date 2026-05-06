@@ -33,13 +33,34 @@ export interface PassBlocker {
   action: string;
 }
 
+export interface PassStep {
+  name: string;
+  status: "pass" | "warn" | "fail";
+  detail?: string;
+}
+
+export interface PassSyncSummary {
+  generatedConfigPath: string;
+  builtInAgents: number;
+  extensionAgents: number;
+  builtInCommands: number;
+  extensionCommands: number;
+  skills: number;
+  tuiFiles: number;
+  externalIntegrationFiles: number;
+  rulesyncStatus: SyncReport["rulesync"]["status"];
+  rulesyncPromoted: number;
+}
+
 export interface PassReport {
   version: string;
   projectRoot: string;
   outcome: "pass" | "warn" | "fail";
   automated: string[];
+  steps: PassStep[];
   acceptedHooks: string[];
   blockers: PassBlocker[];
+  sync?: PassSyncSummary;
   doctor: {
     warnings: number;
     errors: number;
@@ -63,9 +84,10 @@ export interface PassReport {
 function actionForWarning(warning: string): string {
   if (/^Hook needs review:/.test(warning)) return "Revise o hook e rode `ogb pass --accept-hooks` para registrar o hash revisado.";
   if (/Duplicate name/i.test(warning)) return "Rode `ogb pass --json` ou abra `.opencode/generated/ogb-inventory.json` para ver os paths duplicados; mantenha uma copia.";
-  if (/Run ogb sync/i.test(warning)) return "O `ogb pass` ja tentou `ogb sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
   if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Ative o fallback gerado ou desative `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc`.";
-  if (/opencode-auto-fallback/i.test(warning)) return "Rode `ogb pass --force`; se persistir, revise o plugin em `opencode.jsonc` e a config de fallback.";
+  if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Instale `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, rode `ogb sync` e reinicie o OpenCode.";
+  if (/opencode-auto-fallback/i.test(warning)) return "Revise `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc` e o plugin global do OpenCode.";
+  if (/Run ogb sync/i.test(warning)) return "O `ogb pass` ja tentou `ogb sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
   if (/Model resolution warning/i.test(warning)) return "Revise os modelos em `.opencode/ogb.config.jsonc` e compare com `opencode models`.";
   if (/MCP command warning/i.test(warning)) return "Instale o comando do MCP ou remova/desabilite esse MCP na configuracao de origem.";
   return "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `ogb pass --force` depois de revisar.";
@@ -100,33 +122,109 @@ function writeReport(filePath: string, report: PassReport): void {
   fs.writeFileSync(filePath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 }
 
+function statusText(status: PassStep["status"] | PassReport["outcome"] | PassBlocker["severity"]): string {
+  if (status === "pass") return "OK";
+  if (status === "fail") return "FAIL";
+  return "WARN";
+}
+
+function stepStatusDetail(step: PassStep): string {
+  return step.detail ? `  ${step.detail}` : "";
+}
+
+function relativeReportPath(projectRoot: string, filePath: string): string {
+  const rel = path.relative(projectRoot, filePath);
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return filePath;
+  return rel;
+}
+
+function plural(count: number, singular: string, pluralText = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralText}`;
+}
+
+function syncSummaryLine(sync: PassSyncSummary): string {
+  const parts = [
+    plural(sync.builtInAgents, "agent"),
+    plural(sync.extensionAgents, "subagent"),
+    plural(sync.builtInCommands, "comando"),
+    plural(sync.extensionCommands, "comando de extensao", "comandos de extensao"),
+    plural(sync.skills, "skill"),
+  ].filter((item) => !item.startsWith("0 "));
+  return parts.length > 0 ? parts.join(", ") : "sem arquivos projetados";
+}
+
+function friendlyBlockerMessage(item: PassBlocker): string {
+  if (/opencode-auto-fallback.*plugin is not active/i.test(item.message)) {
+    return "Auto fallback esta ligado, mas o plugin externo nao carregou.";
+  }
+  if (item.source === "validation" && item.severity === "warn") return "Validation encontrou avisos.";
+  if (item.source === "security" && item.severity === "warn") return "Security-check encontrou avisos.";
+  if (item.source === "dashboard" && item.severity === "warn") return "Dashboard herdou avisos dos checks anteriores.";
+  return item.message;
+}
+
 export function formatPassReport(report: PassReport): string {
   const lines = [
-    "OpenCode Gemini Bridge Pass",
-    `Project: ${report.projectRoot}`,
-    `Outcome: ${report.outcome.toUpperCase()}`,
+    `OGB pass  ${statusText(report.outcome)}`,
+    `Project   ${report.projectRoot}`,
     "",
-    "Automacao:",
-    ...report.automated.map((item) => `- ${item}`),
+    "Checks",
+    ...report.steps.map((step) => `  ${statusText(step.status).padEnd(5)} ${step.name}${stepStatusDetail(step)}`),
   ];
 
+  if (report.sync) {
+    lines.push(
+      "",
+      "Sync",
+      `  ${syncSummaryLine(report.sync)}`,
+      `  rulesync: ${report.sync.rulesyncStatus}${report.sync.rulesyncPromoted > 0 ? `, ${report.sync.rulesyncPromoted} promoted` : ""}`,
+    );
+  }
+
   if (report.acceptedHooks.length > 0) {
-    lines.push("", "Hooks aceitos:");
+    lines.push("", "Trusted Hooks");
     for (const hook of report.acceptedHooks) lines.push(`- ${hook}`);
   }
 
   if (report.blockers.length > 0) {
-    lines.push("", "Pendencias:");
+    lines.push("", "Needs Attention");
     for (const item of report.blockers) {
-      lines.push(`- ${item.severity.toUpperCase()} ${item.source}: ${item.message}`);
-      lines.push(`  Acao: ${item.action}`);
+      lines.push(`  ${statusText(item.severity).padEnd(5)} ${item.source}: ${friendlyBlockerMessage(item)}`);
+      lines.push(`        fix: ${item.action}`);
     }
   } else {
-    lines.push("", "Sem pendencias bloqueantes.");
+    lines.push("", "No pending fixes.");
   }
 
-  lines.push("", `Relatorio: ${report.files.pass}`);
+  lines.push(
+    "",
+    "Files",
+    `  report:    ${relativeReportPath(report.projectRoot, report.files.pass)}`,
+    `  dashboard: ${relativeReportPath(report.projectRoot, report.files.dashboard)}`,
+  );
   return `${lines.join("\n")}\n`;
+}
+
+function statusFromFindings(fail: boolean, warn: boolean): PassStep["status"] {
+  if (fail) return "fail";
+  if (warn) return "warn";
+  return "pass";
+}
+
+function buildSyncSummary(sync: SyncReport | undefined): PassSyncSummary | undefined {
+  if (!sync) return undefined;
+  return {
+    generatedConfigPath: sync.generatedConfigPath,
+    builtInAgents: sync.projectedAgents.length,
+    extensionAgents: sync.projectedExtensionAgents.length,
+    builtInCommands: Math.max(0, sync.projectedCommands.length - sync.projectedExtensionCommands.length),
+    extensionCommands: sync.projectedExtensionCommands.length,
+    skills: sync.projectedSkills.length,
+    tuiFiles: sync.projectedTuiFiles.length,
+    externalIntegrationFiles: sync.projectedExternalIntegrationFiles.length,
+    rulesyncStatus: sync.rulesync.status,
+    rulesyncPromoted: sync.rulesync.promoted.length,
+  };
 }
 
 export function runPass(options: PassOptions = {}): PassReport {
@@ -158,6 +256,7 @@ export function runPass(options: PassOptions = {}): PassReport {
       homeDir: paths.homeDir,
       dryRun: options.dryRun,
       force: options.force,
+      silent: true,
     });
     automated.push("sync");
     for (const warning of sync.warnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb pass --force` se quiser sobrescrever arquivos gerenciados."));
@@ -202,13 +301,46 @@ export function runPass(options: PassOptions = {}): PassReport {
       ? "warn"
       : "pass";
 
+  const steps: PassStep[] = [];
+  if (setup) {
+    steps.push({
+      name: "setup-opencode",
+      status: setup.warnings.length > 0 ? "warn" : "pass",
+      detail: setup.warnings.length > 0 ? `${setup.warnings.length} warning(s)` : undefined,
+    });
+  }
+  if (sync) {
+    steps.push({
+      name: "sync",
+      status: sync.warnings.length > 0 ? "warn" : "pass",
+      detail: sync.warnings.length > 0 ? `${sync.warnings.length} warning(s)` : undefined,
+    });
+  }
+  if (acceptedHooks.length > 0) {
+    steps.push({ name: "hook review", status: "pass", detail: `${acceptedHooks.length} accepted` });
+  }
+  steps.push({
+    name: "doctor",
+    status: statusFromFindings(doctor.errors.length > 0, doctor.warnings.length > 0),
+    detail: doctor.errors.length > 0
+      ? `${doctor.errors.length} error(s)`
+      : doctor.warnings.length > 0
+        ? `${doctor.warnings.length} warning(s)`
+        : undefined,
+  });
+  if (validation) steps.push({ name: "validate", status: validation.outcome, detail: validation.outcome === "pass" ? undefined : validation.outcome });
+  if (security) steps.push({ name: "security-check", status: security.outcome, detail: security.outcome === "pass" ? undefined : security.outcome });
+  if (dashboard) steps.push({ name: "dashboard", status: dashboard.outcome, detail: dashboard.outcome === "pass" ? undefined : dashboard.outcome });
+
   const report: PassReport = {
     version: OGB_VERSION,
     projectRoot: paths.projectRoot,
     outcome,
     automated,
+    steps,
     acceptedHooks,
     blockers,
+    sync: buildSyncSummary(sync),
     doctor: {
       warnings: doctor.warnings.length,
       errors: doctor.errors.length,

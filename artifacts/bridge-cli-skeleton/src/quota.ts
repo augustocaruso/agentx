@@ -156,11 +156,28 @@ function extractExportedString(text: string | undefined, name: string): string |
   return match?.[1];
 }
 
+function geminiAuthPackageDirs(homeDir: string): string[] {
+  const packagesDir = path.join(homeDir, ".cache", "opencode", "packages");
+  const dirs = new Set<string>([
+    path.join(packagesDir, "opencode-gemini-auth@latest"),
+  ]);
+  try {
+    for (const entry of fs.readdirSync(packagesDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith("opencode-gemini-auth@")) {
+        dirs.add(path.join(packagesDir, entry.name));
+      }
+    }
+  } catch {
+    // Missing OpenCode package cache is a normal unauthenticated state.
+  }
+  return [...dirs];
+}
+
 function geminiOAuthClientFromPlugin(homeDir: string): { id: string; secret: string } | undefined {
-  const candidates = [
-    path.join(homeDir, ".cache", "opencode", "packages", "opencode-gemini-auth@latest", "node_modules", "opencode-gemini-auth", "src", "constants.ts"),
-    path.join(homeDir, ".cache", "opencode", "packages", "opencode-gemini-auth@latest", "node_modules", "opencode-gemini-auth", "dist", "constants.js"),
-  ];
+  const candidates = geminiAuthPackageDirs(homeDir).flatMap((dir) => [
+    path.join(dir, "node_modules", "opencode-gemini-auth", "src", "constants.ts"),
+    path.join(dir, "node_modules", "opencode-gemini-auth", "dist", "constants.js"),
+  ]);
   for (const filePath of candidates) {
     const text = readText(filePath);
     const id = extractExportedString(text, "GEMINI_CLIENT_ID");

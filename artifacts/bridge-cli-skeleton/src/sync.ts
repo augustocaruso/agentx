@@ -19,6 +19,7 @@ export interface SyncOptions {
   homeDir?: string;
   dryRun?: boolean;
   force?: boolean;
+  silent?: boolean;
   rulesyncMode?: RulesyncMode;
   rulesyncFeatures?: string[];
 }
@@ -362,7 +363,7 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
   const warnings: string[] = [];
 
   if (options.dryRun) {
-    console.log(JSON.stringify(generated, null, 2));
+    if (!options.silent) console.log(JSON.stringify(generated, null, 2));
   } else {
     fs.mkdirSync(path.dirname(paths.generatedOpenCodeConfigPath), { recursive: true });
     fs.writeFileSync(paths.generatedOpenCodeConfigPath, `${JSON.stringify(generated, null, 2)}\n`, "utf8");
@@ -492,26 +493,28 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     writeSyncState(state, paths.projectRoot);
   }
 
-  console.log(`${options.dryRun ? "Would generate" : "Generated"} ${paths.generatedOpenCodeConfigPath}`);
-  if (projectedAgents.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedAgents.promoted.length} built-in agent(s)`);
-  if (projectedExtensionCommands.projectedAgents.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedExtensionCommands.projectedAgents.length} Gemini extension subagent(s)`);
-  if (projectedExtensionCommands.projectedModelRoutingConfig) console.log(`${options.dryRun ? "Would project" : "Projected"} OGB model routing report`);
-  if (projectedExtensionCommands.projectedModelFallbackConfig) console.log(`${options.dryRun ? "Would project" : "Projected"} compatibility model fallback config`);
-  if (projectedExtensionCommands.removedAgents.length > 0) console.log(`Removed ${projectedExtensionCommands.removedAgents.length} stale Gemini extension subagent(s)`);
-  if (projectedAgents.removed.length > 0) console.log(`Removed ${projectedAgents.removed.length} obsolete built-in agent(s)`);
-  if (projectedCommands.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedCommands.promoted.length} built-in command(s)`);
-  if (projectedExtensionCommands.projectedCommands.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedExtensionCommands.projectedCommands.length} Gemini extension command(s)`);
-  if (projectedExtensionCommands.removedCommands.length > 0) console.log(`Removed ${projectedExtensionCommands.removedCommands.length} stale Gemini extension command(s)`);
-  if (projectedSkills.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedSkills.promoted.length} Gemini extension skill(s)`);
-  if (report.projectedTuiFiles.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${report.projectedTuiFiles.length} TUI sidebar file(s)`);
-  if (report.projectedExternalPlugins.length > 0) console.log(`${options.dryRun ? "Would enable" : "Enabled"} external plugin(s): ${report.projectedExternalPlugins.join(", ")}`);
-  if (report.projectedExternalIntegrationFiles.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${report.projectedExternalIntegrationFiles.length} external integration file(s)`);
-  if (rulesync.status === "applied") console.log(`Rulesync promoted ${rulesync.promoted.length} file(s)`);
-  if (rulesync.status === "partial") console.log(`Rulesync partially completed; promoted ${rulesync.promoted.length} file(s)`);
-  if (rulesync.status === "preview") console.log("Rulesync dry-run completed");
-  if (rulesync.status === "skipped") console.log(`Rulesync skipped: ${rulesync.skippedReason}`);
-  if (rulesync.status === "error" && rulesync.conflicts.length > 0) console.log(`Rulesync conflicts: ${rulesync.conflicts.join(", ")}`);
-  else if (rulesync.status === "error") console.log(`Rulesync failed: ${rulesync.stderr || rulesync.skippedReason || "unknown error"}`);
+  if (!options.silent) {
+    console.log(`${options.dryRun ? "Would generate" : "Generated"} ${paths.generatedOpenCodeConfigPath}`);
+    if (projectedAgents.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedAgents.promoted.length} built-in agent(s)`);
+    if (projectedExtensionCommands.projectedAgents.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedExtensionCommands.projectedAgents.length} Gemini extension subagent(s)`);
+    if (projectedExtensionCommands.projectedModelRoutingConfig) console.log(`${options.dryRun ? "Would project" : "Projected"} OGB model routing report`);
+    if (projectedExtensionCommands.projectedModelFallbackConfig) console.log(`${options.dryRun ? "Would project" : "Projected"} compatibility model fallback config`);
+    if (projectedExtensionCommands.removedAgents.length > 0) console.log(`Removed ${projectedExtensionCommands.removedAgents.length} stale Gemini extension subagent(s)`);
+    if (projectedAgents.removed.length > 0) console.log(`Removed ${projectedAgents.removed.length} obsolete built-in agent(s)`);
+    if (projectedCommands.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedCommands.promoted.length} built-in command(s)`);
+    if (projectedExtensionCommands.projectedCommands.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedExtensionCommands.projectedCommands.length} Gemini extension command(s)`);
+    if (projectedExtensionCommands.removedCommands.length > 0) console.log(`Removed ${projectedExtensionCommands.removedCommands.length} stale Gemini extension command(s)`);
+    if (projectedSkills.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedSkills.promoted.length} Gemini extension skill(s)`);
+    if (report.projectedTuiFiles.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${report.projectedTuiFiles.length} TUI sidebar file(s)`);
+    if (report.projectedExternalPlugins.length > 0) console.log(`${options.dryRun ? "Would enable" : "Enabled"} external plugin(s): ${report.projectedExternalPlugins.join(", ")}`);
+    if (report.projectedExternalIntegrationFiles.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${report.projectedExternalIntegrationFiles.length} external integration file(s)`);
+    if (rulesync.status === "applied") console.log(`Rulesync promoted ${rulesync.promoted.length} file(s)`);
+    if (rulesync.status === "partial") console.log(`Rulesync partially completed; promoted ${rulesync.promoted.length} file(s)`);
+    if (rulesync.status === "preview") console.log("Rulesync dry-run completed");
+    if (rulesync.status === "skipped") console.log(`Rulesync skipped: ${rulesync.skippedReason}`);
+    if (rulesync.status === "error" && rulesync.conflicts.length > 0) console.log(`Rulesync conflicts: ${rulesync.conflicts.join(", ")}`);
+    else if (rulesync.status === "error") console.log(`Rulesync failed: ${rulesync.stderr || rulesync.skippedReason || "unknown error"}`);
+  }
 
   if (options.rulesyncMode === "require" && rulesync.status === "error") process.exitCode = 2;
   if (options.rulesyncMode === "require" && rulesync.status === "partial") process.exitCode = 1;

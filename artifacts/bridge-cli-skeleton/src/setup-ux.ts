@@ -13,6 +13,7 @@ export const OGB_UX_SAFE_PLUGINS = [
   "opencode-gemini-auth@1.4.12",
   "@ex-machina/opencode-anthropic-auth@1.8.0",
   "opencode-update-notifier@0.1.0",
+  "opencode-auto-fallback@0.4.3",
   "@tarquinen/opencode-dcp@3.1.9",
   "opencode-pty@0.3.4",
 ];
@@ -139,7 +140,7 @@ export const OGB_UX_PROJECT_CONFIG: OgbConfig = {
     },
     autoFallback: {
       enabled: false,
-      plugin: "opencode-auto-fallback@0.4.2",
+      plugin: "opencode-auto-fallback@0.4.3",
       installProjectPlugin: false,
       cooldownMs: 60_000,
       maxRetries: 2,

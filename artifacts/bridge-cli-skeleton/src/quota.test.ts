@@ -14,8 +14,8 @@ function writeJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function writeGeminiAuthConstants(homeDir: string): void {
-  const constants = path.join(homeDir, ".cache", "opencode", "packages", "opencode-gemini-auth@latest", "node_modules", "opencode-gemini-auth", "src", "constants.ts");
+function writeGeminiAuthConstants(homeDir: string, packageDir = "opencode-gemini-auth@latest"): void {
+  const constants = path.join(homeDir, ".cache", "opencode", "packages", packageDir, "node_modules", "opencode-gemini-auth", "src", "constants.ts");
   fs.mkdirSync(path.dirname(constants), { recursive: true });
   fs.writeFileSync(constants, [
     'export const GEMINI_CLIENT_ID = "client-id";',
@@ -131,6 +131,52 @@ test("refreshQuota does not refresh expired Gemini OAuth without configured clie
     const report = await refreshQuota({ projectRoot, homeDir, force: true });
     assert.equal(report.status, "unavailable");
     assert.match(report.message ?? "", /Token Google indisponivel/);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("refreshQuota finds Gemini auth constants in versioned OpenCode plugin package dirs", async () => {
+  const projectRoot = tempDir("ogb-quota-project-");
+  const homeDir = tempDir("ogb-quota-home-");
+  const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
+  writeGeminiAuthConstants(homeDir, "opencode-gemini-auth@1.4.12");
+  writeJson(authFile, {
+    google: {
+      type: "oauth",
+      access: "expired-access-token",
+      refresh: "refresh-token|user-project|managed-project",
+      expires: Date.now() - 60 * 1000,
+    },
+  });
+
+  const calls: string[] = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push(String(input));
+    if (String(input) === "https://oauth2.googleapis.com/token") {
+      const body = init?.body as URLSearchParams;
+      assert.equal(body.get("client_id"), "client-id");
+      assert.equal(body.get("client_secret"), "client-secret");
+      return new Response(JSON.stringify({ access_token: "fresh-access-token", expires_in: 3600 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({
+      buckets: [
+        { modelId: "gemini-3-flash-preview", remainingFraction: 0.88 },
+      ],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const report = await refreshQuota({ projectRoot, homeDir, force: true });
+    assert.equal(report.status, "ok");
+    assert.deepEqual(calls, [
+      "https://oauth2.googleapis.com/token",
+      "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota",
+    ]);
   } finally {
     globalThis.fetch = previousFetch;
   }

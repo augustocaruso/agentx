@@ -78,6 +78,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
 
   const projectConfig = parseJsonc(fs.readFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), "utf8"));
   assert.equal(projectConfig.openCode.defaultAgent, "YOLO");
+  assert.equal(projectConfig.externalPlugins.autoFallback.plugin, "opencode-auto-fallback@0.4.3");
   assert.equal(projectConfig.externalPlugins.autoFallback.installProjectPlugin, false);
   assert.equal(projectConfig.modelFallbacks.agents["med-knowledge-architect"].model.variant, "high");
   assert.equal(projectConfig.modelFallbacks.agents["med-chat-triager"].model.variant, "high");
