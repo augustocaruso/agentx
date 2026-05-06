@@ -23,10 +23,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const DEFAULT_ARGS = ["sync"];
+const DEFAULT_ARGS = ["startup-sync"];
 const DASHBOARD_ARGS = ["dashboard", "--write-only"];
-const UPDATE_ARGS = ["auto-update"];
+const UPDATE_ARGS = ["check-update", "--no-write"];
 const DEFAULT_LOCK_TTL_MS = 10 * 60_000;
+const DEFAULT_FAILURE_BACKOFF_MS = 10 * 60_000;
 const PROJECT_GENERATED_DIR = path.join(".opencode", "generated");
 const GLOBAL_GENERATED_DIR = path.join(os.homedir(), ".config", "opencode-gemini-bridge", "generated");
 const STARTUP_CONFIG_FILE = "ogb-startup-sync.json";
@@ -35,23 +36,91 @@ const STARTUP_LOCK_FILE = "ogb-startup-sync.lock";
 const UPDATE_STATUS_FILE = "ogb-update-status.json";
 const DASHBOARD_FILE = "ogb-dashboard.md";
 const STARTUP_DELAY_MS = 2500;
-const BRIDGE_COMMANDS = new Set([
-  "bridge",
-  "doctor",
-  "sync",
-  "resources",
-  "validate",
-  "security-check",
-  "telemetry",
-  "agent-sync",
-  "status",
-  "update-extensions",
-  "upgrade-ogb",
-]);
+const OGB_DIRECT_COMMANDS = {
+  bridge: {
+    description: "Painel principal do OpenCode Gemini Bridge",
+    template: "Mostra o painel OGB diretamente no chat.",
+  },
+  doctor: {
+    description: "Mostra diagnostico do OpenCode Gemini Bridge",
+    template: "Executa ogb doctor e imprime o resultado diretamente no chat.",
+  },
+  resources: {
+    description: "Lista recursos projetados pelo bridge",
+    template: "Mostra os recursos OGB diretamente no chat.",
+  },
+  validate: {
+    description: "Valida o bridge de ponta a ponta sem chamar modelo por padrao",
+    template: "Executa ogb validate e imprime o resultado diretamente no chat.",
+  },
+  "security-check": {
+    description: "Verifica riscos obvios de seguranca do bridge",
+    template: "Executa ogb security-check e imprime o resultado diretamente no chat.",
+  },
+  telemetry: {
+    description: "Mostra e envia telemetria local do OpenCode Gemini Bridge",
+    template: "Executa ogb telemetry status por padrao, ou a acao informada.",
+  },
+  "agent-sync": {
+    description: "Planeja adocao segura do agent-rules-sync",
+    template: "Executa ogb adopt-agent-sync e imprime o resultado diretamente no chat.",
+  },
+  status: {
+    description: "Resume o estado atual do bridge",
+    template: "Mostra o status OGB diretamente no chat.",
+  },
+  "update-extensions": {
+    description: "Atualiza Gemini Extensions e reprojeta OpenCode",
+    template: "Roda dry-run por padrao. Use --apply para atualizar de verdade.",
+  },
+  "upgrade-ogb": {
+    description: "Atualiza o OpenCode Gemini Bridge pela release oficial",
+    template: "Executa ogb self-update e depois ogb doctor diretamente no chat.",
+  },
+};
+const BRIDGE_COMMANDS = new Set([...Object.keys(OGB_DIRECT_COMMANDS), "sync"]);
+const COMMAND_REGISTRATION_SKIP = new Set(["sync"]);
 
 function splitArgs(raw, fallback = DEFAULT_ARGS) {
   if (!raw || !raw.trim()) return fallback;
   return raw.trim().split(/\s+/);
+}
+
+function splitCommandArgs(raw) {
+  const args = [];
+  let current = "";
+  let quote = "";
+  let escaping = false;
+  for (const char of String(raw || "")) {
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      else current += char;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        args.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (current) args.push(current);
+  return args;
 }
 
 function projectStartupConfigPath(cwd) {
@@ -96,6 +165,14 @@ function readConfig(cwd) {
   }
 }
 
+function readStatus(cwd) {
+  try {
+    return JSON.parse(fs.readFileSync(statusPath(cwd), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 function hasStartupConfig(cwd) {
   return Boolean(startupConfigPath(cwd));
 }
@@ -134,16 +211,23 @@ function commandPlan(cwd) {
   };
 }
 
+function safeUpdateArgs(args) {
+  const raw = Array.isArray(args) && args.length > 0 ? args.map(String) : UPDATE_ARGS;
+  if (raw.some((arg) => ["auto-update", "self-update", "upgrade-ogb"].includes(arg))) return UPDATE_ARGS;
+  if (!raw.includes("check-update")) return UPDATE_ARGS;
+  return raw.includes("--no-write") ? raw : [...raw, "--no-write"];
+}
+
 function autoUpdatePlan(cwd, syncPlan) {
   const config = readConfig(cwd);
-  const enabled = process.env.OGB_AUTO_UPDATE !== "0" && config.autoUpdate !== false;
-  const verbs = new Set(["sync", "import", "doctor", "dashboard", "auto-update", "check-update"]);
+  const enabled = process.env.OGB_AUTO_UPDATE !== "0" && (process.env.OGB_AUTO_UPDATE === "1" || config.autoUpdate === true);
+  const verbs = new Set(["sync", "startup-sync", "import", "doctor", "dashboard", "auto-update", "check-update"]);
   const verbIndex = syncPlan.args.findIndex((arg) => verbs.has(String(arg)));
   const baseArgs = verbIndex >= 0 ? syncPlan.args.slice(0, verbIndex) : [];
   const updateArgs = process.env.OGB_AUTO_UPDATE_ARGS
-    ? splitArgs(process.env.OGB_AUTO_UPDATE_ARGS, UPDATE_ARGS)
+    ? safeUpdateArgs(splitArgs(process.env.OGB_AUTO_UPDATE_ARGS, UPDATE_ARGS))
     : Array.isArray(config.updateArgs)
-      ? config.updateArgs.map(String)
+      ? safeUpdateArgs(config.updateArgs)
       : UPDATE_ARGS;
   return {
     command: syncPlan.command,
@@ -233,7 +317,7 @@ async function showToast(client, cwd, input) {
 }
 
 function dashboardPlanFrom(syncPlan) {
-  const verbs = new Set(["sync", "import", "doctor", "dashboard"]);
+  const verbs = new Set(["sync", "startup-sync", "import", "doctor", "dashboard"]);
   const verbIndex = syncPlan.args.findIndex((arg) => verbs.has(String(arg)));
   const baseArgs = verbIndex >= 0 ? syncPlan.args.slice(0, verbIndex) : [];
   return {
@@ -243,7 +327,7 @@ function dashboardPlanFrom(syncPlan) {
 }
 
 function telemetryPlanFrom(syncPlan) {
-  const verbs = new Set(["sync", "import", "doctor", "dashboard", "auto-update", "check-update", "telemetry"]);
+  const verbs = new Set(["sync", "startup-sync", "import", "doctor", "dashboard", "auto-update", "check-update", "telemetry"]);
   const verbIndex = syncPlan.args.findIndex((arg) => verbs.has(String(arg)));
   const baseArgs = verbIndex >= 0 ? syncPlan.args.slice(0, verbIndex) : [];
   return {
@@ -281,6 +365,176 @@ function commandForPlatform(command, args) {
   };
 }
 
+function baseArgsFrom(syncPlan) {
+  const verbs = new Set(["sync", "startup-sync", "import", "doctor", "dashboard", "auto-update", "check-update", "telemetry", "validate", "security-check", "adopt-agent-sync", "update-extensions", "self-update"]);
+  const verbIndex = syncPlan.args.findIndex((arg) => verbs.has(String(arg)));
+  return verbIndex >= 0 ? syncPlan.args.slice(0, verbIndex) : [];
+}
+
+function withoutApplyFlags(args) {
+  return args.filter((arg) => !["--apply", "--run", "--yes"].includes(String(arg)));
+}
+
+function hasApplyFlag(args) {
+  return args.some((arg) => ["--apply", "--run", "--yes"].includes(String(arg)));
+}
+
+function hasDryRunFlag(args) {
+  return args.some((arg) => String(arg) === "--dry-run");
+}
+
+function isLocalOgbSyncCommand(cwd) {
+  try {
+    const syncPath = path.join(cwd, ".opencode", "commands", "sync.md");
+    return fs.existsSync(syncPath) && fs.readFileSync(syncPath, "utf8").includes("Sincroniza recursos Gemini para OpenCode");
+  } catch {
+    return false;
+  }
+}
+
+function directCommandPlans(cwd, syncPlan, commandName, rawArgs) {
+  const userArgs = splitCommandArgs(rawArgs);
+  const baseArgs = baseArgsFrom(syncPlan);
+  const projectArgs = ["--project", cwd];
+  const plan = (args) => ({ command: syncPlan.command, args: [...baseArgs, ...projectArgs, ...args] });
+
+  if (commandName === "bridge") return [plan(["dashboard", ...userArgs])];
+  if (commandName === "doctor") return [plan(["doctor", ...userArgs])];
+  if (commandName === "resources") return [plan(["dashboard", "--no-refresh", ...userArgs])];
+  if (commandName === "validate") return [plan(["validate", ...userArgs])];
+  if (commandName === "security-check") return [plan(["security-check", ...userArgs])];
+  if (commandName === "agent-sync") return [plan(["adopt-agent-sync", ...userArgs])];
+  if (commandName === "status") return [plan(["dashboard", "--no-refresh", ...userArgs])];
+  if (commandName === "telemetry") return [plan(["telemetry", ...(userArgs.length > 0 ? userArgs : ["status"])])];
+  if (commandName === "sync") {
+    const args = withoutApplyFlags(userArgs);
+    return [plan(["sync", ...(hasApplyFlag(userArgs) || hasDryRunFlag(args) ? args : ["--dry-run", ...args])])];
+  }
+  if (commandName === "update-extensions") {
+    const args = withoutApplyFlags(userArgs);
+    return [plan(["update-extensions", ...(hasApplyFlag(userArgs) || hasDryRunFlag(args) ? args : ["--dry-run", ...args])])];
+  }
+  if (commandName === "upgrade-ogb") return [
+    plan(["self-update", ...userArgs]),
+    plan(["doctor"]),
+  ];
+  return [];
+}
+
+function quoteArg(arg) {
+  const value = String(arg);
+  if (/^[A-Za-z0-9_./:=@+-]+$/.test(value)) return value;
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
+function commandLine(plan) {
+  return [plan.command, ...plan.args].map(quoteArg).join(" ");
+}
+
+function chatTail(text, maxChars = 12000) {
+  const value = String(text || "").trimEnd();
+  if (value.length <= maxChars) return value;
+  return "[saida truncada; mostrando o final]\n" + value.slice(-maxChars);
+}
+
+function formatDirectCommandMessage(commandName, results) {
+  const lines = [
+    "OpenCode Gemini Bridge /" + commandName,
+    "",
+  ];
+  for (const result of results) {
+    lines.push("Comando:");
+    lines.push("~~~sh");
+    lines.push(commandLine(result.plan));
+    lines.push("~~~");
+    lines.push("");
+
+    const output = chatTail([result.stdout, result.stderr].filter(Boolean).join("\n"));
+    if (output) {
+      lines.push("Saida:");
+      lines.push("~~~text");
+      lines.push(output);
+      lines.push("~~~");
+      lines.push("");
+    }
+
+    const status = result.ok ? "PASS" : "FAIL";
+    const exitCode = result.exitCode === null || result.exitCode === undefined ? "sem exit code" : "exit " + result.exitCode;
+    lines.push("Status: " + status + " (" + exitCode + ")");
+    if (result.error) lines.push("Erro: " + result.error);
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
+async function sendDirectChatMessage(client, sessionID, text) {
+  try {
+    await client.session.prompt({
+      path: { id: sessionID },
+      body: {
+        noReply: true,
+        parts: [
+          {
+            type: "text",
+            text,
+            ignored: true,
+          },
+        ],
+      },
+    });
+  } catch (error) {
+    await log(client, {
+      service: "ogb-startup-sync",
+      level: "warn",
+      message: "Failed to send direct command output",
+      extra: { error: String(error?.message || error) },
+    });
+  }
+}
+
+async function handleDirectBridgeCommand({ cwd, client, input }) {
+  const commandName = String(input?.command || "");
+  if (!BRIDGE_COMMANDS.has(commandName)) return false;
+  if (commandName === "sync" && !isLocalOgbSyncCommand(cwd)) return false;
+  if (!input?.sessionID) return false;
+
+  await showToast(client, cwd, {
+    title: "OGB " + commandName.toUpperCase(),
+    message: commandName === "sync" && !hasApplyFlag(splitCommandArgs(input.arguments || ""))
+      ? "Rodando preview do bridge."
+      : "Rodando comando do bridge.",
+    variant: "info",
+    duration: 2200,
+  });
+
+  const syncPlan = commandPlan(cwd);
+  const plans = directCommandPlans(cwd, syncPlan, commandName, input.arguments || "");
+  const results = [];
+  for (const plan of plans) {
+    const result = await runProcess({ cwd, plan });
+    results.push({ ...result, plan });
+  }
+
+  await sendDirectChatMessage(client, input.sessionID, formatDirectCommandMessage(commandName, results));
+  await log(client, {
+    service: "ogb-startup-sync",
+    level: results.every((result) => result.ok) ? "info" : "warn",
+    message: "ogb direct command executed",
+    extra: {
+      cwd,
+      command: commandName,
+      plans: plans.map((plan) => ({ command: plan.command, args: plan.args })),
+      results: results.map((result) => ({
+        exitCode: result.exitCode,
+        error: result.error,
+        stdout: tail(result.stdout),
+        stderr: tail(result.stderr),
+      })),
+    },
+  });
+  return true;
+}
+
 function runProcess({ cwd, plan, input }) {
   return new Promise((resolve) => {
     let settled = false;
@@ -313,8 +567,8 @@ function runProcess({ cwd, plan, input }) {
       resolve({
         ok: false,
         exitCode: null,
-        error: error.message,
         signal: null,
+        error: error.message,
         durationMs: Date.now() - startedAt,
         stdout,
         stderr,
@@ -513,12 +767,6 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
       stdoutTail: tail(result.stdout),
       stderrTail: tail(result.stderr),
     });
-    await showToast(client, cwd, {
-      title: "OGB UPDATE FALHOU",
-      message: "Use /upgrade-ogb quando quiser tentar manualmente.",
-      variant: "error",
-      duration: 6500,
-    });
   }
 
   return {
@@ -530,9 +778,22 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
   };
 }
 
-async function runCommand({ cwd, client, reason }) {
+function nextFailureCount(cwd) {
+  const previous = readStatus(cwd);
+  if (previous?.state !== "fail") return 1;
+  const count = Number(previous.failureCount ?? 1);
+  return Number.isFinite(count) && count > 0 ? count + 1 : 2;
+}
+
+function shortFailure(result) {
+  const detail = result.error || tail(result.stderr).trim() || tail(result.stdout).trim();
+  return detail ? String(detail).split(/\r?\n/).find(Boolean)?.slice(0, 220) : undefined;
+}
+
+async function runCommand({ cwd, client, reason, notifications, failureBackoffMs }) {
   const plan = commandPlan(cwd);
   const startedAt = new Date().toISOString();
+  const failureCountIfNeeded = nextFailureCount(cwd);
 
   writeStatus(cwd, {
     state: "running",
@@ -545,16 +806,12 @@ async function runCommand({ cwd, client, reason }) {
     command: plan.command,
     args: plan.args,
   });
-  await showToast(client, cwd, {
-    title: "OGB SYNC",
-    message: "Atualizando bridge no startup...",
-    variant: "info",
-    duration: 2500,
-  });
 
   const update = await runAutoUpdate({ cwd, client, syncPlan: plan, reason });
   const result = await runProcess({ cwd, plan });
   const finishedAt = new Date().toISOString();
+  const failureCount = result.ok ? 0 : failureCountIfNeeded;
+  const nextRetryAfter = result.ok ? undefined : new Date(Date.now() + failureBackoffMs).toISOString();
   const baseStatus = {
     state: result.ok ? "pass" : "fail",
     reason,
@@ -563,6 +820,7 @@ async function runCommand({ cwd, client, reason }) {
     finishedAt,
     durationMs: result.durationMs,
     exitCode: result.exitCode,
+    signal: result.signal,
     command: plan.command,
     args: plan.args,
     hostPid: process.pid,
@@ -570,6 +828,8 @@ async function runCommand({ cwd, client, reason }) {
     stdoutTail: tail(result.stdout),
     stderrTail: tail(result.stderr),
     error: result.error,
+    failureCount,
+    nextRetryAfter,
     updateStatus: update.status,
     updateRestartRequired: update.restartRequired === true,
     dashboardPath: dashboardPath(cwd),
@@ -593,24 +853,24 @@ async function runCommand({ cwd, client, reason }) {
 
   await recordTelemetry({ cwd, client, syncPlan: plan, reason, result, update, dashboard, status });
 
-  if (result.ok && update.restartRequired === true) {
+  if (result.ok && update.restartRequired === true && notifications.success()) {
     await showToast(client, cwd, {
       title: "REINICIE OPENCODE",
       message: "O OGB foi atualizado e a sessao atual ainda usa partes antigas.",
       variant: "warning",
       duration: 9000,
     });
-  } else if (result.ok) {
+  } else if (result.ok && notifications.success()) {
     await showToast(client, cwd, {
       title: "OGB SYNC OK",
       message: "Bridge atualizado. Use /bridge para ver o painel.",
       variant: "success",
       duration: 4500,
     });
-  } else {
+  } else if (!result.ok && notifications.failure()) {
     await showToast(client, cwd, {
       title: "OGB SYNC FALHOU",
-      message: "Rode /bridge ou ogb dashboard para ver o motivo.",
+      message: shortFailure(result) || "Rode /bridge ou ogb dashboard para ver o motivo.",
       variant: "error",
       duration: 6500,
     });
@@ -634,11 +894,62 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
   const plan = commandPlan(cwd);
   const enabled = process.env.OGB_STARTUP_SYNC !== "0" && plan.enabled !== false;
   const lockPath = startupLockPath(cwd);
-  const startupEvents = new Set(["session.created", "session.updated", "session.idle"]);
+  const startupEvents = new Set(["session.created"]);
+  const config = readConfig(cwd);
+  const configuredBackoff = Number(config.failureBackoffMs ?? DEFAULT_FAILURE_BACKOFF_MS);
+  const failureBackoffMs = Number.isFinite(configuredBackoff) && configuredBackoff >= 0 ? configuredBackoff : DEFAULT_FAILURE_BACKOFF_MS;
   let startupTimer;
+  let startupStarted = false;
+  let successToastShown = false;
+  let failureToastShown = false;
+
+  function backoffStatus() {
+    const status = readStatus(cwd);
+    if (status?.state !== "fail" || typeof status.nextRetryAfter !== "string") return { blocked: false };
+    const retryAt = Date.parse(status.nextRetryAfter);
+    if (!Number.isFinite(retryAt) || retryAt <= Date.now()) return { blocked: false };
+    return {
+      blocked: true,
+      nextRetryAfter: status.nextRetryAfter,
+      failureCount: Number(status.failureCount ?? 1),
+    };
+  }
+
+  const notifications = {
+    success() {
+      if (successToastShown) return false;
+      successToastShown = true;
+      return true;
+    },
+    failure() {
+      if (failureToastShown) return false;
+      failureToastShown = true;
+      return true;
+    },
+  };
 
   async function runOnce(reason) {
     if (!enabled) return;
+    if (startupStarted) {
+      await log(client, {
+        service: "ogb-startup-sync",
+        level: "info",
+        message: "Skipping ogb startup sync: already attempted in this OpenCode process",
+        extra: { cwd, reason },
+      });
+      return;
+    }
+    const backoff = backoffStatus();
+    if (backoff.blocked) {
+      await log(client, {
+        service: "ogb-startup-sync",
+        level: "warn",
+        message: "Skipping ogb startup sync: failure backoff is active",
+        extra: { cwd, reason, nextRetryAfter: backoff.nextRetryAfter, failureCount: backoff.failureCount },
+      });
+      return;
+    }
+    startupStarted = true;
     const lock = acquireLock(lockPath, plan.lockTtlMs);
     if (!lock.acquired) {
       await log(client, {
@@ -655,9 +966,9 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
         service: "ogb-startup-sync",
         level: "info",
         message: "Running ogb startup sync (" + reason + ")",
-        extra: { cwd },
+        extra: { cwd, command: plan.command, args: plan.args },
       });
-      await runCommand({ cwd, client, reason });
+      await runCommand({ cwd, client, reason, notifications, failureBackoffMs });
     } finally {
       releaseLock(lockPath);
     }
@@ -679,6 +990,16 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
   scheduleStartup("plugin.init", Number.isFinite(startupDelay) && startupDelay >= 0 ? startupDelay : STARTUP_DELAY_MS);
 
   return {
+    config: async (opencodeConfig) => {
+      opencodeConfig.command ??= {};
+      for (const [name, definition] of Object.entries(OGB_DIRECT_COMMANDS)) {
+        if (COMMAND_REGISTRATION_SKIP.has(name)) continue;
+        opencodeConfig.command[name] = {
+          template: definition.template,
+          description: definition.description,
+        };
+      }
+    },
     event: async ({ event }) => {
       const type = String(event?.type || "");
       if (startupEvents.has(type)) scheduleStartup(type, 0);
@@ -689,13 +1010,8 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
       }
     },
     "command.execute.before": async (input) => {
-      if (BRIDGE_COMMANDS.has(input?.command)) {
-        await showToast(client, cwd, {
-          title: "OGB " + input.command.toUpperCase(),
-          message: "Comando do bridge iniciado.",
-          variant: "info",
-          duration: 2200,
-        });
+      if (await handleDirectBridgeCommand({ cwd, client, input })) {
+        throw new Error("__OGB_COMMAND_HANDLED__");
       }
     },
   };
@@ -772,7 +1088,7 @@ export function defaultCommandPlan(options: SetupOpenCodeOptions): SetupCommandP
     return {
       command: options.command,
       baseArgs: options.baseArgs ?? [],
-      syncArgs: options.syncArgs ?? ["sync"],
+      syncArgs: options.syncArgs ?? ["startup-sync"],
     };
   }
 
@@ -781,14 +1097,14 @@ export function defaultCommandPlan(options: SetupOpenCodeOptions): SetupCommandP
     return {
       command: process.execPath,
       baseArgs,
-      syncArgs: options.syncArgs ?? ["sync"],
+      syncArgs: options.syncArgs ?? ["startup-sync"],
     };
   }
 
   return {
     command: "ogb",
     baseArgs: [],
-    syncArgs: options.syncArgs ?? ["sync"],
+    syncArgs: options.syncArgs ?? ["startup-sync"],
   };
 }
 
@@ -796,12 +1112,13 @@ export function startupConfigSource(plan: SetupCommandPlan): string {
   return `${JSON.stringify({
     version: 1,
     enabled: true,
-    autoUpdate: true,
+    autoUpdate: false,
     command: plan.command,
     baseArgs: plan.baseArgs,
     syncArgs: plan.syncArgs,
-    updateArgs: ["auto-update"],
+    updateArgs: ["check-update", "--no-write"],
     lockTtlMs: 10 * 60_000,
+    failureBackoffMs: 10 * 60_000,
   }, null, 2)}\n`;
 }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.50 - Startup sync global sem spam
+
+- Troca o plugin de startup para usar `ogb startup-sync`, um caminho dedicado que trata avisos de hooks/extensoes como avisos e so falha em erro real de projecao.
+- Faz o startup sync rodar no maximo uma vez por processo do OpenCode e respeitar backoff de 10 minutos depois de falha, sem reagir a `session.updated` ou `session.idle`.
+- Desliga update automatico no startup por padrao; o plugin no maximo usa check silencioso quando explicitamente habilitado, enquanto update real fica em `ogb self-update` ou `/upgrade-ogb`.
+- Registra diagnosticos de falha no status do plugin, incluindo stdout/stderr tail, signal, comando, args, contagem de falhas e proxima tentativa.
+- Mostra no dashboard a causa curta da falha de startup sync, em vez de apenas `exit code 1`.
+- Adiciona testes para lifecycle do plugin, backoff, diagnostico do dashboard e sync global de startup.
+
 ## 0.0.49 - Windows startup plugin process runner
 
 - Faz o plugin de startup sync usar `cmd /c call` no Windows para executar shims `.cmd` como `ogb.cmd`, evitando falha instantanea com `exit code null`.

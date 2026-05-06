@@ -24,6 +24,7 @@ import { printSetupReport, setupOpenCode } from "./setup-opencode.js";
 import { printSetupUxReport, setupUx } from "./setup-ux.js";
 import { runSecurityCheck } from "./security.js";
 import { checkOgbUpdate, printAutoUpdateReport, printSelfUpdateReport, printUpdateCheckReport, runAutoUpdate, runSelfUpdate } from "./self-update.js";
+import { printStartupSyncReport, runStartupSync } from "./startup-sync.js";
 import { syncToOpenCode } from "./sync.js";
 import { formatTelemetryEmailSetupResult, setupTelemetryEmailReceiver, TelemetrySetupError } from "./telemetry-email-setup.js";
 import { disableTelemetry, enableTelemetry, previewTelemetryEnvelope, printTelemetrySendResult, printTelemetryStatus, recordWorkflowRun, safeRecordWorkflowRun, sendTelemetry, telemetryStatus, TELEMETRY_PAYLOAD_LEVELS, type TelemetryPayloadLevel } from "./telemetry.js";
@@ -270,6 +271,22 @@ program.command("sync")
       });
       return { bidirectional, sync };
     });
+  });
+
+program.command("startup-sync")
+  .description("Run the lightweight startup projection used by the OpenCode plugin")
+  .option("--force", "Overwrite files previously changed outside ogb management")
+  .option("--dry-run", "Preview startup projection without writing")
+  .option("--json", "Print JSON report")
+  .action((opts) => {
+    const { project } = commonProjectOptions();
+    const report = runStartupSync({
+      projectRoot: project,
+      force: opts.force,
+      dryRun: opts.dryRun,
+    });
+    printStartupSyncReport(report, opts.json);
+    if (report.outcome === "fail") process.exitCode = 2;
   });
 
 program.command("bidirectional-sync")
@@ -633,7 +650,7 @@ program.command("setup-opencode")
   .option("--strict", "Exit non-zero when setup has warnings")
   .option("--command <path>", "Command used by the startup plugin instead of the current ogb CLI")
   .option("--base-args <list>", "Comma-separated args placed before sync, useful for node + cli.js")
-  .option("--sync-args <list>", "Comma-separated startup sync args", "sync")
+  .option("--sync-args <list>", "Comma-separated startup sync args", "startup-sync")
   .option("--json", "Print JSON report")
   .action(async (opts) => {
     await withWorkflowTelemetry("setup-opencode", () => {
@@ -646,7 +663,7 @@ program.command("setup-opencode")
         skipCommandCheck: opts.skipCommandCheck,
         command: opts.command,
         baseArgs: splitFeatures(opts.baseArgs),
-        syncArgs: splitFeatures(opts.syncArgs) ?? ["sync"],
+        syncArgs: splitFeatures(opts.syncArgs) ?? ["startup-sync"],
       });
       printSetupReport(report, opts.json);
       if (report.plugin.status === "conflict" || report.startupConfig.status === "conflict") process.exitCode = 2;

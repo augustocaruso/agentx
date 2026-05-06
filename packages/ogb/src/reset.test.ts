@@ -134,6 +134,9 @@ test("runReset cleans home project artifacts and recreates global config", async
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "tui-plugins", "ogb-sidebar.js")), true);
   assert.deepEqual(readJson(path.join(homeDir, ".config", "opencode", "tui.json")).plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json")), true);
+  const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
+  assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
+  assert.equal(startupConfig.autoUpdate, false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-update-status.json")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-validation.json")), false);

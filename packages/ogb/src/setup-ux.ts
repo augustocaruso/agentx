@@ -770,7 +770,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     text: startupConfigSource({
       command: "ogb",
       baseArgs: ["--project", homeDir],
-      syncArgs: ["sync"],
+      syncArgs: ["startup-sync"],
     }),
     dryRun: options.dryRun,
   }));

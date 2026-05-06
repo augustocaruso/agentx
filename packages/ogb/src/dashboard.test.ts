@@ -181,3 +181,47 @@ test("runDashboard warns when auto-update requires an OpenCode restart", () => {
   assert.match(markdown, /OGB update: UPDATED v0\.0\.39 - restart OpenCode/);
   assert.ok(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")));
 });
+
+test("runDashboard surfaces startup sync failure details", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.doctorPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    warnings: [],
+    errors: [],
+    counts: {},
+    startupSync: {
+      projectPlugin: true,
+      projectConfig: true,
+      lastState: "fail",
+    },
+  });
+  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, outcome: "pass", findings: [] });
+  writeJson(paths.pluginStatusPath, {
+    version: 1,
+    state: "fail",
+    reason: "session.created",
+    finishedAt: "2026-05-06T18:47:02.300Z",
+    durationMs: 1000,
+    exitCode: 1,
+    signal: null,
+    command: "ogb",
+    args: ["--project", projectRoot, "startup-sync"],
+    failureCount: 3,
+    nextRetryAfter: "2026-05-06T18:57:02.300Z",
+    stderrTail: "node nao foi encontrado no PATH\nsegunda linha",
+  });
+
+  const report = runDashboard({ projectRoot, refresh: false, silent: true });
+  const markdown = fs.readFileSync(paths.dashboardMarkdownPath, "utf8");
+
+  assert.equal(report.outcome, "fail");
+  assert.equal(report.startupSync.failureCount, 3);
+  assert.equal(report.startupSync.nextRetryAfter, "2026-05-06T18:57:02.300Z");
+  assert.ok(report.errors.some((error) => error.includes("exit code 1") && error.includes("node nao foi encontrado")));
+  assert.match(markdown, /Startup sync falhou com exit code 1: node nao foi encontrado no PATH/);
+  assert.match(markdown, /retry after 2026-05-06T18:57:02\.300Z/);
+});

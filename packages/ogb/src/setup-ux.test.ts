@@ -120,7 +120,10 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
   assert.equal(startupConfig.command, "ogb");
   assert.deepEqual(startupConfig.baseArgs, ["--project", homeDir]);
-  assert.deepEqual(startupConfig.syncArgs, ["sync"]);
+  assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
+  assert.equal(startupConfig.autoUpdate, false);
+  assert.deepEqual(startupConfig.updateArgs, ["check-update", "--no-write"]);
+  assert.equal(startupConfig.failureBackoffMs, 10 * 60_000);
 });
 
 test("setupUx removes the retired global dev-server command and overwrites global AGENTS.md", () => {

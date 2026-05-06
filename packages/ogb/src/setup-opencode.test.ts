@@ -48,7 +48,7 @@ test("setupOpenCode installs startup plugin, config, and project OpenCode config
   assert.equal(fs.existsSync(projectPath(projectRoot, TUI_SIDEBAR_PLUGIN_PATH)), true);
   assert.equal(fs.existsSync(projectPath(projectRoot, TUI_CONFIG_PATH)), true);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /ogb-plugin-status\.json/);
-  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /auto-update/);
+  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /startup-sync/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /REINICIE OPENCODE/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /ogb dashboard refreshed/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /telemetry record/);
@@ -56,9 +56,10 @@ test("setupOpenCode installs startup plugin, config, and project OpenCode config
 
   const startupConfig = JSON.parse(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_CONFIG_PATH), "utf8"));
   assert.equal(startupConfig.command, "ogb");
-  assert.equal(startupConfig.autoUpdate, true);
-  assert.deepEqual(startupConfig.syncArgs, ["sync"]);
-  assert.deepEqual(startupConfig.updateArgs, ["auto-update"]);
+  assert.equal(startupConfig.autoUpdate, false);
+  assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
+  assert.deepEqual(startupConfig.updateArgs, ["check-update", "--no-write"]);
+  assert.equal(startupConfig.failureBackoffMs, 10 * 60_000);
 
   const state = readSyncState(projectRoot);
   assert.ok(state?.managedFiles.some((file) => file.path === STARTUP_SYNC_PLUGIN_PATH && file.source === "ogb"));
@@ -217,8 +218,8 @@ test("startup plugin uses global generated lock and status when cwd is home", as
     autoUpdate: false,
     command: process.execPath,
     baseArgs: [runnerPath],
-    syncArgs: ["sync"],
-    updateArgs: ["auto-update"],
+    syncArgs: ["startup-sync"],
+    updateArgs: ["check-update", "--no-write"],
     lockTtlMs: 10 * 60_000,
   }, null, 2) + "\n");
 
@@ -242,6 +243,9 @@ test("startup plugin uses global generated lock and status when cwd is home", as
     });
     assert.equal(typeof plugin.event, "function");
     await plugin.event({ event: { type: "session.updated" } });
+    await plugin.event({ event: { type: "session.idle" } });
+    assert.equal(fs.existsSync(path.join(generatedDir, "ogb-plugin-status.json")), false);
+    await plugin.event({ event: { type: "session.created" } });
 
     const statusPath = path.join(generatedDir, "ogb-plugin-status.json");
     const globalLockPath = path.join(generatedDir, "ogb-startup-sync.lock");
@@ -263,5 +267,268 @@ test("startup plugin uses global generated lock and status when cwd is home", as
     else process.env.HOME = previousHome;
     if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
     else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+  }
+});
+
+test("startup plugin sends OGB command output directly to chat", async () => {
+  const root = tempProject();
+  const projectRoot = path.join(root, "project");
+  const pluginDir = path.join(root, "plugin");
+  const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
+  const runnerPath = path.join(root, "runner.mjs");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
+  fs.writeFileSync(runnerPath, "console.log('RUNNER_ARGS=' + JSON.stringify(process.argv.slice(2)))\n", "utf8");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+    version: 1,
+    enabled: true,
+    autoUpdate: false,
+    command: process.execPath,
+    baseArgs: [runnerPath],
+    syncArgs: ["startup-sync"],
+    updateArgs: ["check-update", "--no-write"],
+    lockTtlMs: 10 * 60_000,
+  }, null, 2) + "\n");
+
+  const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
+  process.env.OGB_STARTUP_DELAY_MS = "600000";
+  try {
+    const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}`);
+    const prompts: any[] = [];
+    const plugin = await mod.default({
+      directory: projectRoot,
+      worktree: projectRoot,
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async () => undefined },
+        session: { prompt: async (entry: unknown) => prompts.push(entry) },
+      },
+    });
+
+    const config: any = {};
+    await plugin.config(config);
+    assert.equal(config.command.bridge.description, "Painel principal do OpenCode Gemini Bridge");
+    assert.equal(config.command.sync, undefined);
+
+    await assert.rejects(
+      () => plugin["command.execute.before"]({ command: "doctor", arguments: "--json", sessionID: "session-1" }),
+      /__OGB_COMMAND_HANDLED__/,
+    );
+
+    assert.equal(prompts.length, 1);
+    assert.equal(prompts[0].path.id, "session-1");
+    assert.equal(prompts[0].body.noReply, true);
+    assert.equal(prompts[0].body.parts[0].ignored, true);
+    assert.match(prompts[0].body.parts[0].text, /OpenCode Gemini Bridge \/doctor/);
+    assert.match(prompts[0].body.parts[0].text, /RUNNER_ARGS=/);
+    assert.match(prompts[0].body.parts[0].text, /"doctor"/);
+    assert.match(prompts[0].body.parts[0].text, /"--project"/);
+  } finally {
+    if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
+    else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+  }
+});
+
+test("startup plugin runs once for a burst of startup events", async () => {
+  const root = tempProject();
+  const projectRoot = path.join(root, "project");
+  const pluginDir = path.join(root, "plugin");
+  const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
+  const runnerPath = path.join(root, "runner.mjs");
+  const counterPath = path.join(root, "counter.txt");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
+  fs.writeFileSync(runnerPath, "import fs from 'node:fs'; if (process.argv.slice(2).includes('startup-sync')) fs.appendFileSync(process.env.OGB_COUNTER, 'x'); console.log('ok')\n", "utf8");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+    version: 1,
+    enabled: true,
+    autoUpdate: false,
+    command: process.execPath,
+    baseArgs: [runnerPath],
+    syncArgs: ["startup-sync"],
+    updateArgs: ["check-update", "--no-write"],
+    lockTtlMs: 10 * 60_000,
+    failureBackoffMs: 10 * 60_000,
+  }, null, 2) + "\n");
+
+  const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
+  const previousCounter = process.env.OGB_COUNTER;
+  process.env.OGB_STARTUP_DELAY_MS = "600000";
+  process.env.OGB_COUNTER = counterPath;
+  try {
+    const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}-burst`);
+    const toasts: any[] = [];
+    const plugin = await mod.default({
+      directory: projectRoot,
+      worktree: projectRoot,
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async (entry: unknown) => toasts.push(entry) },
+      },
+    });
+
+    await Promise.all([
+      plugin.event({ event: { type: "session.created" } }),
+      plugin.event({ event: { type: "session.updated" } }),
+      plugin.event({ event: { type: "session.idle" } }),
+      plugin.event({ event: { type: "session.created" } }),
+    ]);
+
+    const statusPath = path.join(projectRoot, ".opencode", "generated", "ogb-plugin-status.json");
+    await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "pass");
+
+    assert.equal(fs.readFileSync(counterPath, "utf8"), "x");
+    const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+    assert.equal(status.state, "pass");
+    assert.equal(status.failureCount, 0);
+    await waitFor(() => toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC OK")).length === 1);
+    assert.equal(toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC OK")).length, 1);
+  } finally {
+    if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
+    else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+    if (previousCounter === undefined) delete process.env.OGB_COUNTER;
+    else process.env.OGB_COUNTER = previousCounter;
+  }
+});
+
+test("startup plugin records failure diagnostics and suppresses retries during backoff", async () => {
+  const root = tempProject();
+  const projectRoot = path.join(root, "project");
+  const pluginDir = path.join(root, "plugin");
+  const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
+  const runnerPath = path.join(root, "runner.mjs");
+  const counterPath = path.join(root, "counter.txt");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
+  fs.writeFileSync(runnerPath, [
+    "import fs from 'node:fs';",
+    "const isStartup = process.argv.slice(2).includes('startup-sync');",
+    "if (isStartup) fs.appendFileSync(process.env.OGB_COUNTER, 'x');",
+    "if (isStartup) { console.error('startup exploded clearly'); process.exit(1); }",
+    "console.log('ok');",
+  ].join("\n"), "utf8");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+    version: 1,
+    enabled: true,
+    autoUpdate: false,
+    command: process.execPath,
+    baseArgs: [runnerPath],
+    syncArgs: ["startup-sync"],
+    updateArgs: ["check-update", "--no-write"],
+    lockTtlMs: 10 * 60_000,
+    failureBackoffMs: 10 * 60_000,
+  }, null, 2) + "\n");
+
+  const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
+  const previousCounter = process.env.OGB_COUNTER;
+  process.env.OGB_STARTUP_DELAY_MS = "600000";
+  process.env.OGB_COUNTER = counterPath;
+  try {
+    const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}-fail`);
+    const toasts: any[] = [];
+    const logs: any[] = [];
+    const client = {
+      app: { log: async (entry: unknown) => logs.push(entry) },
+      tui: { showToast: async (entry: unknown) => toasts.push(entry) },
+    };
+    const plugin = await mod.default({ directory: projectRoot, worktree: projectRoot, client });
+
+    await Promise.all([
+      plugin.event({ event: { type: "session.created" } }),
+      plugin.event({ event: { type: "session.created" } }),
+      plugin.event({ event: { type: "session.updated" } }),
+    ]);
+
+    const statusPath = path.join(projectRoot, ".opencode", "generated", "ogb-plugin-status.json");
+    await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "fail");
+
+    const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+    assert.equal(fs.readFileSync(counterPath, "utf8"), "x");
+    assert.equal(status.exitCode, 1);
+    assert.equal(status.signal, null);
+    assert.equal(status.failureCount, 1);
+    assert.equal(typeof status.nextRetryAfter, "string");
+    assert.match(status.stderrTail, /startup exploded clearly/);
+    assert.deepEqual(status.args.slice(-1), ["startup-sync"]);
+    await waitFor(() => toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC FALHOU")).length === 1);
+    assert.equal(toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC FALHOU")).length, 1);
+
+    const secondPlugin = await mod.default({ directory: projectRoot, worktree: projectRoot, client });
+    await secondPlugin.event({ event: { type: "session.created" } });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(fs.readFileSync(counterPath, "utf8"), "x");
+    assert.equal(logs.some((entry) => JSON.stringify(entry).includes("failure backoff is active")), true);
+  } finally {
+    if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
+    else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+    if (previousCounter === undefined) delete process.env.OGB_COUNTER;
+    else process.env.OGB_COUNTER = previousCounter;
+  }
+});
+
+test("startup plugin downgrades legacy auto-update startup config to check-update", async () => {
+  const root = tempProject();
+  const projectRoot = path.join(root, "project");
+  const pluginDir = path.join(root, "plugin");
+  const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
+  const runnerPath = path.join(root, "runner.mjs");
+  const callsPath = path.join(root, "calls.log");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
+  fs.writeFileSync(runnerPath, [
+    "import fs from 'node:fs';",
+    "fs.appendFileSync(process.env.OGB_CALLS, JSON.stringify(process.argv.slice(2)) + '\\n');",
+    "console.log('ok');",
+  ].join("\n"), "utf8");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+    version: 1,
+    enabled: true,
+    autoUpdate: true,
+    command: process.execPath,
+    baseArgs: [runnerPath],
+    syncArgs: ["startup-sync"],
+    updateArgs: ["auto-update"],
+    lockTtlMs: 10 * 60_000,
+    failureBackoffMs: 10 * 60_000,
+  }, null, 2) + "\n");
+
+  const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
+  const previousCalls = process.env.OGB_CALLS;
+  process.env.OGB_STARTUP_DELAY_MS = "600000";
+  process.env.OGB_CALLS = callsPath;
+  try {
+    const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}-autoupdate`);
+    const plugin = await mod.default({
+      directory: projectRoot,
+      worktree: projectRoot,
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async () => undefined },
+      },
+    });
+
+    await plugin.event({ event: { type: "session.created" } });
+
+    const statusPath = path.join(projectRoot, ".opencode", "generated", "ogb-plugin-status.json");
+    await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "pass");
+    await waitFor(() => fs.existsSync(callsPath) && fs.readFileSync(callsPath, "utf8").split(/\n/).filter(Boolean).length >= 3);
+
+    const calls = fs.readFileSync(callsPath, "utf8").trim().split(/\n/).map((line) => JSON.parse(line));
+    assert.equal(calls.some((args) => args.includes("auto-update")), false);
+    assert.equal(calls.some((args) => args.includes("check-update") && args.includes("--no-write")), true);
+    assert.equal(calls.some((args) => args.includes("startup-sync")), true);
+  } finally {
+    if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
+    else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+    if (previousCalls === undefined) delete process.env.OGB_CALLS;
+    else process.env.OGB_CALLS = previousCalls;
   }
 });

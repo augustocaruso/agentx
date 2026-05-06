@@ -58,6 +58,12 @@ export interface DashboardReport {
     lastFinishedAt?: string;
     lastDurationMs?: number;
     lastExitCode?: number | null;
+    lastSignal?: string | null;
+    lastError?: string;
+    stdoutTail?: string;
+    stderrTail?: string;
+    failureCount?: number;
+    nextRetryAfter?: string;
   };
   update: {
     exists: boolean;
@@ -222,6 +228,24 @@ function firstLines(items: string[], max = 6): string[] {
   return [...items.slice(0, max), `...mais ${items.length - max}`];
 }
 
+function compactLine(value: unknown, max = 220): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const line = value.trim().split(/\r?\n/).find(Boolean);
+  if (!line) return undefined;
+  return line.length > max ? `${line.slice(0, max - 1)}...` : line;
+}
+
+function startupFailureMessage(pluginStatus: Record<string, any> | undefined): string {
+  const parts: string[] = [];
+  if (pluginStatus?.exitCode !== undefined) parts.push(`exit code ${pluginStatus.exitCode}`);
+  if (typeof pluginStatus?.signal === "string" && pluginStatus.signal) parts.push(`signal ${pluginStatus.signal}`);
+  const detail = compactLine(pluginStatus?.error)
+    ?? compactLine(pluginStatus?.stderrTail)
+    ?? compactLine(pluginStatus?.stdoutTail);
+  if (detail) parts.push(detail);
+  return parts.length > 0 ? `Startup sync falhou com ${parts.join(": ")}.` : "Startup sync falhou.";
+}
+
 function publicTelemetryStatus(status: TelemetryStatus): DashboardReport["telemetry"] {
   return {
     schema: status.schema,
@@ -280,7 +304,7 @@ function buildNextSteps(report: DashboardReport): string[] {
 export function formatDashboard(report: DashboardReport): string {
   const startup = report.startupSync.lastState === "unknown"
     ? "sem execucao registrada"
-    : `${statusLabel(report.startupSync.lastState)}${report.startupSync.lastFinishedAt ? ` em ${report.startupSync.lastFinishedAt}` : ""}${report.startupSync.lastDurationMs ? ` (${formatMs(report.startupSync.lastDurationMs)})` : ""}`;
+    : `${statusLabel(report.startupSync.lastState)}${report.startupSync.lastFinishedAt ? ` em ${report.startupSync.lastFinishedAt}` : ""}${report.startupSync.lastDurationMs ? ` (${formatMs(report.startupSync.lastDurationMs)})` : ""}${report.startupSync.nextRetryAfter ? `, retry after ${report.startupSync.nextRetryAfter}` : ""}`;
   const modelRouting = report.extensionCompatibility.modelRoutingReport
     ? `OGB ${report.extensionCompatibility.modelRoutingEnabled ? "active" : "disabled"}, ${report.extensionCompatibility.modelRoutingDecisions} decision(s)${report.extensionCompatibility.modelRoutingRouted > 0 ? `, ${report.extensionCompatibility.modelRoutingRouted} routed` : ""}${report.extensionCompatibility.modelRoutingSkipped > 0 ? `, ${report.extensionCompatibility.modelRoutingSkipped} skipped` : ""}`
     : "missing - run `ogb sync`";
@@ -371,7 +395,7 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
   if (validationSummary.status === "fail") errors.push(validationSummary.message);
   if (securitySummary.status === "warn") warnings.push(securitySummary.message);
   if (securitySummary.status === "fail") errors.push(securitySummary.message);
-  if (pluginStatusLevel === "fail") errors.push(`Startup sync falhou${pluginStatus?.exitCode !== undefined ? ` com exit code ${pluginStatus.exitCode}` : ""}.`);
+  if (pluginStatusLevel === "fail") errors.push(startupFailureMessage(pluginStatus));
   if (pluginStatusLevel === "warn" && pluginState === "stale") {
     const staleWarning = "OpenCode startup sync ficou preso em running, mas o processo nao existe mais. Reinicie o OpenCode para carregar o plugin novo.";
     if (!warnings.includes(staleWarning)) warnings.push(staleWarning);
@@ -432,6 +456,12 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
       lastFinishedAt: typeof startupSync.lastFinishedAt === "string" ? startupSync.lastFinishedAt : typeof pluginStatus?.finishedAt === "string" ? pluginStatus.finishedAt : undefined,
       lastDurationMs: typeof pluginStatus?.durationMs === "number" ? pluginStatus.durationMs : undefined,
       lastExitCode: typeof pluginStatus?.exitCode === "number" || pluginStatus?.exitCode === null ? pluginStatus.exitCode : undefined,
+      lastSignal: typeof pluginStatus?.signal === "string" || pluginStatus?.signal === null ? pluginStatus.signal : undefined,
+      lastError: typeof pluginStatus?.error === "string" ? pluginStatus.error : undefined,
+      stdoutTail: typeof pluginStatus?.stdoutTail === "string" ? pluginStatus.stdoutTail : undefined,
+      stderrTail: typeof pluginStatus?.stderrTail === "string" ? pluginStatus.stderrTail : undefined,
+      failureCount: typeof pluginStatus?.failureCount === "number" ? pluginStatus.failureCount : undefined,
+      nextRetryAfter: typeof pluginStatus?.nextRetryAfter === "string" ? pluginStatus.nextRetryAfter : undefined,
     },
     update: {
       exists: Boolean(updateStatus),
