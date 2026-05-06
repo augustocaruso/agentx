@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.61 - Limpa restart do self-update latest
+
+- Corrige o dashboard para consumir o aviso de restart tambem quando `self-update` foi feito contra `latest` e o status antigo nao registrou `latestTag`.
+- Mantem a exigencia de `validate` e `security-check` limpos na versao atual antes de limpar o aviso.
+
 ## 0.0.60 - Installer e restart consumivel
 
 - Faz os instaladores Mac e Windows terminarem em `ogb pass` (`--windows` no Windows), para setup, sync, doctor, validate, security-check e dashboard sairem do instalador ja regenerados.

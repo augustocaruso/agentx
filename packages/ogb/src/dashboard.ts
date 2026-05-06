@@ -239,6 +239,7 @@ function updateTargetsCurrentVersion(updateStatus: Record<string, any> | undefin
     normalizeVersionTag(updateStatus?.latestVersion),
     normalizeVersionTag(updateStatus?.latestTag),
   ].filter(Boolean);
+  if (candidates.length === 0) return true;
   return candidates.includes(OGB_VERSION);
 }
 
