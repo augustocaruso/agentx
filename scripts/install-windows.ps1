@@ -160,6 +160,15 @@ function Ensure-OpenCodeExaEnvironment {
   $env:OPENCODE_ENABLE_EXA = "1"
 }
 
+function Invoke-FinalOgbPass {
+  $PassArgs = @("--project", $Project, "pass", "--windows")
+  if ($Force) {
+    $PassArgs += "--force"
+  }
+  Write-Host "Running final OGB pass for $Project..."
+  & $OgbBin @PassArgs
+}
+
 function Remove-UserPath($Dir) {
   if (-not $Dir) {
     return
@@ -419,8 +428,7 @@ if ($RunHomeSync) {
   }
   Write-Host "Running global ogb import/sync for $Project..."
   & $OgbBin @ImportArgs
-  Write-Host "Running global doctor for $Project..."
-  & $OgbBin --project $Project doctor
+  Invoke-FinalOgbPass
 }
 
 if (-not $NoSetup) {
@@ -434,16 +442,9 @@ if (-not $NoSetup) {
   & $OgbBin @ImportArgs
   Write-Host "Installing OpenCode startup plugin for $Project..."
   & $OgbBin @SetupArgs
-  Write-Host "Running final doctor for $Project..."
-  & $OgbBin --project $Project doctor
-  Write-Host "Running final validation for $Project..."
-  & $OgbBin --project $Project validate --windows
-  Write-Host "Running final security check for $Project..."
-  & $OgbBin --project $Project security-check
-  Write-Host "Writing final dashboard for $Project..."
-  & $OgbBin --project $Project dashboard
+  Invoke-FinalOgbPass
 }
 
 Write-Host "Done."
 Write-Host "ogb command: $OgbBin"
-Write-Host "Try: & `"$OgbBin`" --project `"$Project`" doctor"
+Write-Host "Try: & `"$OgbBin`" --project `"$Project`" pass --windows"

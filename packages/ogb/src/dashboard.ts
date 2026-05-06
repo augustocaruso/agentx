@@ -227,6 +227,57 @@ function reportGeneratedMs(report: Record<string, any>): number | undefined {
   return timestampMs(report.generatedAt);
 }
 
+function normalizeVersionTag(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/^v/i, "");
+}
+
+function updateTargetsCurrentVersion(updateStatus: Record<string, any> | undefined): boolean {
+  const candidates = [
+    normalizeVersionTag(updateStatus?.latestVersion),
+    normalizeVersionTag(updateStatus?.latestTag),
+  ].filter(Boolean);
+  return candidates.includes(OGB_VERSION);
+}
+
+function reportIsFreshForUpdate(report: Record<string, any> | undefined, updateMs: number | undefined): boolean {
+  if (!report || report.version !== OGB_VERSION) return false;
+  if (report.outcome !== "pass") return false;
+  const generatedMs = reportGeneratedMs(report);
+  if (!generatedMs) return false;
+  return updateMs === undefined || generatedMs >= updateMs;
+}
+
+function consumeCompletedRestart(
+  updateStatus: Record<string, any> | undefined,
+  validation: Record<string, any> | undefined,
+  security: Record<string, any> | undefined,
+  updateStatusPath: string,
+): Record<string, any> | undefined {
+  if (!updateRequiresRestart(updateStatus)) return updateStatus;
+  if (!updateTargetsCurrentVersion(updateStatus)) return updateStatus;
+  const updateMs = updateFinishedMs(updateStatus);
+  if (!reportIsFreshForUpdate(validation, updateMs) || !reportIsFreshForUpdate(security, updateMs)) return updateStatus;
+
+  const consumed = {
+    ...updateStatus,
+    status: "current",
+    currentVersion: OGB_VERSION,
+    restartRequired: false,
+    restartAcknowledgedAt: new Date().toISOString(),
+    message: `OGB ${OGB_VERSION} esta carregado e o pass pos-update foi regenerado.`,
+  };
+  try {
+    fs.mkdirSync(path.dirname(updateStatusPath), { recursive: true });
+    fs.writeFileSync(updateStatusPath, `${JSON.stringify(consumed, null, 2)}\n`, "utf8");
+  } catch {
+    // Dashboard rendering should not fail just because the update status could not be rewritten.
+  }
+  return consumed;
+}
+
 function hasKnownWindowsQuotedCommandFailure(kind: "validation" | "security", report: Record<string, any>): boolean {
   return reportItems(kind, report).some((item: any) => {
     const text = [item?.name, item?.message, item?.details].map((value) =>
@@ -494,7 +545,8 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
   const security = readJson(paths.securityPath);
   const limits = readJson(paths.limitsPath);
   const pluginStatus = readJson(paths.pluginStatusPath);
-  const updateStatus = readJson(paths.updateStatusPath);
+  const rawUpdateStatus = readJson(paths.updateStatusPath);
+  const updateStatus = consumeCompletedRestart(rawUpdateStatus, validation, security, paths.updateStatusPath);
   const telemetry = publicTelemetryStatus(telemetryStatus({ homeDir: paths.homeDir }));
   const doctorSummary = reportSummary("doctor", doctor);
   const validationSummary = reportSummary("validation", validation, { homeMode: paths.homeMode, updateStatus });

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.60 - Installer e restart consumivel
+
+- Faz os instaladores Mac e Windows terminarem em `ogb pass` (`--windows` no Windows), para setup, sync, doctor, validate, security-check e dashboard sairem do instalador ja regenerados.
+- Consome o estado `restartRequired` do update quando o OGB atual ja e a versao aplicada e os relatorios de pass foram gerados depois do update.
+- Impede a sidebar/dashboard de manterem `update applied · restart OpenCode` para sempre depois de um pass limpo.
+
 ## 0.0.59 - Update com pass completo
 
 - Faz `self-update` e `auto-update` gravarem o status de update e rodarem `ogb pass --force` logo depois, regenerando sync, doctor, validation, security e dashboard no mesmo fluxo.

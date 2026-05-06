@@ -7,7 +7,7 @@ Usage: install-mac.sh [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [-
 
 Installs the ogb CLI, applies the global OpenCode UX profile, and optionally
 runs the full project setup:
-ogb setup-ux -> ogb import -> ogb setup-opencode -> ogb doctor -> ogb validate -> ogb security-check -> ogb dashboard.
+ogb setup-ux -> ogb import/setup-opencode -> ogb pass.
 
 Defaults:
   --project  current working directory
@@ -177,6 +177,15 @@ fi
 
 ensure_opencode_exa_env
 
+run_final_pass() {
+  local pass_args=(--project "$PROJECT_DIR" pass)
+  if [[ "$FORCE" -eq 1 ]]; then
+    pass_args+=(--force)
+  fi
+  echo "Running final OGB pass for $PROJECT_DIR..."
+  "$OGB_BIN" "${pass_args[@]}"
+}
+
 if [[ "$RUN_UX" -eq 1 ]]; then
   echo "Cleaning old OGB project artifacts from the home directory..."
   "$OGB_BIN" cleanup-home
@@ -202,8 +211,7 @@ if [[ "$RUN_HOME_SYNC" -eq 1 ]]; then
   fi
   echo "Running global ogb import/sync for $PROJECT_DIR..."
   "$OGB_BIN" "${IMPORT_ARGS[@]}"
-  echo "Running global doctor for $PROJECT_DIR..."
-  "$OGB_BIN" --project "$PROJECT_DIR" doctor
+  run_final_pass
 fi
 
 if [[ "$RUN_SETUP" -eq 1 ]]; then
@@ -217,19 +225,12 @@ if [[ "$RUN_SETUP" -eq 1 ]]; then
   "$OGB_BIN" "${IMPORT_ARGS[@]}"
   echo "Installing OpenCode startup plugin for $PROJECT_DIR..."
   "$OGB_BIN" "${SETUP_ARGS[@]}"
-  echo "Running final doctor for $PROJECT_DIR..."
-  "$OGB_BIN" --project "$PROJECT_DIR" doctor
-  echo "Running final validation for $PROJECT_DIR..."
-  "$OGB_BIN" --project "$PROJECT_DIR" validate
-  echo "Running final security check for $PROJECT_DIR..."
-  "$OGB_BIN" --project "$PROJECT_DIR" security-check
-  echo "Writing final dashboard for $PROJECT_DIR..."
-  "$OGB_BIN" --project "$PROJECT_DIR" dashboard
+  run_final_pass
 fi
 
 echo "Done."
 if command -v ogb >/dev/null 2>&1; then
-  echo "Try: ogb --project \"$PROJECT_DIR\" doctor"
+  echo "Try: ogb --project \"$PROJECT_DIR\" pass"
 else
-  echo "Try: $OGB_BIN --project \"$PROJECT_DIR\" doctor"
+  echo "Try: $OGB_BIN --project \"$PROJECT_DIR\" pass"
 fi

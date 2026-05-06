@@ -156,6 +156,7 @@ test("runDashboard keeps a clean bridge passing when only OpenCode restart is pe
     startupSync: {
       projectPlugin: true,
       projectConfig: true,
+      lastState: "pass",
     },
   });
   writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
@@ -181,6 +182,50 @@ test("runDashboard keeps a clean bridge passing when only OpenCode restart is pe
   assert.match(markdown, /OGB update: UPDATED v0\.0\.39 - restart OpenCode/);
   assert.ok(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")));
   assert.equal(report.warnings.some((warning) => warning.includes("reinicie o OpenCode")), false);
+});
+
+test("runDashboard consumes restart-required update after current-version pass reports exist", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.doctorPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    warnings: [],
+    errors: [],
+    counts: {},
+    startupSync: {
+      projectPlugin: true,
+      projectConfig: true,
+      lastState: "pass",
+    },
+  });
+  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+  writeJson(paths.updateStatusPath, {
+    version: 1,
+    status: "updated",
+    currentVersion: "0.0.58",
+    latestVersion: OGB_VERSION,
+    latestTag: `v${OGB_VERSION}`,
+    checkedAt: "2026-05-06T12:00:00.000Z",
+    finishedAt: "2026-05-06T12:01:00.000Z",
+    restartRequired: true,
+    message: "OGB updated. Restart OpenCode.",
+  });
+
+  const report = runDashboard({ projectRoot, refresh: false, silent: true });
+  const saved = JSON.parse(fs.readFileSync(paths.updateStatusPath, "utf8"));
+  const markdown = fs.readFileSync(paths.dashboardMarkdownPath, "utf8");
+
+  assert.equal(report.outcome, "pass");
+  assert.equal(report.update.status, "current");
+  assert.equal(report.update.restartRequired, false);
+  assert.equal(saved.status, "current");
+  assert.equal(saved.restartRequired, false);
+  assert.match(saved.message, /pass pos-update foi regenerado/);
+  assert.match(markdown, /OGB update: CURRENT v/);
+  assert.equal(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")), false);
 });
 
 test("runDashboard treats validation/security reports without generatedAt as stale after self-update", () => {

@@ -315,6 +315,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["install-mac.sh cleanup-home", scripts.macInstaller, "cleanup-home"],
     ["install-mac.sh setup-ux", scripts.macInstaller, "setup-ux"],
     ["install-mac.sh setup-opencode", scripts.macInstaller, "setup-opencode"],
+    ["install-mac.sh final pass", scripts.macInstaller, "run_final_pass"],
     ["install-mac.sh home sync", scripts.macInstaller, "RUN_HOME_SYNC"],
     ["install-mac.sh reset global", scripts.macInstaller, "--reset-global"],
     ["install-mac.sh Exa websearch env", scripts.macInstaller, "OPENCODE_ENABLE_EXA"],
@@ -323,6 +324,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["install-windows.ps1 path arg normalization", scripts.windowsInstaller, "Normalize-PathArgument"],
     ["install-windows.ps1 setup-ux", scripts.windowsInstaller, "setup-ux"],
     ["install-windows.ps1 setup-opencode", scripts.windowsInstaller, "setup-opencode"],
+    ["install-windows.ps1 final pass", scripts.windowsInstaller, "Invoke-FinalOgbPass"],
     ["install-windows.ps1 home sync", scripts.windowsInstaller, "RunHomeSync"],
     ["install-windows.ps1 reset global", scripts.windowsInstaller, "--reset-global"],
     ["install-windows.ps1 Exa websearch env", scripts.windowsInstaller, "OPENCODE_ENABLE_EXA"],
@@ -334,7 +336,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     status: missing.length ? "fail" : "pass",
     message: missing.length
       ? `Missing expected release/bootstrap token(s): ${missing.join(", ")}.`
-      : "Bootstrap scripts download the release pack, clean old home artifacts, set Exa websearch env, reset home global config when forced, and installers apply setup-ux, project setup, and home global sync.",
+      : "Bootstrap scripts download the release pack, clean old home artifacts, set Exa websearch env, reset home global config when forced, and installers apply setup-ux, project setup, home global sync, and final pass.",
     details: { repoRoot },
   });
 }
@@ -376,10 +378,8 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "cleanup-home",
     "setup-opencode",
     "setup-ux",
-    "doctor",
-    "validate --windows",
-    "security-check",
-    "dashboard",
+    "pass",
+    "--windows",
     "SetEnvironmentVariable(\"Path\"",
     "SetEnvironmentVariable(\"OPENCODE_ENABLE_EXA\"",
     "Ensure-OpenCodeExaEnvironment",
@@ -402,7 +402,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
       ? `Missing expected installer token(s): ${missing.join(", ")}.`
       : forbidden.length
         ? `Forbidden unsafe installer token(s): ${forbidden.join(", ")}.`
-        : "PowerShell installer has safe native command capture, build, install, Exa websearch env, setup, doctor, validate, security-check and dashboard steps.",
+        : "PowerShell installer has safe native command capture, build, install, Exa websearch env, setup and final pass steps.",
   });
 }
 
