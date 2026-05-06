@@ -35,6 +35,31 @@ permission:
   fs.writeFileSync(path.join(projectRoot, "opencode.jsonc"), JSON.stringify({ mcp: {} }));
 }
 
+function writeCleanGlobalBridgeFiles(homeDir: string): void {
+  fs.mkdirSync(path.join(homeDir, ".config", "opencode", "agents"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".config", "opencode", "agents", "YOLO.md"), `---
+mode: primary
+permission:
+  question: allow
+  todowrite: allow
+  edit: allow
+  bash: allow
+  task: allow
+  external_directory: allow
+---
+`);
+  fs.mkdirSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-extension-map.json"), JSON.stringify({
+    extensions: [
+      {
+        hooks: [{ source: "hooks/hooks.json", projected: false }],
+        scripts: [{ source: "bin/run.sh", projected: false }],
+      },
+    ],
+  }));
+  fs.writeFileSync(path.join(homeDir, ".config", "opencode", "opencode.json"), JSON.stringify({ mcp: {} }));
+}
+
 test("runSecurityCheck passes a clean generated bridge surface", () => {
   const projectRoot = tempProject();
   writeCleanBridgeFiles(projectRoot);
@@ -93,7 +118,7 @@ test("runSecurityCheck skips unreadable directories", { skip: process.platform =
 
 test("runSecurityCheck scans only bridge files when project root is home", () => {
   const projectRoot = tempProject();
-  writeCleanBridgeFiles(projectRoot);
+  writeCleanGlobalBridgeFiles(projectRoot);
   fs.mkdirSync(path.join(projectRoot, ".ssh"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".ssh", "id_rsa"), "not part of the bridge scan\n");
 
@@ -101,6 +126,7 @@ test("runSecurityCheck scans only bridge files when project root is home", () =>
 
   assert.equal(report.outcome, "pass");
   assert.equal(report.findings.find((finding) => finding.name === "Secret-like files")?.status, "pass");
+  assert.equal(report.findings.find((finding) => finding.name === "Extension projection safety")?.status, "pass");
 });
 
 test("runSecurityCheck fails when trusted extension hook hash changes", () => {

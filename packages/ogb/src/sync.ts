@@ -2,7 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { applyEdits, modify as modifyJsonc, parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES, REMOVED_BUILT_IN_COMMAND_NAMES, type BuiltInTextFile } from "./built-ins.js";
-import { parseGeminiCommandToml, projectGeminiExtensionCommands } from "./extension-projection.js";
+import {
+  parseGeminiCommandToml,
+  projectGeminiExtensionCommands,
+  type GeminiExtensionCommandProjection,
+  type GeminiExtensionInstallMetadata,
+  type GeminiExtensionMapEntry,
+  type GeminiExtensionProjectionMap,
+} from "./extension-projection.js";
 import { externalOpenCodePlugins, externalTuiPlugins, projectExternalIntegrations } from "./external-integrations.js";
 import { buildInventory } from "./inventory.js";
 import { defaultOpenCodeAgent, readOgbConfig } from "./ogb-config.js";
@@ -222,6 +229,26 @@ const GLOBAL_EXTENSION_COMMAND_MARKER = "SOURCE_KIND: gemini-global-extension-co
 const GLOBAL_AGENT_MARKER = "SOURCE_KIND: gemini-global-agent";
 const GLOBAL_EXTENSION_AGENT_MARKER = "SOURCE_KIND: gemini-global-extension-agent";
 
+interface GlobalExtensionRoot {
+  name: string;
+  scope: "global";
+  dir: string;
+}
+
+interface GlobalExtensionCommandMapItem extends GeminiExtensionCommandProjection {
+  extensionName: string;
+}
+
+interface GlobalExtensionAgentMapItem {
+  extensionName: string;
+  name: string;
+  source: string;
+  target?: string;
+  projected: boolean;
+  reason?: string;
+  status?: "projected" | "conflict";
+}
+
 function fileExists(filePath: string): boolean {
   try {
     return fs.statSync(filePath).isFile();
@@ -274,6 +301,18 @@ function globalConfigPath(globalRoot: string): string {
   return jsonPath;
 }
 
+function readJson(filePath: string): any {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function relativeTo(root: string, filePath: string): string {
+  return toPosix(path.relative(root, filePath));
+}
+
 function listFilesRecursive(root: string): string[] {
   if (!dirExists(root)) return [];
   const out: string[] = [];
@@ -283,6 +322,14 @@ function listFilesRecursive(root: string): string[] {
     else if (entry.isFile()) out.push(fullPath);
   }
   return out;
+}
+
+function listDirs(root: string): string[] {
+  if (!dirExists(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(root, entry.name))
+    .sort();
 }
 
 function safeGlobalSegment(input: string): string {
@@ -482,6 +529,184 @@ function globalAgentMarkdown(options: {
     "",
   );
   return lines.join("\n");
+}
+
+function listGlobalExtensionRoots(homeDir: string): GlobalExtensionRoot[] {
+  const extensionsRoot = path.join(homeDir, ".gemini", "extensions");
+  return listDirs(extensionsRoot)
+    .map((dir) => ({ name: path.basename(dir), scope: "global" as const, dir }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function readInstallMetadata(extensionDir: string): GeminiExtensionInstallMetadata | undefined {
+  const parsed = readJson(path.join(extensionDir, ".gemini-extension-install.json"));
+  if (!parsed || typeof parsed !== "object") return undefined;
+  return {
+    source: typeof parsed.source === "string" ? parsed.source : undefined,
+    type: typeof parsed.type === "string" ? parsed.type : undefined,
+    ref: typeof parsed.ref === "string" ? parsed.ref : undefined,
+    autoUpdate: typeof parsed.autoUpdate === "boolean" ? parsed.autoUpdate : undefined,
+  };
+}
+
+function collectExtensionDocs(extensionDir: string): Array<{ source: string }> {
+  const docs: Array<{ source: string }> = [];
+  for (const rel of ["README.md", "GEMINI.md", "docs", "knowledge"]) {
+    const fullPath = path.join(extensionDir, rel);
+    if (fileExists(fullPath)) {
+      docs.push({ source: rel });
+    } else if (dirExists(fullPath)) {
+      for (const filePath of listFilesRecursive(fullPath).filter((item) => /\.(md|txt|json|toml)$/i.test(item))) {
+        docs.push({ source: relativeTo(extensionDir, filePath) });
+      }
+    }
+  }
+  return docs.sort((a, b) => a.source.localeCompare(b.source));
+}
+
+function collectExtensionScripts(extensionDir: string): Array<{ source: string; projected: false; reason: string }> {
+  return listFilesRecursive(extensionDir)
+    .map((filePath) => relativeTo(extensionDir, filePath))
+    .filter((relPath) => /(^|\/)(bin|scripts)\//.test(relPath) || /\.(sh|bash|zsh|ps1|bat|cmd|mjs|js|py)$/i.test(relPath))
+    .filter((relPath) => !relPath.startsWith("skills/"))
+    .map((source) => ({
+      source,
+      projected: false as const,
+      reason: "Scripts can execute code; ogb maps them for review but does not copy them into OpenCode.",
+    }))
+    .sort((a, b) => a.source.localeCompare(b.source));
+}
+
+function globalCommandNameFromRelPath(relPath: string): string {
+  const withoutPrefix = relPath.startsWith("commands/") ? relPath.slice("commands/".length) : relPath;
+  const extension = path.posix.extname(withoutPrefix);
+  return extension ? withoutPrefix.slice(0, -extension.length) : withoutPrefix;
+}
+
+function globalAgentNameFromRelPath(relPath: string): string {
+  const withoutPrefix = relPath.startsWith("agents/") ? relPath.slice("agents/".length) : relPath;
+  const extension = path.posix.extname(withoutPrefix);
+  return path.posix.basename(extension ? withoutPrefix.slice(0, -extension.length) : withoutPrefix);
+}
+
+function extensionMapEntry(options: {
+  extension: GlobalExtensionRoot;
+  commandBySource: Map<string, GlobalExtensionCommandMapItem>;
+  agentBySource: Map<string, GlobalExtensionAgentMapItem>;
+}): GeminiExtensionMapEntry {
+  const extension = options.extension;
+  const manifestPath = path.join(extension.dir, "gemini-extension.json");
+  const warnings: string[] = [];
+  if (!fileExists(manifestPath)) warnings.push("Missing gemini-extension.json");
+
+  const commandFiles = listFilesRecursive(path.join(extension.dir, "commands")).filter((filePath) => filePath.endsWith(".toml"));
+  const agentFiles = listFilesRecursive(path.join(extension.dir, "agents")).filter((filePath) => filePath.endsWith(".md"));
+  const skillDirs = listDirs(path.join(extension.dir, "skills")).filter((dir) => fileExists(path.join(dir, "SKILL.md")));
+  const hookFiles = listFilesRecursive(path.join(extension.dir, "hooks")).filter((filePath) => path.basename(filePath) === "hooks.json" || filePath.endsWith(".json"));
+
+  return {
+    name: extension.name,
+    scope: extension.scope,
+    path: extension.dir,
+    manifestPath,
+    manifestHash: fileExists(manifestPath) ? sha256File(manifestPath) : undefined,
+    install: readInstallMetadata(extension.dir),
+    commands: commandFiles.map((filePath) => {
+      const source = relativeTo(extension.dir, filePath);
+      const projected = options.commandBySource.get(`${extension.name}\0${source}`);
+      return projected
+        ? {
+            name: projected.name,
+            source,
+            target: projected.target,
+            description: projected.description,
+            status: projected.status,
+            message: projected.message,
+          }
+        : {
+            name: path.basename(filePath, ".toml"),
+            source,
+            status: "parse_warning" as const,
+            message: "Not projected yet",
+          };
+    }).sort((a, b) => a.source.localeCompare(b.source)),
+    skills: skillDirs
+      .map((dir) => ({ name: path.basename(dir), source: relativeTo(extension.dir, dir) }))
+      .sort((a, b) => a.source.localeCompare(b.source)),
+    agents: agentFiles.map((filePath) => {
+      const source = relativeTo(extension.dir, filePath);
+      const projected = options.agentBySource.get(`${extension.name}\0${source}`);
+      return projected
+        ? {
+            name: projected.name,
+            source,
+            target: projected.target,
+            projected: projected.projected,
+            reason: projected.reason,
+            status: projected.status,
+          }
+        : {
+            name: path.basename(filePath, ".md"),
+            source,
+            projected: false,
+            reason: "Not projected yet.",
+          };
+    }).sort((a, b) => a.source.localeCompare(b.source)),
+    hooks: hookFiles.map((filePath) => ({
+      source: relativeTo(extension.dir, filePath),
+      projected: false as const,
+      reason: "Hooks can execute commands and require manual trust review.",
+    })).sort((a, b) => a.source.localeCompare(b.source)),
+    scripts: collectExtensionScripts(extension.dir),
+    docs: collectExtensionDocs(extension.dir),
+    warnings,
+  };
+}
+
+function writeGlobalExtensionMap(options: {
+  paths: ReturnType<typeof resolveProjectPaths>;
+  state: ReturnType<typeof emptySyncState>;
+  commands: GlobalExtensionCommandMapItem[];
+  agents: GlobalExtensionAgentMapItem[];
+  projectedCommands: string[];
+  projectedAgents: string[];
+  warnings: string[];
+  dryRun?: boolean;
+}): { promoted?: string } {
+  const commandBySource = new Map(options.commands.map((item) => [`${item.extensionName}\0${item.source}`, item]));
+  const agentBySource = new Map(options.agents.map((item) => [`${item.extensionName}\0${item.source}`, item]));
+  const map: GeminiExtensionProjectionMap = {
+    _generated: {
+      tool: "ogb",
+      version: OGB_VERSION,
+      warning: "DO NOT EDIT. Regenerate with ogb sync.",
+    },
+    projectRoot: options.paths.projectRoot,
+    generatedAt: new Date().toISOString(),
+    extensions: listGlobalExtensionRoots(options.paths.homeDir).map((extension) => extensionMapEntry({
+      extension,
+      commandBySource,
+      agentBySource,
+    })),
+    projectedCommands: options.projectedCommands,
+    projectedAgents: options.projectedAgents,
+    modelFallbacks: [],
+    removedCommands: [],
+    removedAgents: [],
+    warnings: options.warnings,
+  };
+  const content = `${JSON.stringify(map, null, 2)}\n`;
+  const reportPath = ".config/opencode-gemini-bridge/generated/ogb-extension-map.json";
+  if (options.dryRun) return { promoted: reportPath };
+
+  fs.mkdirSync(path.dirname(options.paths.extensionMapPath), { recursive: true });
+  fs.writeFileSync(options.paths.extensionMapPath, content, "utf8");
+  upsertManagedFile(options.state, {
+    path: reportPath,
+    sha256: sha256Text(content),
+    source: "ogb",
+  });
+  return { promoted: reportPath };
 }
 
 function writeManagedGlobalText(options: {
@@ -722,12 +947,13 @@ function projectGlobalGeminiExtensionCommands(options: {
   usedCommandRelPaths?: Set<string>;
   dryRun?: boolean;
   force?: boolean;
-}): { promoted: string[]; warnings: string[] } {
+}): { promoted: string[]; warnings: string[]; mapCommands: GlobalExtensionCommandMapItem[] } {
   const warnings: string[] = [];
   const promoted: string[] = [];
+  const mapCommands: GlobalExtensionCommandMapItem[] = [];
   const usedCommandRelPaths = options.usedCommandRelPaths ?? new Set<string>();
   const extensionsRoot = path.join(options.homeDir, ".gemini", "extensions");
-  if (!dirExists(extensionsRoot)) return { promoted, warnings };
+  if (!dirExists(extensionsRoot)) return { promoted, warnings, mapCommands };
 
   for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
     const extensionDir = path.join(extensionsRoot, extensionName);
@@ -765,10 +991,19 @@ function projectGlobalGeminiExtensionCommands(options: {
       });
       if (write.promoted) promoted.push(write.promoted);
       if (write.warning) warnings.push(write.warning);
+      mapCommands.push({
+        extensionName,
+        name: globalCommandNameFromRelPath(relPath),
+        source: sourceRelPath,
+        target: write.promoted ?? globalOpenCodeRelPath(relPath),
+        description,
+        status: write.warning ? "conflict" : parsed.warnings.length > 0 ? "parse_warning" : "projected",
+        message: write.warning ?? (parsed.warnings.length > 0 ? parsed.warnings.join("; ") : undefined),
+      });
     }
   }
 
-  return { promoted, warnings };
+  return { promoted, warnings, mapCommands };
 }
 
 function projectGlobalGeminiAgents(options: {
@@ -823,12 +1058,13 @@ function projectGlobalGeminiExtensionAgents(options: {
   usedAgentRelPaths?: Set<string>;
   dryRun?: boolean;
   force?: boolean;
-}): { promoted: string[]; warnings: string[] } {
+}): { promoted: string[]; warnings: string[]; mapAgents: GlobalExtensionAgentMapItem[] } {
   const warnings: string[] = [];
   const promoted: string[] = [];
+  const mapAgents: GlobalExtensionAgentMapItem[] = [];
   const usedAgentRelPaths = options.usedAgentRelPaths ?? new Set<string>();
   const extensionsRoot = path.join(options.homeDir, ".gemini", "extensions");
-  if (!dirExists(extensionsRoot)) return { promoted, warnings };
+  if (!dirExists(extensionsRoot)) return { promoted, warnings, mapAgents };
 
   for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
     const extensionDir = path.join(extensionsRoot, extensionName);
@@ -865,10 +1101,19 @@ function projectGlobalGeminiExtensionAgents(options: {
       });
       if (write.promoted) promoted.push(write.promoted);
       if (write.warning) warnings.push(write.warning);
+      mapAgents.push({
+        extensionName,
+        name: globalAgentNameFromRelPath(relPath),
+        source: sourceRelPath,
+        target: write.promoted ?? globalOpenCodeRelPath(relPath),
+        projected: !write.warning,
+        reason: write.warning,
+        status: write.warning ? "conflict" : "projected",
+      });
     }
   }
 
-  return { promoted, warnings };
+  return { promoted, warnings, mapAgents };
 }
 
 function listGeminiGlobalSkillDirs(homeDir: string): Array<{ skillName: string; sourceDir: string }> {
@@ -1156,6 +1401,7 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     dryRun: options.dryRun,
     force: options.force,
   });
+  const extensionProjectionWarnings = [...projectedExtensionCommands.warnings];
   warnings.push(...projectedExtensionCommands.warnings);
 
   const projectedAgents = projectGlobalGeminiAgents({
@@ -1176,6 +1422,7 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     dryRun: options.dryRun,
     force: options.force,
   });
+  extensionProjectionWarnings.push(...projectedExtensionAgents.warnings);
   warnings.push(...projectedExtensionAgents.warnings);
 
   const projectedSkills = projectGlobalGeminiSkills({
@@ -1186,6 +1433,17 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     force: options.force,
   });
   warnings.push(...projectedSkills.warnings);
+
+  const projectedExtensionMap = writeGlobalExtensionMap({
+    paths,
+    state,
+    commands: projectedExtensionCommands.mapCommands,
+    agents: projectedExtensionAgents.mapAgents,
+    projectedCommands: projectedExtensionCommands.promoted,
+    projectedAgents: projectedExtensionAgents.promoted,
+    warnings: extensionProjectionWarnings,
+    dryRun: options.dryRun,
+  });
 
   const rulesync: RulesyncProjectionResult = {
     status: options.dryRun ? "preview" : "skipped",
@@ -1236,6 +1494,7 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     if (projectedAgents.promoted.length > 0) console.log(`${action} ${projectedAgents.promoted.length} global Gemini agent(s)`);
     if (projectedExtensionAgents.promoted.length > 0) console.log(`${action} ${projectedExtensionAgents.promoted.length} global Gemini extension agent(s)`);
     if (projectedSkills.promoted.length > 0) console.log(`${action} ${projectedSkills.promoted.length} global Gemini skill(s)`);
+    if (projectedExtensionMap.promoted) console.log(`${options.dryRun ? "Would generate" : "Generated"} global Gemini extension map at ${projectedExtensionMap.promoted}`);
     if (!projectedConfig.promoted && report.projectedCommands.length === 0 && report.projectedAgents.length === 0 && report.projectedExtensionAgents.length === 0 && report.projectedSkills.length === 0) {
       console.log("No global Gemini rules, MCPs, commands, agents, or skills found to sync.");
     }

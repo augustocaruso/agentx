@@ -182,6 +182,18 @@ function total(counts: StatusCounts): number {
   return counts.ok + counts.warning + counts.error + counts.needs_review;
 }
 
+function firstFailedReportDetail(kind: "validation" | "security", report: Record<string, any>): string | undefined {
+  const items = kind === "validation"
+    ? (Array.isArray(report.checks) ? report.checks : [])
+    : (Array.isArray(report.findings) ? report.findings : []);
+  const failed = items.find((item: any) => item?.status === "fail");
+  if (!failed) return undefined;
+  const name = typeof failed.name === "string" ? failed.name.trim() : "";
+  const message = compactLine(failed.message, 180);
+  if (name && message) return `${name}: ${message}`;
+  return name || message;
+}
+
 function reportSummary(kind: "doctor" | "validation" | "security", report: Record<string, any> | undefined): ReportSummary {
   if (!report) {
     return {
@@ -199,7 +211,10 @@ function reportSummary(kind: "doctor" | "validation" | "security", report: Recor
     return { exists: true, status: "pass", message: "Doctor limpo." };
   }
 
-  if (report.outcome === "fail") return { exists: true, status: "fail", message: `${kind} falhou.` };
+  if (report.outcome === "fail") {
+    const detail = kind === "validation" || kind === "security" ? firstFailedReportDetail(kind, report) : undefined;
+    return { exists: true, status: "fail", message: detail ? `${kind} falhou: ${detail}` : `${kind} falhou.` };
+  }
   if (report.outcome === "warn") return { exists: true, status: "warn", message: `${kind} passou com avisos.` };
   if (report.outcome === "pass") return { exists: true, status: "pass", message: `${kind} limpo.` };
   return { exists: true, status: "warn", message: `${kind} existe, mas nao tem outcome conhecido.` };

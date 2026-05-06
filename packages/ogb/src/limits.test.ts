@@ -9,8 +9,8 @@ function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-function writeAnthropicAuthConstants(homeDir: string): void {
-  const constants = path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", "opencode-anthropic-auth@latest", "node_modules", "@ex-machina", "opencode-anthropic-auth", "dist", "constants.js");
+function writeAnthropicAuthConstants(homeDir: string, packageDir = "opencode-anthropic-auth@latest"): void {
+  const constants = path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", packageDir, "node_modules", "@ex-machina", "opencode-anthropic-auth", "dist", "constants.js");
   fs.mkdirSync(path.dirname(constants), { recursive: true });
   fs.writeFileSync(constants, "export const CLIENT_ID = 'anthropic-client-id';\n", "utf8");
 }
@@ -184,7 +184,7 @@ test("refreshLimits refreshes expired Anthropic OAuth before reading usage", asy
   const projectRoot = tempDir("ogb-limits-project-");
   const homeDir = tempDir("ogb-limits-home-");
   const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
-  writeAnthropicAuthConstants(homeDir);
+  writeAnthropicAuthConstants(homeDir, "opencode-anthropic-auth@1.8.0");
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
   fs.writeFileSync(authFile, JSON.stringify({
     anthropic: {

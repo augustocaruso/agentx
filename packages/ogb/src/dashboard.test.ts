@@ -225,3 +225,45 @@ test("runDashboard surfaces startup sync failure details", () => {
   assert.match(markdown, /Startup sync falhou com exit code 1: node nao foi encontrado no PATH/);
   assert.match(markdown, /retry after 2026-05-06T18:57:02\.300Z/);
 });
+
+test("runDashboard surfaces first validation and security failure details", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.doctorPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    warnings: [],
+    errors: [],
+    counts: {},
+    startupSync: {
+      projectPlugin: true,
+      projectConfig: true,
+    },
+  });
+  writeJson(paths.validationPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    outcome: "fail",
+    checks: [
+      { name: "Global OpenCode config", status: "fail", message: "Missing or invalid global OpenCode config." },
+    ],
+  });
+  writeJson(paths.securityPath, {
+    version: OGB_VERSION,
+    projectRoot,
+    outcome: "fail",
+    findings: [
+      { name: "YOLO guardrails", status: "fail", message: "Missing .config/opencode/agents/YOLO.md." },
+    ],
+  });
+
+  const report = runDashboard({ projectRoot, refresh: false, silent: true });
+  const markdown = fs.readFileSync(paths.dashboardMarkdownPath, "utf8");
+
+  assert.equal(report.outcome, "fail");
+  assert.ok(report.errors.some((error) => error.includes("validation falhou: Global OpenCode config")));
+  assert.ok(report.errors.some((error) => error.includes("security falhou: YOLO guardrails")));
+  assert.match(markdown, /Validation: FAIL - validation falhou: Global OpenCode config/);
+  assert.match(markdown, /Security: FAIL - security falhou: YOLO guardrails/);
+});

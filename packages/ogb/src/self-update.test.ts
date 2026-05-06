@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildSelfUpdateCommand, checkOgbUpdate, runAutoUpdate, runSelfUpdate } from "./self-update.js";
+import { buildSelfUpdateCommand, checkOgbUpdate, runAutoUpdate, runSelfUpdate, writeSelfUpdateSuccessStatus } from "./self-update.js";
 import { resolveProjectPaths } from "./paths.js";
 
 test("buildSelfUpdateCommand uses GitHub bootstrap on POSIX platforms", () => {
@@ -73,6 +73,30 @@ test("runSelfUpdate dry-run does not execute the bootstrap", () => {
   assert.equal(report.status, "preview");
   assert.equal(report.command[0], process.platform === "win32" ? "powershell.exe" : "bash");
   assert.match(report.message, /Would download/);
+});
+
+test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-update-success-"));
+  const paths = resolveProjectPaths(projectRoot);
+  fs.mkdirSync(path.dirname(paths.updateStatusPath), { recursive: true });
+  fs.writeFileSync(paths.updateStatusPath, JSON.stringify({
+    version: 1,
+    status: "error",
+    message: "old failure",
+    restartRequired: false,
+  }), "utf8");
+
+  const report = writeSelfUpdateSuccessStatus({
+    projectRoot,
+    version: "v0.0.53",
+  }, new Date("2026-05-06T20:00:00.000Z"));
+  const saved = JSON.parse(fs.readFileSync(paths.updateStatusPath, "utf8"));
+
+  assert.equal(report.status, "updated");
+  assert.equal(saved.status, "updated");
+  assert.equal(saved.latestTag, "v0.0.53");
+  assert.equal(saved.restartRequired, true);
+  assert.doesNotMatch(saved.message, /old failure/);
 });
 
 test("buildSelfUpdateCommand rejects invalid repo names", () => {

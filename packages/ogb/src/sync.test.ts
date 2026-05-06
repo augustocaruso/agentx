@@ -62,9 +62,14 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   fs.mkdirSync(path.join(extensionDir, "agents"), { recursive: true });
   fs.mkdirSync(path.join(extensionDir, "commands", "notes"), { recursive: true });
   fs.mkdirSync(path.join(extensionDir, "skills", "review-notes"), { recursive: true });
+  fs.mkdirSync(path.join(extensionDir, "hooks"), { recursive: true });
+  fs.mkdirSync(path.join(extensionDir, "bin"), { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "study-pack" }));
   fs.writeFileSync(path.join(extensionDir, "agents", "researcher.md"), "---\ndescription: Extension researcher\n---\nResearch with extension context.\n");
   fs.writeFileSync(path.join(extensionDir, "commands", "notes", "review.toml"), `description = "Review extension notes"\nprompt = """\nUse ${"${extensionPath}"}${"${/}"}docs${"${/}"}guide.md with {{args}}\n"""\n`);
   fs.writeFileSync(path.join(extensionDir, "skills", "review-notes", "SKILL.md"), `---\nname: review-notes\ndescription: Review notes.\n---\nUse ${"${extensionPath}"}${"${/}"}docs${"${/}"}guide.md\n`);
+  fs.writeFileSync(path.join(extensionDir, "hooks", "hooks.json"), "{}\n");
+  fs.writeFileSync(path.join(extensionDir, "bin", "run.sh"), "#!/usr/bin/env bash\n");
   fs.mkdirSync(path.join(homeDir, ".config", "opencode"), { recursive: true });
   fs.writeFileSync(path.join(homeDir, ".config", "opencode", "AGENTS.md"), "Manual OpenCode global rules\n", "utf8");
 
@@ -79,6 +84,7 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   const extensionCommand = fs.readFileSync(path.join(globalRoot, "commands", "notes", "review.md"), "utf8");
   const extensionSkill = fs.readFileSync(path.join(globalRoot, "skills", "review-notes", "SKILL.md"), "utf8");
   const state = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-sync-state.json"), "utf8"));
+  const extensionMap = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-extension-map.json"), "utf8"));
 
   assert.equal(report.rulesync.status, "skipped");
   assert.equal(report.warnings.length, 0);
@@ -99,6 +105,13 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode/opencode.json"));
   assert.equal(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode/AGENTS.md"), false);
   assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode-gemini-bridge/generated/GEMINI.expanded.md"));
+  assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode-gemini-bridge/generated/ogb-extension-map.json"));
+  assert.equal(extensionMap._generated.version, OGB_VERSION);
+  assert.equal(extensionMap.extensions[0].scope, "global");
+  assert.equal(extensionMap.extensions[0].commands[0].target, ".config/opencode/commands/notes/review.md");
+  assert.equal(extensionMap.extensions[0].agents[0].target, ".config/opencode/agents/researcher.md");
+  assert.equal(extensionMap.extensions[0].hooks[0].projected, false);
+  assert.equal(extensionMap.extensions[0].scripts.some((script: { source: string }) => script.source === "bin/run.sh"), true);
   assert.match(helperAgent, /mode: subagent/);
   assert.match(helperAgent, /model: "openai\/gpt-5.2"/);
   assert.match(helperAgent, /maxSteps: 4/);

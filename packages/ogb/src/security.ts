@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { sha256File } from "./file-hash.js";
+import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { resolveProjectPaths } from "./paths.js";
 import { readTrustFile } from "./trust.js";
 import { OGB_VERSION } from "./types.js";
@@ -61,12 +62,20 @@ function toPosix(input: string): string {
 }
 
 const HOME_SCOPED_SECURITY_PATHS = [
-  "opencode.jsonc",
-  ".opencode/agents",
-  ".opencode/commands",
-  ".opencode/plugins",
-  ".opencode/skills",
-  ".opencode/tui-plugins",
+  ".config/opencode/opencode.json",
+  ".config/opencode/opencode.jsonc",
+  ".config/opencode/agents",
+  ".config/opencode/commands",
+  ".config/opencode/plugins",
+  ".config/opencode/skills",
+  ".config/opencode/tui-plugins",
+  ".config/opencode/tui.json",
+  ".config/opencode/tui.jsonc",
+  ".config/opencode/dcp.jsonc",
+  ".config/opencode-gemini-bridge/ogb.config.jsonc",
+  ".config/opencode-gemini-bridge/ogb-trust.jsonc",
+  ".config/opencode-gemini-bridge/generated/GEMINI.expanded.md",
+  ".config/opencode-gemini-bridge/generated/ogb-extension-map.json",
 ];
 
 function listProjectFiles(root: string, homeScoped = false): string[] {
@@ -183,8 +192,8 @@ function findSecretPatterns(projectRoot: string, files: string[]): SecurityFindi
   };
 }
 
-function checkOpenCodeEnvironment(projectRoot: string): SecurityFinding {
-  const config = readJsonc(path.join(projectRoot, "opencode.jsonc"));
+function checkOpenCodeEnvironment(configPath: string, displayPath: string): SecurityFinding {
+  const config = readJsonc(configPath);
   const hits: string[] = [];
   const sensitiveKey = /(SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL|AUTH|PRIVATE)/i;
   const safePlaceholder = /^(|false|true|0|1|<.*>|\$\{.*\}|process\.env\..*)$/;
@@ -202,15 +211,14 @@ function checkOpenCodeEnvironment(projectRoot: string): SecurityFinding {
   return {
     name: "OpenCode MCP environment",
     status: hits.length ? "fail" : "pass",
-    message: hits.length ? `Sensitive MCP environment value(s) are materialized in opencode.jsonc: ${hits.join(", ")}.` : "No materialized sensitive MCP environment values found.",
-    files: hits.length ? ["opencode.jsonc"] : undefined,
+    message: hits.length ? `Sensitive MCP environment value(s) are materialized in ${displayPath}: ${hits.join(", ")}.` : "No materialized sensitive MCP environment values found.",
+    files: hits.length ? [displayPath] : undefined,
   };
 }
 
-function checkYoloAgent(projectRoot: string): SecurityFinding {
-  const yoloPath = path.join(projectRoot, ".opencode", "agents", "YOLO.md");
+function checkYoloAgent(yoloPath: string, displayPath: string): SecurityFinding {
   if (!fs.existsSync(yoloPath)) {
-    return { name: "YOLO guardrails", status: "fail", message: "Missing .opencode/agents/YOLO.md." };
+    return { name: "YOLO guardrails", status: "fail", message: `Missing ${displayPath}.` };
   }
 
   const text = fs.readFileSync(yoloPath, "utf8");
@@ -220,14 +228,14 @@ function checkYoloAgent(projectRoot: string): SecurityFinding {
     name: "YOLO guardrails",
     status: missing.length ? "warn" : "pass",
     message: missing.length ? `YOLO agent is missing expected permission(s): ${missing.join(", ")}.` : "YOLO permissions are configured as allow.",
-    files: [".opencode/agents/YOLO.md"],
+    files: [displayPath],
   };
 }
 
-function checkExtensionProjection(projectRoot: string): SecurityFinding {
-  const map = readJsonc(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"));
+function checkExtensionProjection(mapPath: string): SecurityFinding {
+  const map = readJsonc(mapPath);
   if (!map) {
-    return { name: "Extension projection safety", status: "warn", message: "Missing extension map. Run ogb sync." };
+    return { name: "Extension projection safety", status: "warn", message: `Missing extension map: ${mapPath}. Run ogb sync.` };
   }
 
   const projectedRisk: string[] = [];
@@ -253,8 +261,8 @@ function checkExtensionProjection(projectRoot: string): SecurityFinding {
   };
 }
 
-function checkTrustedExtensionResources(projectRoot: string, homeDir?: string): SecurityFinding {
-  const map = readJsonc(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"));
+function checkTrustedExtensionResources(mapPath: string, projectRoot: string, homeDir?: string): SecurityFinding {
+  const map = readJsonc(mapPath);
   const trust = readTrustFile(projectRoot, homeDir);
   const failures: string[] = [];
   let trusted = 0;
@@ -297,14 +305,24 @@ function checkTrustedExtensionResources(projectRoot: string, homeDir?: string): 
 
 export function runSecurityCheck(options: SecurityOptions = {}): SecurityReport {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
-  const files = listProjectFiles(paths.projectRoot, path.resolve(paths.projectRoot) === path.resolve(paths.homeDir));
+  const scanRoot = paths.homeMode ? paths.homeDir : paths.projectRoot;
+  const files = listProjectFiles(scanRoot, paths.homeMode);
+  const globalRoot = globalOpenCodeConfigDir({ homeDir: paths.homeDir });
+  const globalConfigPath = globalOpenCodeConfigFiles({ homeDir: paths.homeDir }).find((filePath) => fs.existsSync(filePath))
+    ?? path.join(globalRoot, "opencode.json");
+  const configPath = paths.homeMode ? globalConfigPath : path.join(paths.projectRoot, "opencode.jsonc");
+  const configDisplayPath = paths.homeMode ? toPosix(path.relative(paths.homeDir, configPath)) : "opencode.jsonc";
+  const yoloPath = paths.homeMode
+    ? path.join(globalRoot, "agents", "YOLO.md")
+    : path.join(paths.projectRoot, ".opencode", "agents", "YOLO.md");
+  const yoloDisplayPath = paths.homeMode ? ".config/opencode/agents/YOLO.md" : ".opencode/agents/YOLO.md";
   const findings: SecurityFinding[] = [
-    findSecretFiles(paths.projectRoot, files),
-    findSecretPatterns(paths.projectRoot, files),
-    checkOpenCodeEnvironment(paths.projectRoot),
-    checkYoloAgent(paths.projectRoot),
-    checkExtensionProjection(paths.projectRoot),
-    checkTrustedExtensionResources(paths.projectRoot, paths.homeDir),
+    findSecretFiles(scanRoot, files),
+    findSecretPatterns(scanRoot, files),
+    checkOpenCodeEnvironment(configPath, configDisplayPath),
+    checkYoloAgent(yoloPath, yoloDisplayPath),
+    checkExtensionProjection(paths.extensionMapPath),
+    checkTrustedExtensionResources(paths.extensionMapPath, paths.projectRoot, paths.homeDir),
   ];
 
   const outcome = findings.some((finding) => finding.status === "fail")

@@ -216,15 +216,32 @@ function extractExportedString(text: string | undefined, name: string): string |
 
 function anthropicOAuthClientId(homeDir: string): string | undefined {
   if (process.env.OGB_ANTHROPIC_CLIENT_ID) return process.env.OGB_ANTHROPIC_CLIENT_ID;
-  const candidates = [
-    path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", "opencode-anthropic-auth@latest", "node_modules", "@ex-machina", "opencode-anthropic-auth", "dist", "constants.js"),
-    path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", "opencode-anthropic-auth@latest", "node_modules", "@ex-machina", "opencode-anthropic-auth", "src", "constants.ts"),
-  ];
+  const candidates = anthropicAuthPackageDirs(homeDir).flatMap((dir) => [
+    path.join(dir, "node_modules", "@ex-machina", "opencode-anthropic-auth", "dist", "constants.js"),
+    path.join(dir, "node_modules", "@ex-machina", "opencode-anthropic-auth", "src", "constants.ts"),
+  ]);
   for (const filePath of candidates) {
     const clientId = extractExportedString(readText(filePath), "CLIENT_ID");
     if (clientId) return clientId;
   }
   return undefined;
+}
+
+function anthropicAuthPackageDirs(homeDir: string): string[] {
+  const packagesDir = path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina");
+  const dirs = new Set<string>([
+    path.join(packagesDir, "opencode-anthropic-auth@latest"),
+  ]);
+  try {
+    for (const entry of fs.readdirSync(packagesDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith("opencode-anthropic-auth@")) {
+        dirs.add(path.join(packagesDir, entry.name));
+      }
+    }
+  } catch {
+    // Missing OpenCode package cache is a normal unauthenticated state.
+  }
+  return [...dirs];
 }
 
 async function refreshAnthropicOAuth(homeDir: string, auth: any): Promise<any | undefined> {

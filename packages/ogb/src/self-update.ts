@@ -131,6 +131,37 @@ function writeUpdateReport(projectRoot: string | undefined, report: UpdateCheckR
   fs.writeFileSync(filePath, `${JSON.stringify({ version: 1, ...report }, null, 2)}\n`, "utf8");
 }
 
+export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, now = new Date()): AutoUpdateReport {
+  const selectedVersion = normalizeVersion(options.version);
+  const latestTag = selectedVersion === "latest" ? undefined : selectedVersion;
+  const checkedAt = now.toISOString();
+  const check: UpdateCheckReport = {
+    status: latestTag ? "available" : "unknown",
+    currentVersion: OGB_VERSION,
+    latestVersion: normalizeTagVersion(latestTag),
+    latestTag,
+    checkedAt,
+    message: latestTag
+      ? `OGB self-update completed for ${latestTag}.`
+      : "OGB self-update completed from the latest release.",
+  };
+  const report: AutoUpdateReport = {
+    status: "updated",
+    currentVersion: OGB_VERSION,
+    latestVersion: check.latestVersion,
+    latestTag,
+    checkedAt,
+    finishedAt: checkedAt,
+    restartRequired: true,
+    message: latestTag
+      ? `OGB self-update completed for ${latestTag}. Restart OpenCode and run ogb reset --yes.`
+      : "OGB self-update completed. Restart OpenCode and run ogb reset --yes.",
+    check,
+  };
+  writeUpdateReport(options.projectRoot, report);
+  return report;
+}
+
 async function fetchLatestRelease(options: UpdateCheckOptions, repo: string): Promise<{
   tag: string;
   url?: string;
@@ -228,6 +259,11 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
   }
   if (result.status !== 0) {
     return { status: "error", command, message: `Bootstrap exited with code ${result.status ?? "unknown"}.` };
+  }
+  try {
+    writeSelfUpdateSuccessStatus(options);
+  } catch {
+    // Updating dashboard status must never turn a successful bootstrap into a failed self-update.
   }
   return {
     status: "applied",

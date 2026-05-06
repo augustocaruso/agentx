@@ -74,6 +74,25 @@ test("runDoctor checks global OpenCode instructions when project root is home", 
   assert.equal(after.warnings.some((warning) => warning.includes("Missing global expanded Gemini context")), false);
 });
 
+test("runDoctor treats the global extension map as review inventory, not permanent extension warnings", () => {
+  const homeDir = tempRoot();
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  fs.mkdirSync(path.join(extensionDir, "commands"), { recursive: true });
+  fs.mkdirSync(path.join(extensionDir, "hooks"), { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "GEMINI.md"), "Extension rules\n", "utf8");
+  fs.writeFileSync(path.join(extensionDir, "commands", "review.toml"), "description = \"Review\"\nprompt = \"Review: {{args}}\"\n", "utf8");
+  fs.writeFileSync(path.join(extensionDir, "hooks", "hooks.json"), "{}\n", "utf8");
+
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+  const report = runDoctor({ projectRoot: homeDir, homeDir, silent: true });
+
+  assert.equal(report.extensionCompatibility.mapExists, true);
+  assert.equal(report.extensionCompatibility.extensions, 1);
+  assert.equal(report.extensionCompatibility.hooks, 1);
+  assert.equal(report.warnings.some((warning) => warning.startsWith("Extension needs review:")), false);
+  assert.equal(report.warnings.some((warning) => warning.includes("Missing gemini-extension.json")), false);
+});
+
 test("runDoctor recovers stale global startup sync status when project root is home", () => {
   const homeDir = tempRoot();
   const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");

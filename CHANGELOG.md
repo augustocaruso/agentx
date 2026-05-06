@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.53 - Dashboard global sem falso FAIL
+
+- Gera `ogb-extension-map.json` tambem no modo home/global, em `~/.config/opencode-gemini-bridge/generated`, para extensoes Gemini virarem inventario de revisao em vez de warnings genericos permanentes.
+- Faz `doctor`, `validate` e `security-check` entenderem o perfil global: config em `~/.config/opencode`, contexto em `~/.config/opencode-gemini-bridge/generated` e YOLO global em `~/.config/opencode/agents/YOLO.md`.
+- Ajusta o dashboard para mostrar a primeira causa real de falha em validation/security, em vez de apenas `validation falhou` ou `security falhou`.
+- Faz `self-update` bem-sucedido sobrescrever status antigo de erro de update, evitando `OGB update: ERROR` obsoleto no dashboard.
+- Adiciona testes de sync global, doctor, validate, security-check, dashboard e self-update para cobrir o modo home/global.
+
 ## 0.0.52 - Windows quoted home path hotfix
 
 - Normaliza paths recebidos com aspas externas acidentais antes de resolver `--project`, `homeDir` e prefixos de instalacao.
