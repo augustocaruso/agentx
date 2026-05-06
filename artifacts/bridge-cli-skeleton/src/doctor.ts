@@ -7,6 +7,7 @@ import { commandExists, resolveCommand } from "./command-resolution.js";
 import { buildInventory } from "./inventory.js";
 import { AUTO_FALLBACK_PLUGIN, resolveFallbackConfigPath } from "./external-integrations.js";
 import { readOgbConfig } from "./ogb-config.js";
+import { globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { configReferencesExpandedGemini, projectConfigPath } from "./project-config.js";
 import { resolveProjectPaths } from "./paths.js";
 import { resolveRulesyncCommand } from "./rulesync.js";
@@ -161,8 +162,7 @@ function configHasPlugin(filePath: string, pattern: RegExp): boolean {
 function listConfiguredPlugins(projectRoot: string, homeDir: string): string[] {
   const files = [
     path.join(projectRoot, "opencode.jsonc"),
-    path.join(homeDir, ".config", "opencode", "opencode.json"),
-    path.join(homeDir, ".config", "opencode", "opencode.jsonc"),
+    ...globalOpenCodeConfigFiles({ homeDir }),
   ];
   const plugins: string[] = [];
   for (const filePath of files) {
@@ -344,8 +344,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
     modelRoutingSkipped: modelRoutingDecisions.reduce((sum: number, decision: any) => sum + (Array.isArray(decision?.skipped) ? decision.skipped.length : 0), 0),
     ohMyOpenAgentConfig: fs.existsSync(paths.ohMyOpenAgentConfigPath),
     ohMyOpenAgentPlugin: configHasPlugin(path.join(paths.projectRoot, "opencode.jsonc"), /oh-my-(openagent|opencode)/i)
-      || configHasPlugin(path.join(paths.homeDir, ".config", "opencode", "opencode.json"), /oh-my-(openagent|opencode)/i)
-      || configHasPlugin(path.join(paths.homeDir, ".config", "opencode", "opencode.jsonc"), /oh-my-(openagent|opencode)/i),
+      || globalOpenCodeConfigFiles({ homeDir: paths.homeDir }).some((filePath) => configHasPlugin(filePath, /oh-my-(openagent|opencode)/i)),
     hooks: Array.isArray(extensionMap?.extensions)
       ? extensionMap.extensions.reduce((sum: number, extension: any) => sum + (Array.isArray(extension.hooks) ? extension.hooks.length : 0), 0)
       : 0,

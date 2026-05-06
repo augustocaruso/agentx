@@ -4,7 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { parse as parseJsonc } from "jsonc-parser";
-import { missingPluginsFromDebugInfo, OGB_UX_PLUGINS, setupUx } from "./setup-ux.js";
+import {
+  authProbeAvailableMethods,
+  missingAuthProbeExpectations,
+  missingPluginsFromDebugInfo,
+  OGB_UX_PLUGINS,
+  setupUx,
+} from "./setup-ux.js";
 
 function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-ux-"));
@@ -81,6 +87,90 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fs.existsSync(path.join(configDir, "commands", "upgrade-ogb.md")), true);
   assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /ogb self-update --project/);
   assert.equal(fs.existsSync(path.join(configDir, "dcp.jsonc")), true);
+});
+
+test("setupUx writes Windows global config under user .config, not AppData opencode", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const appData = path.join(homeDir, "AppData", "Roaming");
+  const projectRoot = path.join(root, "project");
+  fs.mkdirSync(projectRoot, { recursive: true });
+
+  const report = setupUx({
+    homeDir,
+    projectRoot,
+    platform: "win32",
+    env: { APPDATA: appData },
+    installOpenCode: false,
+    installPlugins: false,
+  });
+
+  const configPath = path.join(homeDir, ".config", "opencode", "opencode.json");
+  assert.equal(report.configPath, configPath);
+  assert.equal(fs.existsSync(configPath), true);
+  assert.equal(fs.existsSync(path.join(appData, "opencode", "opencode.json")), false);
+});
+
+test("setupUx migrates and cleans legacy Windows AppData OpenCode config", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const appData = path.join(homeDir, "AppData", "Roaming");
+  const legacyDir = path.join(appData, "opencode");
+  const projectRoot = path.join(root, "project");
+  fs.mkdirSync(legacyDir, { recursive: true });
+  fs.mkdirSync(projectRoot, { recursive: true });
+  fs.writeFileSync(path.join(legacyDir, "opencode.json"), JSON.stringify({
+    plugin: [
+      "opencode-gemini-auth@1.4.12",
+      "opencode-websearch-cited@1.2.0",
+      "opencode-auto-fallback@0.4.2",
+    ],
+    provider: {
+      openai: {
+        options: {
+          websearch_cited: { model: "gpt-5.5" },
+          organization: "org-user",
+        },
+      },
+    },
+    share: "manual",
+  }, null, 2), "utf8");
+
+  const report = setupUx({
+    homeDir,
+    projectRoot,
+    platform: "win32",
+    env: { APPDATA: appData },
+    installOpenCode: false,
+    installPlugins: false,
+  });
+
+  const configPath = path.join(homeDir, ".config", "opencode", "opencode.json");
+  const globalConfig = readJson(configPath);
+  const legacyConfig = readJson(path.join(legacyDir, "opencode.json"));
+
+  assert.deepEqual(globalConfig.plugin, OGB_UX_PLUGINS);
+  assert.equal(globalConfig.provider.openai.options.organization, "org-user");
+  assert.equal(globalConfig.provider.openai.options.websearch_cited, undefined);
+  assert.equal(legacyConfig.plugin.includes("opencode-websearch-cited@1.2.0"), false);
+  assert.equal(legacyConfig.plugin.includes("opencode-auto-fallback@0.4.2"), false);
+  assert.equal(legacyConfig.provider.openai.options.websearch_cited, undefined);
+  assert.equal(report.warnings.some((warning) => warning.includes("foi migrado")), true);
+});
+
+test("auth probe parser recognizes OAuth methods and fails API-key-only output", () => {
+  const openaiOutput = 'Unknown method "__ogb_probe__" for openai. Available: ChatGPT Pro/Plus (browser), ChatGPT Pro/Plus (headless), Manually enter API Key';
+  const googleOutput = 'Unknown method "__ogb_probe__" for google. Available: OAuth with Google (Gemini CLI), Manually enter API Key';
+  const apiKeyOnly = 'Unknown method "__ogb_probe__" for openai. Available: Manually enter API Key';
+
+  assert.deepEqual(authProbeAvailableMethods(openaiOutput), [
+    "ChatGPT Pro/Plus (browser)",
+    "ChatGPT Pro/Plus (headless)",
+    "Manually enter API Key",
+  ]);
+  assert.deepEqual(missingAuthProbeExpectations("openai", openaiOutput), []);
+  assert.deepEqual(missingAuthProbeExpectations("google", googleOutput), []);
+  assert.deepEqual(missingAuthProbeExpectations("openai", apiKeyOnly), ["ChatGPT Pro/Plus"]);
 });
 
 test("setupUx dry-run previews without writing files", () => {

@@ -4,6 +4,7 @@ import path from "node:path";
 import { OGB_VERSION } from "./types.js";
 import type { GeminiExtensionProjectionMap } from "./extension-projection.js";
 import { fallbackModelId, type ModelFallbackEntry, type OgbConfig } from "./ogb-config.js";
+import { globalOpenCodeConfigDir } from "./opencode-paths.js";
 
 export const OPENCODE_QUOTA_PLUGIN = "@slkiser/opencode-quota";
 export const AUTO_FALLBACK_PLUGIN = "opencode-auto-fallback";
@@ -48,20 +49,10 @@ export function usesExternalQuotaUi(config: OgbConfig): boolean {
   return enabled(quota) && quota?.suppressOgbLimits !== false;
 }
 
-function configRoot(homeDir: string): string {
-  if (process.platform === "win32") {
-    return path.join(process.env.APPDATA || path.join(homeDir, "AppData", "Roaming"), "opencode");
-  }
-  if (process.env.XDG_CONFIG_HOME && path.resolve(homeDir) === os.homedir()) {
-    return path.join(process.env.XDG_CONFIG_HOME, "opencode");
-  }
-  return path.join(homeDir, ".config", "opencode");
-}
-
 export function resolveFallbackConfigPath(config: OgbConfig, homeDir: string): string {
   const raw = config.externalPlugins?.autoFallback?.configPath;
   if (raw) return path.resolve(raw.replace(/^~(?=$|\/|\\)/, homeDir));
-  return path.join(configRoot(homeDir), "plugins", "fallback.json");
+  return path.join(globalOpenCodeConfigDir({ homeDir }), "plugins", "fallback.json");
 }
 
 function writeJsonFile(options: {

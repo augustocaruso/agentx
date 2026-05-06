@@ -236,6 +236,8 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
   const required = [
     "Require-Command \"node\"",
     "Require-Command \"npm\"",
+    "Test-WritableDir",
+    "Resolve-AppDataNpmPrefix",
     "Resolve-DefaultPrefix",
     "npm prefix -g",
     "npm --prefix $CliDir install",
@@ -251,6 +253,8 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "security-check",
     "dashboard",
     "SetEnvironmentVariable(\"Path\"",
+    "Verified ogb",
+    "ogb command:",
   ];
   const missing = required.filter((needle) => !text.includes(needle));
   checks.push({

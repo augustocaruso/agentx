@@ -6,6 +6,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
 import { normalizeRuntimeOptions, type OgbConfig } from "./ogb-config.js";
+import { globalOpenCodeConfigDir, legacyWindowsAppDataOpenCodeConfigDir } from "./opencode-paths.js";
 import { OGB_VERSION } from "./types.js";
 
 export const OGB_UX_SAFE_PLUGINS = [
@@ -200,6 +201,8 @@ export interface SetupUxOptions {
   homeDir?: string;
   configDir?: string;
   projectRoot?: string;
+  platform?: NodeJS.Platform;
+  env?: NodeJS.ProcessEnv;
   dryRun?: boolean;
   force?: boolean;
   installPlugins?: boolean;
@@ -233,16 +236,6 @@ export interface SetupUxReport {
   warnings: string[];
 }
 
-function configRoot(homeDir: string): string {
-  if (process.platform === "win32") {
-    return path.join(process.env.APPDATA || path.join(homeDir, "AppData", "Roaming"), "opencode");
-  }
-  if (process.env.XDG_CONFIG_HOME && path.resolve(homeDir) === os.homedir()) {
-    return path.join(process.env.XDG_CONFIG_HOME, "opencode");
-  }
-  return path.join(homeDir, ".config", "opencode");
-}
-
 function readJsonc(filePath: string): Record<string, unknown> {
   if (!fs.existsSync(filePath)) return {};
   try {
@@ -259,6 +252,21 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
+}
+
+function pluginPackageName(plugin: string): string {
+  const trimmed = plugin.trim();
+  if (trimmed.startsWith("@")) {
+    const match = trimmed.match(/^(@[^/]+\/[^@]+)/);
+    return match?.[1] ?? trimmed;
+  }
+  return trimmed.split("@")[0] ?? trimmed;
+}
+
+const DISABLED_PLUGIN_PACKAGES = new Set(OGB_UX_DISABLED_PLUGINS.map(pluginPackageName));
+
+function isDisabledUxPlugin(plugin: string): boolean {
+  return DISABLED_PLUGIN_PACKAGES.has(pluginPackageName(plugin));
 }
 
 function cleanManagedProviderOptions(value: unknown): Record<string, unknown> | undefined {
@@ -286,6 +294,26 @@ function cleanManagedProviderOptions(value: unknown): Record<string, unknown> | 
   }
 
   return Object.keys(cleanedProvider).length > 0 ? cleanedProvider : undefined;
+}
+
+function cleanDisabledUxConfig(current: Record<string, unknown>): { config: Record<string, unknown>; changed: boolean } {
+  const cleaned: Record<string, unknown> = { ...current };
+  let changed = false;
+
+  if (Array.isArray(cleaned.plugin)) {
+    const plugins = cleaned.plugin.filter((plugin) => !(typeof plugin === "string" && isDisabledUxPlugin(plugin)));
+    if (plugins.length !== cleaned.plugin.length) changed = true;
+    cleaned.plugin = plugins;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(cleaned, "provider")) {
+    const cleanedProvider = cleanManagedProviderOptions(cleaned.provider);
+    if (JSON.stringify(cleanedProvider ?? {}) !== JSON.stringify(asRecord(cleaned.provider))) changed = true;
+    if (cleanedProvider) cleaned.provider = cleanedProvider;
+    else delete cleaned.provider;
+  }
+
+  return { config: cleaned, changed };
 }
 
 function mergeGlobalConfig(current: Record<string, unknown>, defaultAgent = "agent", plugins = OGB_UX_SAFE_PLUGINS): Record<string, unknown> {
@@ -388,11 +416,16 @@ function mergeGlobalConfig(current: Record<string, unknown>, defaultAgent = "age
 
 function hasStaleWebsearchCitedConfig(current: Record<string, unknown>): boolean {
   const plugins = Array.isArray(current.plugin) ? current.plugin : [];
-  if (plugins.some((plugin) => plugin === "opencode-websearch-cited@1.2.0" || plugin === "opencode-websearch-cited")) return true;
+  if (plugins.some((plugin) => typeof plugin === "string" && pluginPackageName(plugin) === "opencode-websearch-cited")) return true;
   const provider = asRecord(current.provider);
   const openai = asRecord(provider.openai);
   const options = asRecord(openai.options);
   return Object.prototype.hasOwnProperty.call(options, "websearch_cited");
+}
+
+function hasDisabledUxPluginConfig(current: Record<string, unknown>): boolean {
+  const plugins = Array.isArray(current.plugin) ? current.plugin : [];
+  return plugins.some((plugin) => typeof plugin === "string" && isDisabledUxPlugin(plugin));
 }
 
 function yoloAgentContent(): string {
@@ -469,17 +502,28 @@ function writeText(options: {
   return { path: options.filePath, status: exists ? "updated" : "created" };
 }
 
-function runCommand(command: string[], dryRun?: boolean): SetupUxCommand {
+function runCommand(command: string[], dryRun?: boolean, cwd?: string): SetupUxCommand {
   if (dryRun) return { command, status: "preview", message: `Would run ${command.join(" ")}` };
-  const result = spawnSync(command[0], command.slice(1), { encoding: "utf8", stdio: "pipe", shell: process.platform === "win32" });
+  const result = spawnSync(command[0], command.slice(1), {
+    cwd,
+    encoding: "utf8",
+    stdio: "pipe",
+    shell: process.platform === "win32",
+    env: {
+      ...process.env,
+      NO_COLOR: process.env.NO_COLOR ?? "1",
+      OGB_STARTUP_SYNC: "0",
+    },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
   if (result.error || result.status !== 0) {
     return {
       command,
       status: "fail",
-      message: result.error?.message ?? (result.stderr || result.stdout || "command failed").trim(),
+      message: result.error?.message ?? (output || "command failed"),
     };
   }
-  return { command, status: "ok", message: (result.stdout || "ok").trim() };
+  return { command, status: "ok", message: output || "ok" };
 }
 
 export function missingPluginsFromDebugInfo(output: string, expected: string[]): string[] {
@@ -493,6 +537,70 @@ export function missingPluginsFromDebugInfo(output: string, expected: string[]):
   return expected.filter((plugin) => !loaded.has(plugin));
 }
 
+export function authProbeAvailableMethods(output: string): string[] {
+  const match = output.match(/Available:\s*([^\r\n]+)/i);
+  if (!match) return [];
+  return match[1]
+    .split(",")
+    .map((method) => method.replace(/\x1b\[[0-9;]*m/g, "").trim())
+    .filter(Boolean);
+}
+
+export function missingAuthProbeExpectations(provider: "openai" | "google", output: string): string[] {
+  const methods = authProbeAvailableMethods(output);
+  const joined = methods.join(" ");
+  if (provider === "openai") {
+    return /ChatGPT Pro\/Plus/i.test(joined) ? [] : ["ChatGPT Pro/Plus"];
+  }
+  return /OAuth with Google/i.test(joined) && /Gemini CLI/i.test(joined)
+    ? []
+    : ["OAuth with Google (Gemini CLI)"];
+}
+
+function runAuthProbe(opencodeCommand: string, provider: "openai" | "google", dryRun?: boolean, cwd?: string): SetupUxCommand {
+  const command = [
+    opencodeCommand,
+    "--print-logs",
+    "--log-level",
+    "DEBUG",
+    "auth",
+    "login",
+    "--provider",
+    provider,
+    "--method",
+    "__ogb_probe__",
+  ];
+  if (dryRun) return { command, status: "preview", message: `Would probe ${provider} auth methods` };
+
+  const result = spawnSync(command[0], command.slice(1), {
+    cwd,
+    encoding: "utf8",
+    stdio: "pipe",
+    shell: process.platform === "win32",
+    env: {
+      ...process.env,
+      NO_COLOR: process.env.NO_COLOR ?? "1",
+      OGB_STARTUP_SYNC: "0",
+    },
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
+  const missing = missingAuthProbeExpectations(provider, output);
+  const available = authProbeAvailableMethods(output);
+  if (result.error) return { command, status: "fail", message: result.error.message };
+  if (missing.length > 0) {
+    return {
+      command,
+      status: "fail",
+      message: `Missing expected ${provider} auth method(s): ${missing.join(", ")}. Available: ${available.join(", ") || "none detected"}`,
+    };
+  }
+  return {
+    command,
+    status: "ok",
+    message: `Verified ${provider} auth methods: ${available.join(", ")}`,
+  };
+}
+
 function installOpenCodeCommand(): string[] {
   return process.platform === "win32"
     ? ["npm", "install", "-g", "opencode-ai@latest"]
@@ -502,8 +610,15 @@ function installOpenCodeCommand(): string[] {
 export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const homeDir = options.homeDir || os.homedir();
   const projectRoot = options.projectRoot ? path.resolve(options.projectRoot) : undefined;
-  const root = options.configDir ? path.resolve(options.configDir) : configRoot(homeDir);
+  const commandCwd = projectRoot ?? process.cwd();
+  const root = options.configDir
+    ? path.resolve(options.configDir)
+    : globalOpenCodeConfigDir({ homeDir, platform: options.platform, env: options.env });
   const configPath = path.join(root, "opencode.json");
+  const legacyRoot = options.configDir
+    ? undefined
+    : legacyWindowsAppDataOpenCodeConfigDir({ homeDir, platform: options.platform, env: options.env });
+  const legacyConfigPath = legacyRoot ? path.join(legacyRoot, "opencode.json") : undefined;
   const commandsDir = path.join(root, "commands");
   const agentsDir = path.join(root, "agents");
   const dcpConfigPath = path.join(root, "dcp.jsonc");
@@ -514,8 +629,32 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const warnings: string[] = [];
   const desiredPlugins = OGB_UX_SAFE_PLUGINS;
   const currentConfig = readJsonc(configPath);
-  if (hasStaleWebsearchCitedConfig(currentConfig)) {
+  const legacyConfig = legacyConfigPath && path.resolve(legacyConfigPath) !== path.resolve(configPath)
+    ? readJsonc(legacyConfigPath)
+    : {};
+  const hasCurrentConfig = Object.keys(currentConfig).length > 0;
+  const hasLegacyConfig = Object.keys(legacyConfig).length > 0;
+  const baseConfig = hasCurrentConfig ? currentConfig : legacyConfig;
+
+  if (hasStaleWebsearchCitedConfig(currentConfig) || hasStaleWebsearchCitedConfig(legacyConfig)) {
     warnings.push("opencode-websearch-cited foi desativado porque sobrescreve o OAuth de OpenAI/Google no OpenCode atual.");
+  }
+  if (hasDisabledUxPluginConfig(legacyConfig)) {
+    warnings.push(`${legacyConfigPath} contem plugin(s) OGB desativados; a config global atual fica em ${configPath}.`);
+  }
+  if (!hasCurrentConfig && hasLegacyConfig) {
+    warnings.push(`${legacyConfigPath} foi migrado para ${configPath}, que e o caminho lido pelo OpenCode atual.`);
+  }
+
+  if (legacyConfigPath && hasLegacyConfig) {
+    const cleanedLegacy = cleanDisabledUxConfig(legacyConfig);
+    if (cleanedLegacy.changed) {
+      writes.push(writeText({
+        filePath: legacyConfigPath,
+        text: `${JSON.stringify(cleanedLegacy.config, null, 2)}\n`,
+        dryRun: options.dryRun,
+      }));
+    }
   }
 
   const existingOpenCode = resolveCommand("opencode", { homeDir });
@@ -527,7 +666,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     commands.push(runCommand(installOpenCodeCommand(), options.dryRun));
   }
 
-  const merged = mergeGlobalConfig(currentConfig, OGB_UX_PROJECT_CONFIG.openCode?.defaultAgent, desiredPlugins);
+  const merged = mergeGlobalConfig(baseConfig, OGB_UX_PROJECT_CONFIG.openCode?.defaultAgent, desiredPlugins);
   writes.push(writeText({
     filePath: configPath,
     text: `${JSON.stringify(merged, null, 2)}\n`,
@@ -580,11 +719,11 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
       if (!opencodeCommand) {
         commands.push({ command: ["opencode", "plugin", plugin, "--global", "--force"], status: "skipped", message: "OpenCode is not available" });
       } else {
-        commands.push(runCommand([opencodeCommand, "plugin", plugin, "--global", "--force"], options.dryRun));
+        commands.push(runCommand([opencodeCommand, "plugin", plugin, "--global", "--force"], options.dryRun, commandCwd));
       }
     }
     if (opencodeCommand) {
-      const verification = runCommand([opencodeCommand, "debug", "info"], options.dryRun);
+      const verification = runCommand([opencodeCommand, "debug", "info"], options.dryRun, commandCwd);
       if (verification.status === "ok") {
         const missing = missingPluginsFromDebugInfo(verification.message, desiredPlugins);
         verification.message = missing.length > 0
@@ -593,6 +732,8 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
         if (missing.length > 0) verification.status = "fail";
       }
       commands.push(verification);
+      commands.push(runAuthProbe(opencodeCommand, "openai", options.dryRun, commandCwd));
+      commands.push(runAuthProbe(opencodeCommand, "google", options.dryRun, commandCwd));
     }
   }
 

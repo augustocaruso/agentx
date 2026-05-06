@@ -16,20 +16,45 @@ function Require-Command($Name) {
   }
 }
 
+function Test-WritableDir($Dir) {
+  if (-not $Dir) {
+    return $false
+  }
+  try {
+    New-Item -ItemType Directory -Force $Dir | Out-Null
+    $Probe = Join-Path $Dir (".ogb-write-test-" + [System.Guid]::NewGuid().ToString("N"))
+    "ok" | Set-Content -Path $Probe -Encoding ASCII
+    Remove-Item -Force $Probe -ErrorAction SilentlyContinue
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Resolve-AppDataNpmPrefix {
+  if ($env:APPDATA) {
+    return Join-Path $env:APPDATA "npm"
+  }
+  return Join-Path $HOME "AppData\Roaming\npm"
+}
+
 function Resolve-DefaultPrefix {
+  $AppDataPrefix = Resolve-AppDataNpmPrefix
+  if (Test-WritableDir $AppDataPrefix) {
+    return $AppDataPrefix
+  }
+
   $NpmPrefix = ""
   try {
     $NpmPrefix = (& npm prefix -g 2>$null)
   } catch {
     $NpmPrefix = ""
   }
-  if ($NpmPrefix) {
+  if ($NpmPrefix -and (Test-WritableDir $NpmPrefix.Trim())) {
     return $NpmPrefix.Trim()
   }
-  if ($env:APPDATA) {
-    return Join-Path $env:APPDATA "npm"
-  }
-  return Join-Path $HOME "AppData\Roaming\npm"
+
+  throw "Could not find a writable install prefix. Tried $AppDataPrefix and npm prefix -g."
 }
 
 function Normalize-PathForCompare($PathValue) {
@@ -116,6 +141,8 @@ Require-Command "npm"
 
 if ((-not $Prefix) -or $Prefix.Trim().StartsWith("-")) {
   $Prefix = Resolve-DefaultPrefix
+} elseif (-not (Test-WritableDir $Prefix)) {
+  throw "Install prefix is not writable: $Prefix"
 }
 
 Repair-BrokenForceInstall
@@ -146,7 +173,8 @@ if (-not (Test-Path $OgbBin)) {
   throw "Expected ogb.cmd under $Prefix, but it was not found."
 }
 
-& $OgbBin --version | Out-Null
+$InstalledVersion = (& $OgbBin --version)
+Write-Host "Verified ogb $($InstalledVersion.Trim()) at $OgbBin"
 
 $OgbBinDir = Split-Path -Parent $OgbBin
 Add-UserPath $OgbBinDir
@@ -185,4 +213,5 @@ if (-not $NoSetup) {
 }
 
 Write-Host "Done."
-Write-Host "Try: $OgbBin --project `"$Project`" doctor"
+Write-Host "ogb command: $OgbBin"
+Write-Host "Try: & `"$OgbBin`" --project `"$Project`" doctor"
