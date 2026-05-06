@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.57 - Windows cmd shims com argumentos verbatim
+
+- Envolve a linha inteira de `.cmd/.bat` no formato `""shim.cmd" args"` esperado pelo `cmd.exe /d /s /c`.
+- Usa `windowsVerbatimArguments` quando o OGB precisa passar por `cmd.exe`, evitando que o Node re-escape aspas e o Windows tente executar `\"C:\...\opencode.cmd\"` como texto literal.
+- Atualiza o plugin de startup gerado para usar o mesmo caminho verbatim.
+- Amplia testes para garantir que shims `.cmd` usam outer quotes, `windowsVerbatimArguments` e continuam sem `call`.
+
 ## 0.0.56 - Windows validate sem falso FAIL pos-update
 
 - Troca o runner Windows para executar shims `.cmd/.bat` via `cmd.exe /d /s /c "<shim.cmd>" ...`, sem `call`, mantendo `.exe` direto.

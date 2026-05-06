@@ -40,13 +40,19 @@ export function normalizeCommandInput(value: string): string {
   return normalized;
 }
 
+interface PlatformCommand {
+  command: string;
+  args: string[];
+  windowsVerbatimArguments?: boolean;
+}
+
 function cmdToken(value: string, command = false): string {
   if (command && /^[A-Za-z0-9_.-]+$/.test(value)) return value;
   if (!command && /^[A-Za-z0-9_./:@+=-]+$/.test(value)) return value;
   return cmdQuote(value);
 }
 
-export function commandForPlatform(command: string, args: readonly string[] = [], platform: NodeJS.Platform = process.platform): { command: string; args: string[] } {
+export function commandForPlatform(command: string, args: readonly string[] = [], platform: NodeJS.Platform = process.platform): PlatformCommand {
   const normalizedCommand = normalizeCommandInput(command);
   if (platform !== "win32") return { command: normalizedCommand, args: [...args] };
 
@@ -54,11 +60,19 @@ export function commandForPlatform(command: string, args: readonly string[] = []
   if (ext === ".exe") return { command: normalizedCommand, args: [...args] };
 
   const comspec = process.env.ComSpec || "cmd.exe";
-  const commandLine = [cmdToken(normalizedCommand, true), ...args.map((arg) => cmdToken(arg))].join(" ");
+  const innerCommandLine = [cmdToken(normalizedCommand, true), ...args.map((arg) => cmdToken(arg))].join(" ");
+  const commandLine = `"${innerCommandLine}"`;
   return {
     command: comspec,
     args: ["/d", "/s", "/c", commandLine],
+    windowsVerbatimArguments: true,
   };
+}
+
+function spawnOptions<T extends SpawnOptions | SpawnSyncOptions>(options: T, normalized: PlatformCommand): T {
+  const withoutShellOptions = withoutShell(options) as T & { windowsVerbatimArguments?: boolean };
+  if (normalized.windowsVerbatimArguments) withoutShellOptions.windowsVerbatimArguments = true;
+  return withoutShellOptions as T;
 }
 
 function withoutShell<T extends SpawnOptions | SpawnSyncOptions>(options: T): T {
@@ -69,12 +83,12 @@ function withoutShell<T extends SpawnOptions | SpawnSyncOptions>(options: T): T 
 
 export function spawnCommand(command: string, args: readonly string[] = [], options: SpawnOptions = {}): ChildProcess {
   const normalized = commandForPlatform(command, args);
-  return spawn(normalized.command, normalized.args, withoutShell(options));
+  return spawn(normalized.command, normalized.args, spawnOptions(options, normalized));
 }
 
 export function spawnCommandSync(command: string, args: readonly string[], options: SpawnSyncOptionsWithStringEncoding): SpawnSyncReturns<string>;
 export function spawnCommandSync(command: string, args?: readonly string[], options?: SpawnSyncOptions): SpawnSyncReturns<Buffer>;
 export function spawnCommandSync(command: string, args: readonly string[] = [], options: SpawnSyncOptions = {}): SpawnSyncReturns<string | Buffer> {
   const normalized = commandForPlatform(command, args);
-  return spawnSync(normalized.command, normalized.args, withoutShell(options));
+  return spawnSync(normalized.command, normalized.args, spawnOptions(options, normalized));
 }

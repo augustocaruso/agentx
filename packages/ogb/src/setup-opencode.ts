@@ -383,10 +383,12 @@ function commandForPlatform(command, args) {
   if (ext === ".exe") return { command: normalizedCommand, args };
 
   const comspec = process.env.ComSpec || process.env.COMSPEC || "cmd.exe";
-  const commandLine = [cmdToken(normalizedCommand, true), ...args.map((arg) => cmdToken(arg))].join(" ");
+  const innerCommandLine = [cmdToken(normalizedCommand, true), ...args.map((arg) => cmdToken(arg))].join(" ");
+  const commandLine = '"' + innerCommandLine + '"';
   return {
     command: comspec,
     args: ["/d", "/s", "/c", commandLine],
+    windowsVerbatimArguments: true,
   };
 }
 
@@ -569,6 +571,7 @@ function runProcess({ cwd, plan, input }) {
       cwd,
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
+      windowsVerbatimArguments: normalized.windowsVerbatimArguments === true,
     });
     try {
       if (input !== undefined) child.stdin.end(input);

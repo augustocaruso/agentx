@@ -10,6 +10,8 @@ test("startup plugin wraps Windows cmd shims before spawning", () => {
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /process\.platform !== "win32"/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /cmd\.exe/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /\["\/d", "\/s", "\/c", commandLine\]/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /windowsVerbatimArguments: true/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /windowsVerbatimArguments: normalized\.windowsVerbatimArguments === true/);
   assert.doesNotMatch(STARTUP_SYNC_PLUGIN_SOURCE, /\["call", cmdToken\(normalizedCommand, true\)/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /spawn\(normalized\.command, normalized\.args/);
 });

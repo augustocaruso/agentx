@@ -74,7 +74,8 @@ test("commandForPlatform runs Windows cmd shims through cmd without call", () =>
 
   assert.match(command.command, /cmd\.exe$/i);
   assert.deepEqual(command.args.slice(0, 3), ["/d", "/s", "/c"]);
-  assert.equal(command.args[3], '"C:\\Users\\leona\\AppData\\Roaming\\npm\\opencode.cmd" models');
+  assert.equal(command.args[3], '""C:\\Users\\leona\\AppData\\Roaming\\npm\\opencode.cmd" models"');
+  assert.equal(command.windowsVerbatimArguments, true);
   assert.doesNotMatch(command.args[3], /^call /);
 });
 
@@ -82,7 +83,8 @@ test("commandForPlatform quotes Windows cmd shims with spaces without call", () 
   const command = commandForPlatform('"C:\\Program Files\\nodejs\\npm.cmd"', ["--version"], "win32");
 
   assert.match(command.command, /cmd\.exe$/i);
-  assert.equal(command.args[3], '"C:\\Program Files\\nodejs\\npm.cmd" --version');
+  assert.equal(command.args[3], '""C:\\Program Files\\nodejs\\npm.cmd" --version"');
+  assert.equal(command.windowsVerbatimArguments, true);
   assert.doesNotMatch(command.args[3], /"""C:/);
 });
 
@@ -91,7 +93,8 @@ test("commandForPlatform strips escaped accidental quotes before wrapping Window
 
   assert.match(command.command, /cmd\.exe$/i);
   assert.deepEqual(command.args.slice(0, 3), ["/d", "/s", "/c"]);
-  assert.equal(command.args[3], '"C:\\Program Files\\nodejs\\npm.cmd" --version');
+  assert.equal(command.args[3], '""C:\\Program Files\\nodejs\\npm.cmd" --version"');
+  assert.equal(command.windowsVerbatimArguments, true);
   assert.doesNotMatch(command.args[3], /\\"/);
 });
 
@@ -100,6 +103,7 @@ test("commandForPlatform runs Windows exe commands directly", () => {
 
   assert.equal(command.command, "C:\\Program Files\\nodejs\\node.exe");
   assert.deepEqual(command.args, ["--version"]);
+  assert.equal(command.windowsVerbatimArguments, undefined);
 });
 
 test("commandForPlatform strips accidental quotes from Windows exe commands", () => {
