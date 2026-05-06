@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { parse as parseJsonc } from "jsonc-parser";
-import { OGB_UX_PLUGINS, setupUx } from "./setup-ux.js";
+import { missingPluginsFromDebugInfo, OGB_UX_PLUGINS, setupUx } from "./setup-ux.js";
 
 function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-ux-"));
@@ -13,6 +13,18 @@ function tempRoot(): string {
 function readJson(filePath: string): any {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
+
+test("missingPluginsFromDebugInfo detects expected plugins absent from resolved OpenCode info", () => {
+  assert.deepEqual(missingPluginsFromDebugInfo(`opencode version: 1.14.39
+plugins:
+- opencode-gemini-auth@1.4.12
+- @ex-machina/opencode-anthropic-auth@1.8.0
+`, [
+    "opencode-gemini-auth@1.4.12",
+    "@ex-machina/opencode-anthropic-auth@1.8.0",
+    "opencode-pty@0.3.4",
+  ]), ["opencode-pty@0.3.4"]);
+});
 
 test("setupUx writes global OpenCode UX profile and project fallback profile", () => {
   const root = tempRoot();

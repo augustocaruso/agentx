@@ -482,6 +482,17 @@ function runCommand(command: string[], dryRun?: boolean): SetupUxCommand {
   return { command, status: "ok", message: (result.stdout || "ok").trim() };
 }
 
+export function missingPluginsFromDebugInfo(output: string, expected: string[]): string[] {
+  const loaded = new Set(
+    output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("- "))
+      .map((line) => line.slice(2).trim()),
+  );
+  return expected.filter((plugin) => !loaded.has(plugin));
+}
+
 function installOpenCodeCommand(): string[] {
   return process.platform === "win32"
     ? ["npm", "install", "-g", "opencode-ai@latest"]
@@ -564,13 +575,24 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   }
 
   if (options.installPlugins !== false) {
+    const opencodeCommand = options.dryRun === true ? "opencode" : resolveCommand("opencode", { homeDir });
     for (const plugin of desiredPlugins) {
-      const opencodeCommand = options.dryRun === true ? "opencode" : resolveCommand("opencode", { homeDir });
       if (!opencodeCommand) {
         commands.push({ command: ["opencode", "plugin", plugin, "--global", "--force"], status: "skipped", message: "OpenCode is not available" });
       } else {
         commands.push(runCommand([opencodeCommand, "plugin", plugin, "--global", "--force"], options.dryRun));
       }
+    }
+    if (opencodeCommand) {
+      const verification = runCommand([opencodeCommand, "debug", "info"], options.dryRun);
+      if (verification.status === "ok") {
+        const missing = missingPluginsFromDebugInfo(verification.message, desiredPlugins);
+        verification.message = missing.length > 0
+          ? `Missing plugin(s) in opencode debug info: ${missing.join(", ")}`
+          : "Verified expected plugins in opencode debug info";
+        if (missing.length > 0) verification.status = "fail";
+      }
+      commands.push(verification);
     }
   }
 
