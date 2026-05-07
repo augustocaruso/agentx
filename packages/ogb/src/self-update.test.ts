@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import { buildPostUpdateRitualCommand, buildSelfUpdateCommand, checkOgbUpdate, runAutoUpdate, runSelfUpdate, writeSelfUpdateSuccessStatus } from "./self-update.js";
 import { resolveProjectPaths } from "./paths.js";
+import type { RitualProgressEvent } from "./ritual-progress.js";
+import { OGB_VERSION } from "./types.js";
 
 test("buildSelfUpdateCommand uses GitHub bootstrap on POSIX platforms", () => {
   const command = buildSelfUpdateCommand({
@@ -47,9 +49,23 @@ test("buildSelfUpdateCommand uses PowerShell bootstrap on Windows", () => {
   assert.match(command.join(" "), /PSNativeCommandUseErrorActionPreference = \$false/);
   assert.match(command.join(" "), /-Repo 'acme\/bridge'/);
   assert.match(command.join(" "), /-Version 'v9\.9\.9'/);
+  assert.match(command.join(" "), /-Project 'C:\\Users\\Friend\\Project'/);
   assert.match(command.join(" "), /-NoSetup/);
   assert.match(command.join(" "), /-NoUx/);
   assert.match(command.join(" "), /-NoOpenCode/);
+});
+
+test("buildSelfUpdateCommand preserves Windows drive paths while running on POSIX", () => {
+  const command = buildSelfUpdateCommand({
+    projectRoot: `'"C:\\Users\\leona"'`,
+    prefix: `'\\"C:\\Users\\leona\\AppData\\Roaming\\npm\\"'`,
+  }, "win32");
+  const script = command.join(" ");
+
+  assert.match(script, /-Project 'C:\\Users\\leona'/);
+  assert.match(script, /-Prefix 'C:\\Users\\leona\\AppData\\Roaming\\npm'/);
+  assert.doesNotMatch(script, /\/Users\/augustocaruso\/Documents\/opencode-gemini-bridge\/C:/);
+  assert.doesNotMatch(script, /\\"C:\\Users/);
 });
 
 test("buildSelfUpdateCommand strips accidental quotes from project and prefix paths", () => {
@@ -71,8 +87,51 @@ test("runSelfUpdate dry-run does not execute the bootstrap", () => {
   const report = runSelfUpdate({ dryRun: true, projectRoot: "/tmp/ogb" });
 
   assert.equal(report.status, "preview");
+  assert.equal(report.plan.intent, "update");
   assert.equal(report.command[0], process.platform === "win32" ? "powershell.exe" : "bash");
   assert.match(report.message, /Would download/);
+});
+
+test("runSelfUpdate dry-run emits update ritual progress", () => {
+  const events: RitualProgressEvent[] = [];
+  const report = runSelfUpdate({
+    dryRun: true,
+    projectRoot: "/tmp/ogb",
+    onProgress: (event) => events.push(event),
+  });
+
+  assert.equal(report.status, "preview");
+  assert.deepEqual(events.map((event) => `${event.stepId}:${event.status}`), [
+    "resolve:running",
+    "resolve:pass",
+    "download:skipped",
+    "install:skipped",
+    "post-check:skipped",
+  ]);
+});
+
+test("runSelfUpdate reports bootstrap stderr tail and specific progress failure", () => {
+  const events: RitualProgressEvent[] = [];
+  const report = runSelfUpdate({
+    projectRoot: "/tmp/ogb",
+    stdio: "pipe",
+    onProgress: (event) => events.push(event),
+    runCommand: (spec) => ({
+      ok: false,
+      command: spec.command,
+      args: spec.args ?? [],
+      status: 1,
+      signal: null,
+      stdout: "Downloading OGB...",
+      stderr: "npm is not recognized as a command",
+    }),
+  });
+
+  assert.equal(report.status, "error");
+  assert.equal(report.stderrTail, "npm is not recognized as a command");
+  assert.match(report.message, /Bootstrap exited with code 1/);
+  const installFailure = events.find((event) => event.stepId === "install" && event.status === "fail");
+  assert.match(installFailure?.message ?? "", /npm is not recognized/);
 });
 
 test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
@@ -96,18 +155,20 @@ test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   assert.equal(saved.status, "updated");
   assert.equal(saved.latestTag, "v0.0.53");
   assert.equal(saved.restartRequired, true);
-  assert.match(saved.message, /full bridge pass/);
+  assert.equal(saved.ogbVersion, OGB_VERSION);
+  assert.equal(typeof saved.generatedAt, "string");
+  assert.match(saved.message, /full bridge check/);
   assert.doesNotMatch(saved.message, /reset --yes/);
   assert.doesNotMatch(saved.message, /old failure/);
 });
 
-test("buildPostUpdateRitualCommand runs a full forced pass once after update", () => {
+test("buildPostUpdateRitualCommand runs a full forced check once after update", () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-post-update-"));
   const command = buildPostUpdateRitualCommand({ projectRoot }, "win32");
 
   assert.equal(command.slice(-5)[0], "--project");
   assert.equal(command.slice(-4)[0], projectRoot);
-  assert.equal(command.slice(-3)[0], "pass");
+  assert.equal(command.slice(-3)[0], "check");
   assert.equal(command.slice(-2)[0], "--force");
   assert.equal(command.slice(-1)[0], "--windows");
 });
@@ -138,6 +199,8 @@ test("checkOgbUpdate reports available releases and writes status", async () => 
   const saved = JSON.parse(fs.readFileSync(resolveProjectPaths(projectRoot).updateStatusPath, "utf8"));
   assert.equal(saved.status, "available");
   assert.equal(saved.checkedAt, "2026-05-06T12:00:00.000Z");
+  assert.equal(typeof saved.generatedAt, "string");
+  assert.equal(saved.ogbVersion, OGB_VERSION);
 });
 
 test("checkOgbUpdate reports current when latest tag matches current version", async () => {
@@ -154,7 +217,7 @@ test("checkOgbUpdate reports current when latest tag matches current version", a
   assert.equal(report.status, "current");
 });
 
-test("runAutoUpdate dry-run builds a self-update command without installing OpenCode", async () => {
+test("runAutoUpdate dry-run builds an update command without installing OpenCode", async () => {
   const report = await runAutoUpdate({
     currentVersion: "0.0.38",
     projectRoot: "/tmp/ogb-auto",
@@ -169,7 +232,9 @@ test("runAutoUpdate dry-run builds a self-update command without installing Open
 
   assert.equal(report.status, "available");
   assert.equal(report.restartRequired, false);
+  assert.equal(report.plan.intent, "update");
   assert.ok(report.selfUpdate);
+  assert.equal(report.selfUpdate.plan.intent, "update");
   assert.match(report.selfUpdate.command.join(" "), /v0\.0\.39/);
   assert.match(report.selfUpdate.command.join(" "), /no-(opencode|openCode)/i);
   assert.equal(report.selfUpdate.postUpdate?.status, "preview");

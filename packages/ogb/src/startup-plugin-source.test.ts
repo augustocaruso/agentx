@@ -22,9 +22,9 @@ test("startup plugin uses the dedicated startup command and quiet lifecycle", ()
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /failure backoff is active/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /already attempted in this OpenCode process/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function safeUpdateArgs/);
-  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /\["auto-update", "self-update", "upgrade-ogb"\]/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /\["auto-update", "update", "self-update", "upgrade-ogb"\]/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function withoutProjectArgs/);
-  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /commandName === "bridge"\) return \[plan\(\["pass"/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /commandName === "bridge"\) return \[plan\(\["check"/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /export default OgbStartupSync/);
   assert.doesNotMatch(STARTUP_SYNC_PLUGIN_SOURCE, /"session\.updated", "session\.idle"/);
 });

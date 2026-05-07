@@ -29,5 +29,6 @@ test("resolveProjectPaths treats accidentally quoted home paths as home mode", (
 
 test("normalizePathInput strips only surrounding quotes", () => {
   assert.equal(normalizePathInput(` '"C:\\Users\\leona"' `), "C:\\Users\\leona");
+  assert.equal(normalizePathInput(`'\\"C:\\Users\\leona\\"'`), "C:\\Users\\leona");
   assert.equal(normalizePathInput(`C:\\Users\\leo"na`), `C:\\Users\\leo"na`);
 });

@@ -165,20 +165,29 @@ Tambem escreve:
 
 Esse arquivo nunca inclui o token remoto.
 
-### `ogb pass`
+### `ogb check`
 
 Roda o caminho verde completo e escreve `.opencode/generated/ogb-pass.json`.
 
 ```bash
-ogb pass
-ogb pass --accept-hooks
-ogb pass --force
-ogb pass --json
+ogb check
+ogb check --accept-hooks
+ogb check --force
+ogb check --json
 ```
 
 O comando executa setup local, sync, doctor, validation, security-check e
 dashboard. `--accept-hooks` registra por hash os hooks Gemini revisados; se o
 arquivo mudar, o doctor volta a pedir revisão.
+
+Alias legado:
+
+```bash
+ogb pass
+```
+
+Esse alias continua funcionando por compatibilidade, mas emite warning e sera
+removido apenas depois da janela definida no roadmap de refactor da instalacao.
 
 ### `ogb limits`
 
@@ -218,7 +227,7 @@ ogb telemetry record --workflow startup-plugin --status completed --payload -
 
 `preview` mostra o historico local completo. `send` normal envia remotamente
 apenas problemas acionaveis: falhas, warnings, errors e updates que exigem
-restart. Passes limpos ficam locais. `--include-pass` existe apenas para debug
+restart. Checks limpos ficam locais. `--include-pass` existe apenas para debug
 manual do canal remoto.
 
 Arquivos locais:
@@ -329,22 +338,54 @@ ogb validate --opencode-run
 
 O `--opencode-run` e opcional porque pode gastar tokens.
 
-### `ogb self-update`
+### `ogb install`
+
+Reaplica a instalacao OGB quando o CLI ja esta disponivel. Ele nao substitui o
+bootstrap externo ainda; o papel dele no Release 1 e estabilizar o caminho
+publico depois que o binario existe.
+
+```bash
+ogb --project "$PWD" install
+ogb --project "$PWD" install --dry-run
+ogb --project "$PWD" install --force
+ogb --project "$PWD" install --reset-global
+```
+
+Modelo mental:
+
+```text
+ogb install
+  -> cleanup seguro de artefatos antigos no home
+  -> setup-ux global
+  -> setup/sync/doctor/validate/security/dashboard via ogb check
+```
+
+Flags importantes:
+
+- `--no-install-opencode`: nao tenta instalar OpenCode quando ele falta.
+- `--no-plugins`: nao roda instaladores globais de plugins OpenCode.
+- `--no-project-profile`: nao escreve `.opencode/ogb.config.jsonc`.
+- `--no-check`: deixa de rodar o check final; uso de debug/automacao.
+
+### `ogb update`
 
 Atualiza o OGB a partir do GitHub Release oficial e reaplica o perfil local.
 
 ```bash
-ogb --project "$PWD" self-update
-ogb --project "$PWD" self-update --dry-run
-ogb --project "$PWD" self-update --release v0.0.33
-ogb --project "$PWD" self-update --no-setup
+ogb --project "$PWD" update
+ogb --project "$PWD" update --dry-run
+ogb --project "$PWD" update --release v0.0.33
+ogb --project "$PWD" update --no-setup
 ```
 
-Atalho equivalente:
+Aliases legados:
 
 ```bash
+ogb --project "$PWD" self-update
 ogb --project "$PWD" upgrade-ogb
 ```
+
+Esses aliases continuam funcionando por compatibilidade, mas emitem warning.
 
 Modelo mental:
 
@@ -352,7 +393,7 @@ Modelo mental:
 GitHub Release pack
   -> bootstrap oficial
   -> instalador macOS/Windows
-  -> ogb setup-ux/import/setup-opencode/doctor/validate
+  -> ogb setup-ux/import/setup-opencode/check
 ```
 
 O comando nao sincroniza nem copia conteudo unico do Gemini CLI de outra
@@ -404,7 +445,7 @@ ogb --project "$PWD" check-update --json
 ### `ogb auto-update`
 
 Compara a versao instalada com a ultima release e, se houver versao nova, roda
-o mesmo bootstrap do `self-update`. Por padrao nao instala nem atualiza o
+o mesmo bootstrap do `ogb update`. Por padrao nao instala nem atualiza o
 proprio OpenCode quando chamado automaticamente pelo plugin.
 
 ```bash

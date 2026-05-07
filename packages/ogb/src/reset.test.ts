@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { GLOBAL_AGENTS_MD } from "./global-agents.js";
 import { runReset } from "./reset.js";
+import type { RitualProgressEvent } from "./ritual-progress.js";
 import { globalStartupPluginSpec } from "./setup-ux.js";
 import { TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 
@@ -61,11 +62,47 @@ test("runReset accepts an accidentally quoted home project path", async () => {
   const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
 
   assert.equal(report.outcome, "pass");
+  assert.equal(report.plan.intent, "reset");
+  assert.equal(report.plan.homeMode, true);
+  assert.ok(report.check);
   assert.equal(report.homeDir, path.resolve(homeDir));
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated")), false);
   assert.deepEqual(startupConfig.baseArgs, ["--project", path.resolve(homeDir)]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
+});
+
+test("runReset dry-run emits reset ritual progress without applying changes", async () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const events: RitualProgressEvent[] = [];
+  fs.mkdirSync(homeDir, { recursive: true });
+  writeFile(path.join(homeDir, ".gemini", "GEMINI.md"), "# Global Gemini\n");
+
+  const report = await runReset({
+    homeDir,
+    projectRoot: homeDir,
+    yes: true,
+    dryRun: true,
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+    onProgress: (event) => events.push(event),
+  });
+
+  assert.equal(report.outcome, "preview");
+  assert.deepEqual([...new Set(events.map((event) => event.stepId))], [
+    "confirm",
+    "env",
+    "cleanup",
+    "setup",
+    "opencode",
+    "plugins",
+    "sync",
+    "doctor",
+    "check",
+  ]);
+  assert.equal(events.find((event) => event.stepId === "check")?.status, "skipped");
 });
 
 test("runReset cancellation leaves home project artifacts and global config unchanged", async () => {
@@ -90,6 +127,7 @@ test("runReset cancellation leaves home project artifacts and global config unch
   });
 
   assert.equal(report.outcome, "cancelled");
+  assert.equal(report.plan.intent, "reset");
   assert.equal(fs.existsSync(path.join(homeDir, "opencode.jsonc")), true);
   assert.equal(readJson(path.join(homeDir, ".config", "opencode", "opencode.json")).custom, true);
 });
@@ -141,6 +179,8 @@ test("runReset cleans home project artifacts and recreates global config", async
   });
 
   assert.equal(report.outcome, "pass");
+  assert.equal(report.plan.intent, "reset");
+  assert.ok(report.check);
   assert.equal(fs.existsSync(path.join(homeDir, "opencode.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands", "sync.md")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "ogb-startup-sync.lock")), false);
@@ -167,8 +207,8 @@ test("runReset cleans home project artifacts and recreates global config", async
   assert.equal(startupConfig.autoUpdate, false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-update-status.json")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-validation.json")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-security.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-validation.json")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-security.json")), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
   assert.match(fs.readFileSync(path.join(homeDir, ".config", "zsh", ".zshrc"), "utf8"), /OPENCODE_ENABLE_EXA=1/);
   assert.equal(report.doctor?.warnings.some((warning) => warning.includes("Last OpenCode startup sync failed")), false);

@@ -4,9 +4,12 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { cleanupHomeProjectArtifacts, type HomeCleanupReport } from "./home-cleanup.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
-import { globalOpenCodeConfigDir } from "./opencode-paths.js";
+import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
+import { runNativeCommand } from "./native-runner.js";
+import { runPass, type PassReport } from "./pass.js";
+import { createPlatformAdapter } from "./platform-adapter.js";
 import { resolveProjectPaths } from "./paths.js";
-import { spawnCommandSync } from "./process.js";
+import { emitRitualProgress, progressStatusFromFindings, progressStatusFromOutcome, type RitualProgressSink } from "./ritual-progress.js";
 import { setupUx, type SetupUxReport } from "./setup-ux.js";
 import { syncToOpenCode, type SyncReport } from "./sync.js";
 import { OGB_VERSION } from "./types.js";
@@ -24,6 +27,7 @@ export interface ResetOptions {
   installTuiDependencies?: boolean;
   rulesyncMode?: RulesyncMode;
   confirm?: (plan: ResetPlan) => boolean | Promise<boolean>;
+  onProgress?: RitualProgressSink;
 }
 
 export interface ResetPlan {
@@ -42,12 +46,14 @@ export interface ResetReport {
   version: string;
   homeDir: string;
   outcome: "pass" | "cancelled" | "preview";
+  plan: InstallerPlan;
   globalConfigPath: string;
   exaEnv: ResetEnvReport;
   cleanup: HomeCleanupReport;
   setup?: SetupUxReport;
   sync?: SyncReport;
   doctor?: DoctorReport;
+  check?: PassReport;
   warnings: string[];
 }
 
@@ -72,22 +78,22 @@ function appendLineIfMissing(filePath: string, line: string, pattern: RegExp, dr
   return { path: filePath, status: "configured", message: `Added OPENCODE_ENABLE_EXA=1 to ${filePath}.` };
 }
 
-function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; dryRun?: boolean }): ResetEnvReport {
-  const platform = options.platform ?? process.platform;
-  if (platform === "win32") {
+function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv; dryRun?: boolean }): ResetEnvReport {
+  const adapter = createPlatformAdapter({ homeDir: options.homeDir, platform: options.platform, env: options.env });
+  if (adapter.platform === "win32") {
     process.env.OPENCODE_ENABLE_EXA = "1";
     if (options.dryRun) {
       return { status: "preview", message: "Would set OPENCODE_ENABLE_EXA=1 for the Windows user environment." };
     }
 
-    const script = "[Environment]::SetEnvironmentVariable('OPENCODE_ENABLE_EXA','1','User')";
-    const shells = ["powershell.exe", "pwsh", "powershell"];
-    for (const shell of shells) {
-      const result = spawnCommandSync(shell, ["-NoProfile", "-Command", script], {
-        encoding: "utf8",
+    for (const plan of adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1")) {
+      if (!plan.command) continue;
+      const result = runNativeCommand({
+        command: plan.command[0],
+        args: plan.command.slice(1),
         stdio: "pipe",
       });
-      if (!result.error && result.status === 0) {
+      if (result.ok) {
         return { status: "configured", message: "Set OPENCODE_ENABLE_EXA=1 for the Windows user environment." };
       }
     }
@@ -97,8 +103,9 @@ function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; dr
     };
   }
 
+  const envPlan = adapter.persistEnv("OPENCODE_ENABLE_EXA", "1");
   return appendLineIfMissing(
-    path.join(options.homeDir, ".config", "zsh", ".zshrc"),
+    envPlan.path ?? adapter.join(adapter.homeDir, ".config", "zsh", ".zshrc"),
     "export OPENCODE_ENABLE_EXA=1",
     /^[ \t]*(export[ \t]+)?OPENCODE_ENABLE_EXA=1([ \t]*(#.*)?)?$/m,
     options.dryRun,
@@ -147,8 +154,20 @@ async function promptResetConfirmation(plan: ResetPlan): Promise<boolean> {
 export async function runReset(options: ResetOptions = {}): Promise<ResetReport> {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   if (!paths.homeMode) throw new ResetNotHomeError(paths.projectRoot, paths.homeDir);
+  const adapter = createPlatformAdapter({ homeDir: paths.homeDir, platform: options.platform, env: options.env });
+  const installerPlan = buildInstallerPlan({
+    intent: "reset",
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    platform: options.platform,
+    env: options.env,
+    dryRun: options.dryRun,
+    force: true,
+    rulesyncMode: options.rulesyncMode,
+    windows: (options.platform ?? process.platform) === "win32",
+  });
 
-  const globalConfigPath = path.join(globalOpenCodeConfigDir({ homeDir: paths.homeDir, platform: options.platform, env: options.env }), "opencode.json");
+  const globalConfigPath = adapter.join(adapter.globalConfigDir, "opencode.json");
   const cleanupPreview = cleanupHomeProjectArtifacts({ homeDir: paths.homeDir, dryRun: true });
   const plan: ResetPlan = {
     homeDir: paths.homeDir,
@@ -158,24 +177,86 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
 
   const warnings: string[] = [];
   if (!options.dryRun && !options.yes) {
+    emitRitualProgress(options.onProgress, {
+      stepId: "confirm",
+      label: "Confirm the home reset.",
+      detail: "Requires explicit confirmation before changing global files.",
+      status: "running",
+      message: "Waiting for RESET confirmation.",
+    });
     const confirmed = options.confirm ? await options.confirm(plan) : await promptResetConfirmation(plan);
     if (!confirmed) {
+      emitRitualProgress(options.onProgress, {
+        stepId: "confirm",
+        label: "Confirm the home reset.",
+        detail: "Requires explicit confirmation before changing global files.",
+        status: "skipped",
+        message: "Reset cancelled before changes.",
+      });
       return {
         version: OGB_VERSION,
         homeDir: paths.homeDir,
         outcome: "cancelled",
+        plan: installerPlan,
         globalConfigPath,
         exaEnv: { status: "preview", message: "Reset cancelled before changing environment." },
         cleanup: cleanupPreview,
         warnings,
       };
     }
+    emitRitualProgress(options.onProgress, {
+      stepId: "confirm",
+      label: "Confirm the home reset.",
+      detail: "Requires explicit confirmation before changing global files.",
+      status: "pass",
+      message: "RESET confirmed.",
+    });
+  } else {
+    emitRitualProgress(options.onProgress, {
+      stepId: "confirm",
+      label: "Confirm the home reset.",
+      detail: "Requires explicit confirmation before changing global files.",
+      status: options.dryRun ? "skipped" : "pass",
+      message: options.dryRun ? "Dry-run preview; no destructive confirmation needed." : "--yes accepted.",
+    });
   }
 
-  const exaEnv = ensureExaEnv({ homeDir: paths.homeDir, platform: options.platform, dryRun: options.dryRun });
+  emitRitualProgress(options.onProgress, {
+    stepId: "env",
+    label: "Configure OpenCode websearch support.",
+    detail: "Persists OPENCODE_ENABLE_EXA=1 when the platform allows it.",
+    status: "running",
+  });
+  const exaEnv = ensureExaEnv({ homeDir: paths.homeDir, platform: options.platform, env: options.env, dryRun: options.dryRun });
+  emitRitualProgress(options.onProgress, {
+    stepId: "env",
+    label: "Configure OpenCode websearch support.",
+    detail: "Persists OPENCODE_ENABLE_EXA=1 when the platform allows it.",
+    status: exaEnv.status === "warning" ? "warn" : exaEnv.status === "preview" ? "skipped" : "pass",
+    message: exaEnv.message,
+  });
   if (exaEnv.status === "warning") warnings.push(exaEnv.message);
 
   if (options.dryRun) {
+    emitRitualProgress(options.onProgress, {
+      stepId: "cleanup",
+      label: "Clean old home-project artifacts.",
+      detail: "Backs up accidental project files before removing them.",
+      status: "running",
+    });
+    emitRitualProgress(options.onProgress, {
+      stepId: "cleanup",
+      label: "Clean old home-project artifacts.",
+      detail: "Backs up accidental project files before removing them.",
+      status: cleanupPreview.warnings.length > 0 ? "warn" : "skipped",
+      message: `Would clean ${cleanupPreview.actions.length} action(s).`,
+    });
+    emitRitualProgress(options.onProgress, {
+      stepId: "setup",
+      label: "Overwrite the global OpenCode profile.",
+      detail: "Rebuilds global config, commands, agents, and sidebar files.",
+      status: "running",
+    });
     const setupPreview = setupUx({
       homeDir: paths.homeDir,
       projectRoot: paths.homeDir,
@@ -188,6 +269,33 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
       installPlugins: options.installPlugins,
       installTuiDependencies: options.installTuiDependencies,
     });
+    emitRitualProgress(options.onProgress, {
+      stepId: "setup",
+      label: "Overwrite the global OpenCode profile.",
+      detail: "Rebuilds global config, commands, agents, and sidebar files.",
+      status: setupPreview.warnings.length > 0 ? "warn" : "skipped",
+      message: `Would touch ${setupPreview.writes.filter((write) => write.status !== "unchanged").length} write(s).`,
+    });
+    emitRitualProgress(options.onProgress, {
+      stepId: "opencode",
+      label: "Verify OpenCode is available.",
+      detail: "Installs or updates OpenCode when needed.",
+      status: options.installOpenCode === false ? "skipped" : setupPreview.warnings.length > 0 ? "warn" : "skipped",
+      message: options.installOpenCode === false ? "Skipped by --no-install-opencode." : "Would check OpenCode availability.",
+    });
+    emitRitualProgress(options.onProgress, {
+      stepId: "plugins",
+      label: "Install global OpenCode plugins.",
+      detail: "Covers auth, fallback, sidebar, and startup sync integrations.",
+      status: options.installPlugins === false ? "skipped" : setupPreview.warnings.length > 0 ? "warn" : "skipped",
+      message: options.installPlugins === false ? "Skipped by --no-plugins." : "Would check global plugins.",
+    });
+    emitRitualProgress(options.onProgress, {
+      stepId: "sync",
+      label: "Sync Gemini globals into OpenCode.",
+      detail: "Projects context, MCPs, agents, commands, and skills into global scope.",
+      status: "running",
+    });
     const syncPreview = syncToOpenCode({
       projectRoot: paths.homeDir,
       homeDir: paths.homeDir,
@@ -196,10 +304,27 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
       silent: true,
       rulesyncMode: options.rulesyncMode ?? "auto",
     });
+    emitRitualProgress(options.onProgress, {
+      stepId: "sync",
+      label: "Sync Gemini globals into OpenCode.",
+      detail: "Projects context, MCPs, agents, commands, and skills into global scope.",
+      status: syncPreview.warnings.length > 0 ? "warn" : "skipped",
+      message: `Would project ${syncPreview.projectedSkills.length} skill(s), ${syncPreview.projectedCommands.length} command(s).`,
+    });
+    for (const stepId of ["doctor", "check"] as const) {
+      emitRitualProgress(options.onProgress, {
+        stepId,
+        label: stepId === "doctor" ? "Run doctor." : "Run the full bridge check.",
+        detail: stepId === "doctor" ? "Performs compatibility checks after reset." : "Verifies setup, sync, validation, security, and dashboard.",
+        status: "skipped",
+        message: "Skipped in dry-run preview.",
+      });
+    }
     return {
       version: OGB_VERSION,
       homeDir: paths.homeDir,
       outcome: "preview",
+      plan: installerPlan,
       globalConfigPath,
       exaEnv,
       cleanup: cleanupPreview,
@@ -209,7 +334,26 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
     };
   }
 
+  emitRitualProgress(options.onProgress, {
+    stepId: "cleanup",
+    label: "Clean old home-project artifacts.",
+    detail: "Backs up accidental project files before removing them.",
+    status: "running",
+  });
   const cleanup = cleanupHomeProjectArtifacts({ homeDir: paths.homeDir });
+  emitRitualProgress(options.onProgress, {
+    stepId: "cleanup",
+    label: "Clean old home-project artifacts.",
+    detail: "Backs up accidental project files before removing them.",
+    status: cleanup.warnings.length > 0 ? "warn" : "pass",
+    message: `${cleanup.actions.length} action(s)${cleanup.backupDir ? ", backup created" : ""}.`,
+  });
+  emitRitualProgress(options.onProgress, {
+    stepId: "setup",
+    label: "Overwrite the global OpenCode profile.",
+    detail: "Rebuilds global config, commands, agents, and sidebar files.",
+    status: "running",
+  });
   const setup = setupUx({
     homeDir: paths.homeDir,
     projectRoot: paths.homeDir,
@@ -221,6 +365,34 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
     installPlugins: options.installPlugins,
     installTuiDependencies: options.installTuiDependencies,
   });
+  emitRitualProgress(options.onProgress, {
+    stepId: "setup",
+    label: "Overwrite the global OpenCode profile.",
+    detail: "Rebuilds global config, commands, agents, and sidebar files.",
+    status: setup.warnings.length > 0 ? "warn" : "pass",
+    message: `${setup.writes.filter((write) => write.status !== "unchanged").length} write(s) checked.`,
+  });
+  const openCodeCommand = setup.commands.find((command) => command.command.some((part) => /opencode-ai|opencode(?:\.cmd)?$/i.test(part)));
+  emitRitualProgress(options.onProgress, {
+    stepId: "opencode",
+    label: "Verify OpenCode is available.",
+    detail: "Installs or updates OpenCode when needed.",
+    status: options.installOpenCode === false ? "skipped" : openCodeCommand?.status === "fail" ? "warn" : setup.warnings.length > 0 ? "warn" : "pass",
+    message: options.installOpenCode === false ? "Skipped by --no-install-opencode." : openCodeCommand?.message ?? "OpenCode availability was checked.",
+  });
+  emitRitualProgress(options.onProgress, {
+    stepId: "plugins",
+    label: "Install global OpenCode plugins.",
+    detail: "Covers auth, fallback, sidebar, and startup sync integrations.",
+    status: options.installPlugins === false ? "skipped" : setup.warnings.length > 0 ? "warn" : "pass",
+    message: options.installPlugins === false ? "Skipped by --no-plugins." : `${setup.commands.filter((command) => command.status !== "skipped").length} setup command(s) checked.`,
+  });
+  emitRitualProgress(options.onProgress, {
+    stepId: "sync",
+    label: "Sync Gemini globals into OpenCode.",
+    detail: "Projects context, MCPs, agents, commands, and skills into global scope.",
+    status: "running",
+  });
   const sync = syncToOpenCode({
     projectRoot: paths.homeDir,
     homeDir: paths.homeDir,
@@ -228,20 +400,71 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
     silent: true,
     rulesyncMode: options.rulesyncMode ?? "auto",
   });
+  emitRitualProgress(options.onProgress, {
+    stepId: "sync",
+    label: "Sync Gemini globals into OpenCode.",
+    detail: "Projects context, MCPs, agents, commands, and skills into global scope.",
+    status: sync.warnings.length > 0 ? "warn" : "pass",
+    message: `${sync.projectedSkills.length} skill(s), ${sync.projectedCommands.length} command(s), ${sync.projectedAgents.length + sync.projectedExtensionAgents.length} agent(s).`,
+  });
   clearStartupSyncStatus(paths.homeDir);
+  emitRitualProgress(options.onProgress, {
+    stepId: "doctor",
+    label: "Run doctor.",
+    detail: "Performs compatibility checks after reset.",
+    status: "running",
+  });
   const doctor = runDoctor({ projectRoot: paths.homeDir, homeDir: paths.homeDir, silent: true });
-  warnings.push(...cleanup.warnings, ...setup.warnings, ...sync.warnings, ...doctor.warnings);
+  emitRitualProgress(options.onProgress, {
+    stepId: "doctor",
+    label: "Run doctor.",
+    detail: "Performs compatibility checks after reset.",
+    status: progressStatusFromFindings(doctor.errors.length, doctor.warnings.length),
+    message: doctor.errors.length > 0 ? `${doctor.errors.length} error(s)` : doctor.warnings.length > 0 ? `${doctor.warnings.length} warning(s)` : "Doctor is clean.",
+  });
+  emitRitualProgress(options.onProgress, {
+    stepId: "check",
+    label: "Run the full bridge check.",
+    detail: "Verifies setup, sync, validation, security, and dashboard.",
+    status: "running",
+  });
+  const check = runPass({
+    projectRoot: paths.homeDir,
+    homeDir: paths.homeDir,
+    force: true,
+    skipSetup: true,
+    skipSync: true,
+    windows: (options.platform ?? process.platform) === "win32",
+    silent: true,
+    setExitCode: false,
+  });
+  emitRitualProgress(options.onProgress, {
+    stepId: "check",
+    label: "Run the full bridge check.",
+    detail: "Verifies setup, sync, validation, security, and dashboard.",
+    status: progressStatusFromOutcome(check.outcome),
+    message: check.outcome === "pass" ? "Full check is clean." : `Full check outcome: ${check.outcome}.`,
+  });
+  warnings.push(
+    ...cleanup.warnings,
+    ...setup.warnings,
+    ...sync.warnings,
+    ...doctor.warnings,
+    ...check.blockers.filter((blocker) => blocker.severity === "warn").map((blocker) => `${blocker.source}: ${blocker.message}`),
+  );
 
   return {
     version: OGB_VERSION,
     homeDir: paths.homeDir,
     outcome: "pass",
+    plan: installerPlan,
     globalConfigPath,
     exaEnv,
     cleanup,
     setup,
     sync,
     doctor,
+    check,
     warnings,
   };
 }
@@ -271,6 +494,9 @@ export function printResetReport(report: ResetReport, json = false): void {
   }
   if (report.doctor) {
     console.log(`Doctor: ${report.doctor.errors.length} error(s), ${report.doctor.warnings.length} warning(s)`);
+  }
+  if (report.check) {
+    console.log(`Check: ${report.check.outcome.toUpperCase()}`);
   }
   if (report.warnings.length > 0) {
     console.log("Warnings:");

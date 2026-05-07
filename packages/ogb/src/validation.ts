@@ -5,9 +5,10 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
 import { runDoctor } from "./doctor.js";
+import { runNativeCommand, type NativeCommandResult } from "./native-runner.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { resolveProjectPaths } from "./paths.js";
-import { spawnCommandSync } from "./process.js";
+import { writeStateRecord } from "./state-store.js";
 import { OGB_VERSION } from "./types.js";
 
 export interface ValidationOptions {
@@ -35,11 +36,12 @@ export interface ValidationReport {
   checks: ValidationCheck[];
 }
 
-function run(command: string, args: string[], cwd: string, timeout = 30000, extraEnv: Record<string, string> = {}) {
-  return spawnCommandSync(command, args, {
+function run(command: string, args: string[], cwd: string, timeout = 30000, extraEnv: Record<string, string> = {}): NativeCommandResult {
+  return runNativeCommand({
+    command,
+    args,
     cwd,
-    encoding: "utf8",
-    timeout,
+    timeoutMs: timeout,
     env: {
       ...process.env,
       NO_COLOR: process.env.NO_COLOR ?? "1",
@@ -102,7 +104,7 @@ function addToolCheck(checks: ValidationCheck[], command: string, args: string[]
   checks.push({
     name: `${command} executable`,
     status: result.error || result.status !== 0 ? "warn" : "pass",
-    message: result.error?.message ?? (output || `${command} responded successfully.`),
+    message: result.error ?? (output || `${command} responded successfully.`),
   });
 }
 
@@ -117,7 +119,7 @@ function validateOgbGlobal(checks: ValidationCheck[], projectRoot: string, homeD
   checks.push({
     name: "ogb global binary",
     status: result.error || result.status !== 0 || version !== OGB_VERSION ? "warn" : "pass",
-    message: result.error?.message ?? (version === OGB_VERSION
+    message: result.error ?? (version === OGB_VERSION
       ? `ogb ${version} resolves to ${resolved}.`
       : `ogb resolves to ${resolved}, but reports ${version || "unknown version"}; expected ${OGB_VERSION}.`),
     details: { resolved, expectedVersion: OGB_VERSION, reportedVersion: version },
@@ -201,7 +203,7 @@ function validateOpenCodeDebugConfig(projectRoot: string, homeDir: string, check
     checks.push({
       name: "OpenCode resolved config",
       status: "fail",
-      message: result.error?.message ?? (result.stderr || "opencode debug config failed").trim(),
+      message: result.error ?? (result.stderr || "opencode debug config failed").trim(),
     });
     return;
   }
@@ -312,19 +314,22 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["bootstrap-windows.ps1 release asset", scripts.windowsBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
     ["bootstrap-windows.ps1 installer", scripts.windowsBootstrap, "install-windows.ps1"],
     ["bootstrap-windows.ps1 path arg normalization", scripts.windowsBootstrap, "Normalize-PathArgument"],
-    ["install-mac.sh cleanup-home", scripts.macInstaller, "cleanup-home"],
-    ["install-mac.sh setup-ux", scripts.macInstaller, "setup-ux"],
-    ["install-mac.sh setup-opencode", scripts.macInstaller, "setup-opencode"],
-    ["install-mac.sh final pass", scripts.macInstaller, "run_final_pass"],
+    ["install-mac.sh delegates install", scripts.macInstaller, "install --rulesync"],
+    ["install-mac.sh ritual message", scripts.macInstaller, "Running OGB install ritual"],
+    ["install-mac.sh no ux flag", scripts.macInstaller, "--no-ux"],
+    ["install-mac.sh no opencode flag", scripts.macInstaller, "--no-install-opencode"],
+    ["install-mac.sh no check flag", scripts.macInstaller, "--no-check"],
     ["install-mac.sh home sync", scripts.macInstaller, "RUN_HOME_SYNC"],
     ["install-mac.sh reset global", scripts.macInstaller, "--reset-global"],
     ["install-mac.sh Exa websearch env", scripts.macInstaller, "OPENCODE_ENABLE_EXA"],
     ["install-mac.sh zsh config", scripts.macInstaller, ".config/zsh/.zshrc"],
-    ["install-windows.ps1 cleanup-home", scripts.windowsInstaller, "cleanup-home"],
     ["install-windows.ps1 path arg normalization", scripts.windowsInstaller, "Normalize-PathArgument"],
-    ["install-windows.ps1 setup-ux", scripts.windowsInstaller, "setup-ux"],
-    ["install-windows.ps1 setup-opencode", scripts.windowsInstaller, "setup-opencode"],
-    ["install-windows.ps1 final pass", scripts.windowsInstaller, "Invoke-FinalOgbPass"],
+    ["install-windows.ps1 delegates install", scripts.windowsInstaller, "\"install\", \"--rulesync\""],
+    ["install-windows.ps1 ritual message", scripts.windowsInstaller, "Running OGB install ritual"],
+    ["install-windows.ps1 no ux flag", scripts.windowsInstaller, "--no-ux"],
+    ["install-windows.ps1 no opencode flag", scripts.windowsInstaller, "--no-install-opencode"],
+    ["install-windows.ps1 no check flag", scripts.windowsInstaller, "--no-check"],
+    ["install-windows.ps1 windows flag", scripts.windowsInstaller, "--windows"],
     ["install-windows.ps1 home sync", scripts.windowsInstaller, "RunHomeSync"],
     ["install-windows.ps1 reset global", scripts.windowsInstaller, "--reset-global"],
     ["install-windows.ps1 Exa websearch env", scripts.windowsInstaller, "OPENCODE_ENABLE_EXA"],
@@ -336,7 +341,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     status: missing.length ? "fail" : "pass",
     message: missing.length
       ? `Missing expected release/bootstrap token(s): ${missing.join(", ")}.`
-      : "Bootstrap scripts download the release pack, clean old home artifacts, set Exa websearch env, reset home global config when forced, and installers apply setup-ux, project setup, home global sync, and final pass.",
+      : "Bootstrap scripts download the release pack, set Exa websearch env, and thin installers delegate the ritual to ogb install with the expected platform flags.",
     details: { repoRoot },
   });
 }
@@ -374,15 +379,15 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "Installed ogb verification returned no version output.",
     "node `\"$CliTarget`\" %*",
     "ogb.cmd",
-    "import",
-    "cleanup-home",
-    "setup-opencode",
-    "setup-ux",
-    "pass",
+    "\"install\", \"--rulesync\"",
+    "--no-ux",
+    "--no-install-opencode",
+    "--no-check",
     "--windows",
     "SetEnvironmentVariable(\"Path\"",
     "SetEnvironmentVariable(\"OPENCODE_ENABLE_EXA\"",
     "Ensure-OpenCodeExaEnvironment",
+    "Running OGB install ritual",
     "Verified ogb",
     "ogb command:",
   ];
@@ -402,7 +407,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
       ? `Missing expected installer token(s): ${missing.join(", ")}.`
       : forbidden.length
         ? `Forbidden unsafe installer token(s): ${forbidden.join(", ")}.`
-        : "PowerShell installer has safe native command capture, build, install, Exa websearch env, setup and final pass steps.",
+        : "PowerShell installer has safe native command capture, build, install, Exa websearch env, and delegates the install ritual to the ogb CLI.",
   });
 }
 
@@ -418,7 +423,7 @@ function validateOptionalOpenCodeRun(projectRoot: string, homeDir: string, check
   checks.push({
     name: "OpenCode live run",
     status: result.error || result.status !== 0 || !output.includes("OGB_VALIDATE_OK") ? "warn" : "pass",
-    message: result.error?.message ?? (output.includes("OGB_VALIDATE_OK") ? "OpenCode live run responded." : "OpenCode live run did not confirm the expected text."),
+    message: result.error ?? (output.includes("OGB_VALIDATE_OK") ? "OpenCode live run responded." : "OpenCode live run did not confirm the expected text."),
   });
 }
 
@@ -475,11 +480,10 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
     checks,
   };
 
-  fs.mkdirSync(path.dirname(paths.validationPath), { recursive: true });
-  fs.writeFileSync(paths.validationPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  writeStateRecord("validation", report as unknown as Record<string, unknown>, { projectRoot: paths.projectRoot, homeDir: paths.homeDir });
 
   if (options.silent) {
-    // Report is written to disk for callers such as ogb pass.
+    // Report is written to disk for callers such as ogb check.
   } else if (options.json) {
     console.log(JSON.stringify(report, null, 2));
   } else {

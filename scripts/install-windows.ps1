@@ -160,15 +160,6 @@ function Ensure-OpenCodeExaEnvironment {
   $env:OPENCODE_ENABLE_EXA = "1"
 }
 
-function Invoke-FinalOgbPass {
-  $PassArgs = @("--project", $Project, "pass", "--windows")
-  if ($Force) {
-    $PassArgs += "--force"
-  }
-  Write-Host "Running final OGB pass for $Project..."
-  & $OgbBin @PassArgs
-}
-
 function Remove-UserPath($Dir) {
   if (-not $Dir) {
     return
@@ -403,48 +394,26 @@ $OgbBinDir = Split-Path -Parent $OgbBin
 Add-UserPath $OgbBinDir
 Ensure-OpenCodeExaEnvironment
 
-if (-not $NoUx) {
-  Write-Host "Cleaning old OGB project artifacts from the home directory..."
-  & $OgbBin cleanup-home
-
-  $UxArgs = @("--project", $Project, "setup-ux")
-  if ($NoOpenCode) {
-    $UxArgs += "--no-install-opencode"
+$InstallArgs = @("--project", $Project, "install", "--rulesync", $Rulesync, "--windows")
+if ($NoUx) {
+  $InstallArgs += "--no-ux"
+}
+if ($NoOpenCode) {
+  $InstallArgs += "--no-install-opencode"
+}
+if ($Force) {
+  $InstallArgs += "--force"
+  if ($RunHomeSync) {
+    $InstallArgs += "--reset-global"
   }
-  if ($Force) {
-    $UxArgs += "--force"
-    if ($RunHomeSync) {
-      $UxArgs += "--reset-global"
-    }
-  }
-  Write-Host "Installing OpenCode and the OGB UX profile..."
-  & $OgbBin @UxArgs
+}
+if ($NoSetup -and (-not $RunHomeSync)) {
+  $InstallArgs += "--no-check"
 }
 
-if ($RunHomeSync) {
-  $ImportArgs = @("--project", $Project, "import", "--rulesync", $Rulesync)
-  if ($Force) {
-    $ImportArgs += "--force"
-  }
-  Write-Host "Running global ogb import/sync for $Project..."
-  & $OgbBin @ImportArgs
-  Invoke-FinalOgbPass
-}
-
-if (-not $NoSetup) {
-  $ImportArgs = @("--project", $Project, "import", "--rulesync", $Rulesync)
-  $SetupArgs = @("--project", $Project, "setup-opencode", "--skip-doctor")
-  if ($Force) {
-    $ImportArgs += "--force"
-    $SetupArgs += "--force"
-  }
-  Write-Host "Running ogb import for $Project..."
-  & $OgbBin @ImportArgs
-  Write-Host "Installing OpenCode startup plugin for $Project..."
-  & $OgbBin @SetupArgs
-  Invoke-FinalOgbPass
-}
+Write-Host "Running OGB install ritual for $Project..."
+& $OgbBin @InstallArgs
 
 Write-Host "Done."
 Write-Host "ogb command: $OgbBin"
-Write-Host "Try: & `"$OgbBin`" --project `"$Project`" pass --windows"
+Write-Host "Try: & `"$OgbBin`" --project `"$Project`" check --windows"

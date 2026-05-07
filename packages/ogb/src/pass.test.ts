@@ -4,7 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runDoctor } from "./doctor.js";
+import { buildInstallerPlan } from "./installer-planner.js";
 import { formatPassReport, runPass, type PassReport } from "./pass.js";
+import type { RitualProgressEvent } from "./ritual-progress.js";
 
 function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-pass-"));
@@ -35,8 +37,78 @@ test("runPass can accept reviewed Gemini hooks and produce a clean doctor", () =
   const doctor = runDoctor({ projectRoot, homeDir: projectRoot, silent: true });
 
   assert.equal(report.outcome, "pass");
+  assert.equal(report.plan.intent, "check");
   assert.equal(report.acceptedHooks.length, 1);
   assert.equal(doctor.warnings.some((warning) => warning.startsWith("Hook needs review:")), false);
+  process.exitCode = oldExitCode;
+});
+
+test("runPass emits real progress events in ritual order", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+  const events: RitualProgressEvent[] = [];
+
+  runPass({
+    projectRoot,
+    homeDir: projectRoot,
+    dryRun: true,
+    silent: true,
+    setExitCode: false,
+    onProgress: (event) => events.push(event),
+  });
+
+  const runningOrder = events.filter((event) => event.status === "running").map((event) => event.stepId);
+  assert.deepEqual(runningOrder, ["setup", "sync", "doctor", "validate", "security", "dashboard"]);
+  assert.equal(events.at(-1)?.stepId, "dashboard");
+  assert.notEqual(events.at(-1)?.status, "running");
+  process.exitCode = oldExitCode;
+});
+
+test("runPass removes progress steps disabled by check flags", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+  const events: RitualProgressEvent[] = [];
+
+  runPass({
+    projectRoot,
+    homeDir: projectRoot,
+    skipSetup: true,
+    skipSync: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+    silent: true,
+    setExitCode: false,
+    onProgress: (event) => events.push(event),
+  });
+
+  assert.deepEqual([...new Set(events.map((event) => event.stepId))], ["doctor"]);
+  process.exitCode = oldExitCode;
+});
+
+test("runPass carries the first validation failure into blocker copy and next action", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+  const events: RitualProgressEvent[] = [];
+
+  const report = runPass({
+    projectRoot,
+    homeDir: projectRoot,
+    skipSync: true,
+    skipSecurity: true,
+    skipDashboard: true,
+    silent: true,
+    setExitCode: false,
+    onProgress: (event) => events.push(event),
+  });
+
+  const validationBlocker = report.blockers.find((item) => item.source === "validation");
+  const validationEvent = events.find((event) => event.stepId === "validate" && event.status === "fail");
+  assert.equal(report.outcome, "fail");
+  assert.ok(validationBlocker);
+  assert.match(validationBlocker.message, /Validation falhou: .+:/);
+  assert.match(validationBlocker.action, /ogb validate --plain/);
+  assert.match(validationEvent?.message ?? "", /:/);
   process.exitCode = oldExitCode;
 });
 
@@ -71,6 +143,7 @@ test("formatPassReport prints a compact human report", () => {
     version: "0.0.40",
     projectRoot,
     outcome: "warn",
+    plan: buildInstallerPlan({ intent: "check", projectRoot, homeDir: "/tmp" }),
     automated: ["setup-opencode", "sync", "doctor", "validate", "dashboard"],
     steps: [
       { name: "setup-opencode", status: "pass" },
@@ -112,7 +185,7 @@ test("formatPassReport prints a compact human report", () => {
 
   const text = formatPassReport(report);
 
-  assert.match(text, /^OGB pass  WARN/m);
+  assert.match(text, /^OGB check WARN/m);
   assert.match(text, /Checks\n  OK    setup-opencode/);
   assert.match(text, /Needs Attention/);
   assert.match(text, /Auto fallback esta ligado, mas o plugin externo nao carregou\./);

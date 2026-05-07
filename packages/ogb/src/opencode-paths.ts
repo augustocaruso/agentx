@@ -1,6 +1,5 @@
 import os from "node:os";
-import path from "node:path";
-import { normalizePathInput } from "./paths.js";
+import { createPlatformAdapter } from "./platform-adapter.js";
 
 export interface OpenCodePathOptions {
   homeDir?: string;
@@ -8,36 +7,22 @@ export interface OpenCodePathOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-function resolvedHomeDir(homeDir: string | undefined): string {
-  return path.resolve(normalizePathInput(homeDir ?? os.homedir()));
+function adapterFor(options: OpenCodePathOptions) {
+  return createPlatformAdapter({
+    platform: options.platform,
+    homeDir: options.homeDir ?? os.homedir(),
+    env: options.env,
+  });
 }
 
 export function globalOpenCodeConfigDir(options: OpenCodePathOptions = {}): string {
-  const platform = options.platform ?? process.platform;
-  const homeDir = resolvedHomeDir(options.homeDir);
-  const env = options.env ?? process.env;
-
-  if (platform !== "win32" && env.XDG_CONFIG_HOME && homeDir === path.resolve(os.homedir())) {
-    return path.join(env.XDG_CONFIG_HOME, "opencode");
-  }
-
-  return path.join(homeDir, ".config", "opencode");
+  return adapterFor(options).globalConfigDir;
 }
 
 export function globalOpenCodeConfigFiles(options: OpenCodePathOptions = {}): string[] {
-  const root = globalOpenCodeConfigDir(options);
-  return [
-    path.join(root, "opencode.json"),
-    path.join(root, "opencode.jsonc"),
-  ];
+  return adapterFor(options).globalConfigFiles;
 }
 
 export function legacyWindowsAppDataOpenCodeConfigDir(options: OpenCodePathOptions = {}): string | undefined {
-  const platform = options.platform ?? process.platform;
-  if (platform !== "win32") return undefined;
-
-  const homeDir = resolvedHomeDir(options.homeDir);
-  const env = options.env ?? process.env;
-  const appData = env.APPDATA || path.join(homeDir, "AppData", "Roaming");
-  return path.join(appData, "opencode");
+  return adapterFor(options).legacyGlobalConfigDir;
 }

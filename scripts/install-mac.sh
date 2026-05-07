@@ -5,9 +5,8 @@ usage() {
   cat <<'EOF'
 Usage: install-mac.sh [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [--no-opencode] [--force] [--rulesync MODE]
 
-Installs the ogb CLI, applies the global OpenCode UX profile, and optionally
-runs the full project setup:
-ogb setup-ux -> ogb import/setup-opencode -> ogb pass.
+Installs the ogb CLI, then delegates the install ritual to:
+ogb install
 
 Defaults:
   --project  current working directory
@@ -177,60 +176,29 @@ fi
 
 ensure_opencode_exa_env
 
-run_final_pass() {
-  local pass_args=(--project "$PROJECT_DIR" pass)
-  if [[ "$FORCE" -eq 1 ]]; then
-    pass_args+=(--force)
+INSTALL_ARGS=(--project "$PROJECT_DIR" install --rulesync "$RULESYNC_MODE")
+if [[ "$RUN_UX" -eq 0 ]]; then
+  INSTALL_ARGS+=(--no-ux)
+fi
+if [[ "$INSTALL_OPENCODE" -eq 0 ]]; then
+  INSTALL_ARGS+=(--no-install-opencode)
+fi
+if [[ "$FORCE" -eq 1 ]]; then
+  INSTALL_ARGS+=(--force)
+  if [[ "$RUN_HOME_SYNC" -eq 1 ]]; then
+    INSTALL_ARGS+=(--reset-global)
   fi
-  echo "Running final OGB pass for $PROJECT_DIR..."
-  "$OGB_BIN" "${pass_args[@]}"
-}
-
-if [[ "$RUN_UX" -eq 1 ]]; then
-  echo "Cleaning old OGB project artifacts from the home directory..."
-  "$OGB_BIN" cleanup-home
-
-  UX_ARGS=(--project "$PROJECT_DIR" setup-ux)
-  if [[ "$INSTALL_OPENCODE" -eq 0 ]]; then
-    UX_ARGS+=(--no-install-opencode)
-  fi
-  if [[ "$FORCE" -eq 1 ]]; then
-    UX_ARGS+=(--force)
-    if [[ "$RUN_HOME_SYNC" -eq 1 ]]; then
-      UX_ARGS+=(--reset-global)
-    fi
-  fi
-  echo "Installing OpenCode and the OGB UX profile..."
-  "$OGB_BIN" "${UX_ARGS[@]}"
+fi
+if [[ "$RUN_SETUP" -eq 0 && "$RUN_HOME_SYNC" -eq 0 ]]; then
+  INSTALL_ARGS+=(--no-check)
 fi
 
-if [[ "$RUN_HOME_SYNC" -eq 1 ]]; then
-  IMPORT_ARGS=(--project "$PROJECT_DIR" import --rulesync "$RULESYNC_MODE")
-  if [[ "$FORCE" -eq 1 ]]; then
-    IMPORT_ARGS+=(--force)
-  fi
-  echo "Running global ogb import/sync for $PROJECT_DIR..."
-  "$OGB_BIN" "${IMPORT_ARGS[@]}"
-  run_final_pass
-fi
-
-if [[ "$RUN_SETUP" -eq 1 ]]; then
-  IMPORT_ARGS=(--project "$PROJECT_DIR" import --rulesync "$RULESYNC_MODE")
-  SETUP_ARGS=(--project "$PROJECT_DIR" setup-opencode --skip-doctor)
-  if [[ "$FORCE" -eq 1 ]]; then
-    IMPORT_ARGS+=(--force)
-    SETUP_ARGS+=(--force)
-  fi
-  echo "Running ogb import for $PROJECT_DIR..."
-  "$OGB_BIN" "${IMPORT_ARGS[@]}"
-  echo "Installing OpenCode startup plugin for $PROJECT_DIR..."
-  "$OGB_BIN" "${SETUP_ARGS[@]}"
-  run_final_pass
-fi
+echo "Running OGB install ritual for $PROJECT_DIR..."
+"$OGB_BIN" "${INSTALL_ARGS[@]}"
 
 echo "Done."
 if command -v ogb >/dev/null 2>&1; then
-  echo "Try: ogb --project \"$PROJECT_DIR\" pass"
+  echo "Try: ogb --project \"$PROJECT_DIR\" check"
 else
-  echo "Try: $OGB_BIN --project \"$PROJECT_DIR\" pass"
+  echo "Try: $OGB_BIN --project \"$PROJECT_DIR\" check"
 fi

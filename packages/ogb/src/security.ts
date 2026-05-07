@@ -4,6 +4,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { sha256File } from "./file-hash.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { resolveProjectPaths } from "./paths.js";
+import { writeStateRecord } from "./state-store.js";
 import { readTrustFile } from "./trust.js";
 import { OGB_VERSION } from "./types.js";
 
@@ -339,11 +340,10 @@ export function runSecurityCheck(options: SecurityOptions = {}): SecurityReport 
     findings,
   };
 
-  fs.mkdirSync(path.dirname(paths.securityPath), { recursive: true });
-  fs.writeFileSync(paths.securityPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  writeStateRecord("security", report as unknown as Record<string, unknown>, { projectRoot: paths.projectRoot, homeDir: paths.homeDir });
 
   if (options.silent) {
-    // Report is written to disk for callers such as ogb pass.
+    // Report is written to disk for callers such as ogb check.
   } else if (options.json) {
     console.log(JSON.stringify(report, null, 2));
   } else {

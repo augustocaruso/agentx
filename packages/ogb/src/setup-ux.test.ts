@@ -105,7 +105,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fs.existsSync(path.join(configDir, "commands", "research.md")), true);
   assert.equal(fs.existsSync(path.join(configDir, "commands", "dev-server.md")), false);
   assert.equal(fs.existsSync(path.join(configDir, "commands", "upgrade-ogb.md")), true);
-  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /ogb self-update --project/);
+  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /ogb update --project/);
   assert.equal(fs.existsSync(path.join(configDir, "dcp.jsonc")), true);
   const packageJson = readJson(path.join(configDir, "package.json"));
   assert.equal(packageJson.type, "module");
