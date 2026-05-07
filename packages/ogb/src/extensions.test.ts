@@ -85,7 +85,7 @@ console.error("stderr ok");
 if (!input.includes("y")) process.exit(7);
 `);
 
-  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, timeoutMs: 1000 });
+  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true });
 
   assert.equal(report.status, "applied");
   assert.deepEqual(report.command, [fakeGemini, "extensions", "update", "--all"]);
@@ -101,7 +101,7 @@ console.error("stderr details");
 process.exit(9);
 `);
 
-  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, timeoutMs: 1000 });
+  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true });
 
   assert.equal(report.status, "error");
   assert.equal(report.exitCode, 9);

@@ -6,7 +6,7 @@ import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS } from "./built-ins.js";
 import { commandExists, resolveCommand } from "./command-resolution.js";
 import { buildInventory } from "./inventory.js";
 import { AUTO_FALLBACK_PLUGIN, resolveFallbackConfigPath } from "./external-integrations.js";
-import { sha256File } from "./file-hash.js";
+import { sha256File, sha256Text } from "./file-hash.js";
 import { diagnoseOpenCodeMcpConfig } from "./mcp-projection.js";
 import { readOgbConfig } from "./ogb-config.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
@@ -18,7 +18,7 @@ import { missingGlobalTuiRuntimeDependencies } from "./setup-ux.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import { readSyncState } from "./sync-state.js";
 import { hookTrustKey, readTrustFile } from "./trust.js";
-import { TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
+import { GLOBAL_TUI_SIDEBAR_PLUGIN_PATH, TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 import { OGB_VERSION, type Inventory, type ResourceStatus, type StatusCounts } from "./types.js";
 
 export interface DoctorOptions {
@@ -386,6 +386,10 @@ function globalTuiConfigPath(homeDir: string): string {
   return files.find((filePath) => fs.existsSync(filePath)) ?? files[0];
 }
 
+function globalTuiPluginPath(homeDir: string): string {
+  return path.join(globalOpenCodeConfigDir({ homeDir }), ...GLOBAL_TUI_SIDEBAR_PLUGIN_PATH.split("/"));
+}
+
 function configReferencesInstruction(configPath: string, instructionPath: string): boolean {
   const config = readJsonc(configPath);
   const instructions = Array.isArray(config?.instructions) ? config.instructions : [];
@@ -539,6 +543,12 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   if (configHasPluginSpec(globalTuiConfig, TUI_SIDEBAR_PLUGIN_SPEC)) {
     const missingTuiRuntime = missingGlobalTuiRuntimeDependencies(globalOpenCodeConfigDir({ homeDir: paths.homeDir }));
     if (missingTuiRuntime.length > 0) warnings.push(`Global OGB TUI runtime dependencies are missing: ${missingTuiRuntime.join(", ")}. Run ogb setup-ux.`);
+    const globalTuiPlugin = globalTuiPluginPath(paths.homeDir);
+    if (!fs.existsSync(globalTuiPlugin)) {
+      warnings.push("Global OGB TUI sidebar plugin is missing. Run ogb install --force and restart OpenCode.");
+    } else if (sha256File(globalTuiPlugin) !== sha256Text(TUI_SIDEBAR_PLUGIN_SOURCE)) {
+      warnings.push("Global OGB TUI sidebar plugin is stale. Run ogb install --force and restart OpenCode.");
+    }
   }
   if (startupSync.lastState === "fail") warnings.push("Last OpenCode startup sync failed. Run ogb dashboard for details.");
   if (startupSync.lastState === "stale") warnings.push("OpenCode startup sync ficou preso em running, mas o processo nao existe mais. Reinicie o OpenCode para carregar o plugin novo.");

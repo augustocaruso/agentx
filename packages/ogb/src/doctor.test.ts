@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { runDoctor } from "./doctor.js";
 import { syncToOpenCode } from "./sync.js";
-import { TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
+import { TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 
 function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-doctor-"));
@@ -168,6 +168,25 @@ test("runDoctor warns when global TUI plugin runtime dependencies are missing", 
     warning.includes("Global OGB TUI runtime dependencies are missing")
     && warning.includes("@opentui/solid@0.2.2")
     && warning.includes("solid-js@1.9.12")
+  ), true);
+});
+
+test("runDoctor warns when the global TUI sidebar plugin is stale", () => {
+  const homeDir = tempRoot();
+  const configDir = path.join(homeDir, ".config", "opencode");
+  const pluginPath = path.join(configDir, "tui-plugins", "ogb-sidebar.js");
+  fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
+  fs.writeFileSync(path.join(configDir, "tui.json"), JSON.stringify({
+    plugin: [TUI_SIDEBAR_PLUGIN_SPEC],
+  }, null, 2), "utf8");
+  fs.writeFileSync(pluginPath, `${TUI_SIDEBAR_PLUGIN_SOURCE}\n// old local copy\n`, "utf8");
+
+  const report = runDoctor({ projectRoot: homeDir, homeDir, silent: true });
+
+  assert.equal(report.warnings.some((warning) =>
+    warning.includes("Global OGB TUI sidebar plugin is stale")
+    && warning.includes("ogb install --force")
+    && warning.includes("restart OpenCode")
   ), true);
 });
 
