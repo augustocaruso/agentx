@@ -132,7 +132,10 @@ export function runInstall(options: InstallOptions = {}): InstallReport {
           label: "Apply the OpenCode profile.",
           detail: options.resetGlobal ? "Overwrites global config from OGB defaults." : "Merges managed global settings and writes the project/global profile.",
           status,
-          message: `${changedWrites} write(s), ${activeCommands} command(s).`,
+          message: [
+            `${changedWrites} write(s), ${activeCommands} command(s).`,
+            ...report.notices,
+          ].join(" "),
         });
         const openCodeCommand = report.commands.find((command) => command.command.some((part) => /opencode-ai|opencode(?:\.cmd)?$/i.test(part)));
         emitRitualProgress(options.onProgress, {
@@ -283,6 +286,7 @@ export function printInstallReport(report: InstallReport, json = false): void {
     const writes = report.setup.writes.filter((write) => write.status !== "unchanged").length;
     const commands = report.setup.commands.filter((command) => command.status !== "skipped").length;
     console.log(`Global UX: ${writes} changed/previewed write(s), ${commands} command(s)`);
+    for (const notice of report.setup.notices) console.log(`Notice: ${notice}`);
   } else {
     console.log("Global UX: skipped");
   }

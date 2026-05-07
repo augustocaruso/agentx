@@ -7,6 +7,7 @@ import { runInstall } from "./install.js";
 import { enableMaintainerRole } from "./local-role.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
 import { readStateRecord } from "./state-store.js";
+import { TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar.js";
 
 function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-install-"));
@@ -63,6 +64,34 @@ test("runInstall emits top-level ritual progress", () => {
     "check",
   ]);
   assert.equal(events.find((event) => event.stepId === "check")?.status, "skipped");
+});
+
+test("runInstall repairs stale global TUI sidebar and reports restart notice", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const projectRoot = path.join(root, "project");
+  const pluginPath = path.join(homeDir, ".config", "opencode", "tui-plugins", "ogb-sidebar.js");
+  const events: RitualProgressEvent[] = [];
+  fs.mkdirSync(projectRoot, { recursive: true });
+  fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
+  fs.writeFileSync(pluginPath, "old sidebar plugin\n", "utf8");
+
+  const report = runInstall({
+    projectRoot,
+    homeDir,
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+    check: false,
+    onProgress: (event) => events.push(event),
+  });
+
+  assert.equal(fs.readFileSync(pluginPath, "utf8"), TUI_SIDEBAR_PLUGIN_SOURCE);
+  assert.equal(report.setup?.notices.includes("Global TUI sidebar updated; restart OpenCode to load it."), true);
+  assert.equal(events.some((event) =>
+    event.stepId === "profile"
+    && event.message?.includes("Global TUI sidebar updated; restart OpenCode to load it.")
+  ), true);
 });
 
 test("runInstall applies the current install flow and finishes with check", () => {

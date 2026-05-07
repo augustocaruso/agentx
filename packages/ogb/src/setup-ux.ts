@@ -85,6 +85,7 @@ export interface SetupUxReport {
   ogbConfigPath?: string;
   writes: SetupUxWrite[];
   commands: SetupUxCommand[];
+  notices: string[];
   warnings: string[];
 }
 
@@ -525,6 +526,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   });
   const writes: SetupUxWrite[] = [];
   const commands: SetupUxCommand[] = [];
+  const notices: string[] = [];
   const warnings: string[] = [];
   const currentConfig = readJsonc(configPath);
   const legacyConfig = legacyConfigPath && adapter.resolvePath(legacyConfigPath) !== adapter.resolvePath(configPath)
@@ -605,6 +607,11 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     configDefaults: UX_PROFILE_PRESET.tuiConfig,
   });
   writes.push(globalTui.plugin, globalTui.config);
+  if (globalTui.plugin.status === "updated") {
+    notices.push("Global TUI sidebar updated; restart OpenCode to load it.");
+  } else if (globalTui.plugin.status === "created") {
+    notices.push("Global TUI sidebar installed; restart OpenCode to load it.");
+  }
   warnings.push(...globalTui.warnings);
   writes.push(profileWriter.writeText({
     filePath: globalStartupConfigPath,
@@ -713,6 +720,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     ogbConfigPath,
     writes,
     commands,
+    notices: [...new Set(notices)],
     warnings: [...new Set(warnings)],
   };
 }
@@ -728,6 +736,10 @@ export function printSetupUxReport(report: SetupUxReport, json = false): void {
   if (report.projectRoot) console.log(`Project: ${report.projectRoot}`);
   for (const write of report.writes) console.log(`${write.status}: ${write.path}${write.backup ? ` (backup: ${write.backup})` : ""}`);
   for (const command of report.commands) console.log(`${command.status}: ${command.command.join(" ")}${command.message ? ` - ${command.message.split("\n")[0]}` : ""}`);
+  if (report.notices.length > 0) {
+    console.log("Notices:");
+    for (const notice of report.notices) console.log(`- ${notice}`);
+  }
   if (report.warnings.length > 0) {
     console.log("Warnings:");
     for (const warning of report.warnings) console.log(`- ${warning}`);
