@@ -12,6 +12,7 @@ import {
   previewTelemetryEnvelope,
   recordWorkflowRun,
   redactSnippet,
+  safeRecordWorkflowRun,
   sendTelemetry,
   telemetryPaths,
   telemetryStatus,
@@ -322,6 +323,36 @@ test("send uses Bearer token and marks runs as sent", async () => {
     assert.match(seen.body ?? "", /"workflow":"doctor"|\"workflow\": \"doctor\"/);
     assert.equal(telemetryStatus({ homeDir }).outboxCount, 0);
     assert.equal(telemetryStatus({ homeDir }).sentRunCount, 1);
+  });
+});
+
+test("auto-send is suppressed in Codex and test automation contexts", async () => {
+  await withEnv({ CODEX_CI: "1", OGB_TELEMETRY_DEFAULTS_DISABLED: "1", OGB_TELEMETRY_CONFIG: undefined }, async () => {
+    const homeDir = tempHome();
+    let calls = 0;
+    enableTelemetry({
+      homeDir,
+      endpointUrl: "https://telemetry.example.test/v1/telemetry/workflow-runs",
+      authToken: "bearer-secret",
+    });
+
+    await safeRecordWorkflowRun({
+      workflow: "doctor",
+      source: "cli",
+      status: "completed_with_warnings",
+      payload: { warnings: ["Hook needs review: BeforeTool"] },
+    }, {
+      homeDir,
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: true, status: 202, text: async () => "" };
+      },
+    });
+
+    assert.equal(calls, 0);
+    assert.equal(telemetryStatus({ homeDir }).runCount, 1);
+    assert.equal(telemetryStatus({ homeDir }).outboxCount, 0);
+    assert.equal(telemetryStatus({ homeDir }).sentRunCount, 0);
   });
 });
 

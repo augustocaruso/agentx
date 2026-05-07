@@ -359,6 +359,21 @@ function ready(config: TelemetryConfig): boolean {
   return Boolean(config.enabled && config.endpointUrl && config.authToken && config.installId && process.env.OGB_TELEMETRY_DISABLED !== "1");
 }
 
+function envFlag(name: string): boolean {
+  const value = process.env[name];
+  return Boolean(value && value !== "0" && value.toLowerCase() !== "false");
+}
+
+function shouldSuppressAutoSend(record: WorkflowRunRecord): boolean {
+  if (envFlag("OGB_TELEMETRY_AUTO_SEND_DISABLED")) return true;
+  if (envFlag("OGB_TELEMETRY_AUTO_SEND_FORCE")) return false;
+  if (record.source === "test") return true;
+  if (envFlag("CODEX_CI") || envFlag("CODEX_SHELL")) return true;
+  if (envFlag("CI") || process.env.NODE_ENV === "test") return true;
+  if (/^test(:|$)|(^|:)test(:|$)/.test(process.env.npm_lifecycle_event ?? "")) return true;
+  return false;
+}
+
 export function enableTelemetry(options: {
   endpointUrl: string;
   authToken: string;
@@ -1069,6 +1084,7 @@ async function safeAutoSendRecord(record: WorkflowRunRecord, options: TelemetryO
   try {
     const config = readTelemetryConfig(options);
     if (!ready(config)) return;
+    if (shouldSuppressAutoSend(record)) return;
     if (!isActionableTelemetryRecord(record)) return;
     const envelope = buildTelemetryEnvelope([record], {
       ...options,

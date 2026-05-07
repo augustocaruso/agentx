@@ -7,6 +7,7 @@
 - Faz os scripts de plataforma delegarem o ritual ao CLI comum, reduzindo duplicacao entre install, update, check e reset.
 - Adiciona UI Ink responsiva para rituais e `ogb help`, com lista interativa, selecao por Enter e execucao do comando selecionado.
 - Amplia a cobertura de testes para contratos do planner, runner, state store, adapters, scripts Mac/Windows, dashboard e help interativo.
+- Suprime autoenvio de telemetria em contextos Codex, CI e testes, mantendo os registros locais para diagnostico.
 
 ## 0.0.61 - Limpa restart do self-update latest
 
