@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnCommandSync } from "./process.js";
 
+const DEFAULT_EXTENSION_UPDATE_TIMEOUT_MS = 120_000;
+const AUTO_CONSENT_INPUT = `${"y\n".repeat(25)}`;
+
 export interface ExtensionInstallOptions {
   source: string;
   ref?: string;
@@ -17,6 +20,9 @@ export interface ExtensionUpdateOptions {
   all?: boolean;
   dryRun?: boolean;
   geminiBin?: string;
+  autoConsent?: boolean;
+  timeoutMs?: number;
+  cwd?: string;
 }
 
 export interface ExtensionSourceInspection {
@@ -34,6 +40,12 @@ export interface ExtensionCommandReport {
   status: "applied" | "preview" | "blocked" | "error";
   command: string[];
   inspection?: ExtensionSourceInspection;
+  exitCode?: number | null;
+  signal?: NodeJS.Signals | null;
+  stdoutTail?: string;
+  stderrTail?: string;
+  error?: string;
+  timedOut?: boolean;
 }
 
 function isRemoteSource(source: string): boolean {
@@ -151,6 +163,37 @@ function runGemini(geminiBin: string, args: string[], cwd = process.cwd()): bool
   return !result.error && result.status === 0;
 }
 
+function tail(value: string | Buffer | undefined, maxChars = 2000): string | undefined {
+  const text = String(value ?? "").trim();
+  if (!text) return undefined;
+  return text.length > maxChars ? text.slice(-maxChars) : text;
+}
+
+function runGeminiCaptured(geminiBin: string, args: string[], options: Pick<ExtensionUpdateOptions, "autoConsent" | "timeoutMs" | "cwd">): ExtensionCommandReport {
+  const result = spawnCommandSync(geminiBin, args, {
+    cwd: options.cwd ?? process.cwd(),
+    env: process.env,
+    encoding: "utf8",
+    input: options.autoConsent ? AUTO_CONSENT_INPUT : undefined,
+    timeout: Math.max(1, Number(options.timeoutMs ?? DEFAULT_EXTENSION_UPDATE_TIMEOUT_MS)),
+    maxBuffer: 1024 * 1024,
+  });
+  const errorCode = typeof (result.error as NodeJS.ErrnoException | undefined)?.code === "string"
+    ? (result.error as NodeJS.ErrnoException).code
+    : undefined;
+  const timedOut = errorCode === "ETIMEDOUT";
+  return {
+    status: !result.error && result.status === 0 ? "applied" : "error",
+    command: [geminiBin, ...args],
+    exitCode: result.status,
+    signal: result.signal,
+    stdoutTail: tail(result.stdout),
+    stderrTail: tail(result.stderr),
+    error: result.error ? result.error.message : undefined,
+    timedOut,
+  };
+}
+
 export function installGeminiExtension(options: ExtensionInstallOptions): ExtensionCommandReport {
   const geminiBin = options.geminiBin ?? process.env.GEMINI_BIN ?? "gemini";
   const inspection = inspectExtensionSource(options.source);
@@ -180,6 +223,7 @@ export function updateGeminiExtensions(options: ExtensionUpdateOptions = {}): Ex
   const command = [geminiBin, ...buildUpdateExtensionsArgs(options)];
 
   if (options.dryRun) return { status: "preview", command };
+  if (options.autoConsent) return runGeminiCaptured(geminiBin, command.slice(1), options);
   return {
     status: runGemini(geminiBin, command.slice(1)) ? "applied" : "error",
     command,

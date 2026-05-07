@@ -130,7 +130,7 @@ Update depois que o `ogb` ja esta instalado:
 ```bash
 ogb --project "$PWD" update
 ogb --project "$PWD" update --dry-run
-ogb --project "$PWD" update --release v0.1.1
+ogb --project "$PWD" update --release v0.1.2
 ogb --project "$PWD" check-update
 ogb --project "$PWD" auto-update
 ```
@@ -195,7 +195,8 @@ ogb cleanup-home --dry-run
 O Rulesync entra como auxiliar opcional no `ogb import` e no `ogb sync`: o bridge roda a conversão em staging temporário, promove apenas arquivos seguros/gerenciados e mantém `GEMINI.md` como fonte de verdade.
 
 Use `ogb check` quando quiser o caminho verde completo: ele roda setup local,
-sync, doctor, validação, segurança e dashboard, e grava
+atualiza Gemini Extensions antes do sync, sincroniza, roda doctor, validação,
+segurança e dashboard, e grava
 `.opencode/generated/ogb-pass.json`. Se houver hooks Gemini revisados, rode
 `ogb check --accept-hooks`; isso registra o hash atual, sem executar hook, e o
 doctor volta a avisar se o arquivo mudar depois.
@@ -255,7 +256,7 @@ Extensoes Gemini podem ser instaladas ou atualizadas pelo wrapper do bridge:
 
 ```bash
 ogb install-extension https://github.com/usuario/extensao.git --ref gemini-cli-extension
-ogb update-extensions
+ogb update-extensions --auto-consent
 ```
 
 Comandos, skills, MCPs, `GEMINI.md` e subagentes das extensoes sao projetados

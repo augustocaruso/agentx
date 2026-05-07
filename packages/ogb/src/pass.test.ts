@@ -12,6 +12,13 @@ function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-pass-"));
 }
 
+function writeFakeGemini(root: string, content: string): string {
+  const filePath = path.join(root, "fake-gemini.js");
+  fs.writeFileSync(filePath, `#!/usr/bin/env node\n${content}`, "utf8");
+  fs.chmodSync(filePath, 0o755);
+  return filePath;
+}
+
 function writeHookSettings(projectRoot: string): void {
   fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
@@ -30,6 +37,7 @@ test("runPass can accept reviewed Gemini hooks and produce a clean doctor", () =
     projectRoot,
     homeDir: projectRoot,
     acceptHooks: true,
+    skipExtensionUpdate: true,
     skipValidation: true,
     skipSecurity: true,
     skipDashboard: true,
@@ -58,7 +66,7 @@ test("runPass emits real progress events in ritual order", () => {
   });
 
   const runningOrder = events.filter((event) => event.status === "running").map((event) => event.stepId);
-  assert.deepEqual(runningOrder, ["setup", "sync", "doctor", "validate", "security", "dashboard"]);
+  assert.deepEqual(runningOrder, ["setup", "extension-update", "sync", "doctor", "validate", "security", "dashboard"]);
   assert.equal(events.at(-1)?.stepId, "dashboard");
   assert.notEqual(events.at(-1)?.status, "running");
   process.exitCode = oldExitCode;
@@ -120,6 +128,7 @@ test("trusted Gemini hooks require review again after settings change", () => {
     projectRoot,
     homeDir: projectRoot,
     acceptHooks: true,
+    skipExtensionUpdate: true,
     skipValidation: true,
     skipSecurity: true,
     skipDashboard: true,
@@ -135,6 +144,44 @@ test("trusted Gemini hooks require review again after settings change", () => {
 
   assert.equal(doctor.warnings.some((warning) => warning.startsWith("Hook needs review:")), true);
   process.exitCode = oldExitCode;
+});
+
+test("runPass treats Gemini extension update failure as warning and still syncs", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+  const oldGeminiBin = process.env.GEMINI_BIN;
+  const events: RitualProgressEvent[] = [];
+  process.env.GEMINI_BIN = writeFakeGemini(projectRoot, `
+console.error("extension update failed");
+process.exit(9);
+`);
+
+  try {
+    const report = runPass({
+      projectRoot,
+      homeDir: projectRoot,
+      skipSetup: true,
+      skipValidation: true,
+      skipSecurity: true,
+      skipDashboard: true,
+      silent: true,
+      setExitCode: false,
+      onProgress: (event) => events.push(event),
+    });
+
+    assert.equal(report.outcome, "warn");
+    assert.deepEqual(report.automated.slice(0, 3), ["update-extensions", "sync", "doctor"]);
+    assert.equal(report.steps[0]?.name, "update-extensions");
+    assert.equal(report.steps[0]?.status, "warn");
+    assert.equal(report.steps[1]?.name, "sync");
+    assert.equal(report.blockers.some((item) => item.source === "extension-update" && item.severity === "warn"), true);
+    assert.equal(events.some((event) => event.stepId === "extension-update" && event.status === "warn"), true);
+    assert.equal(events.some((event) => event.stepId === "sync" && event.status === "running"), true);
+  } finally {
+    if (oldGeminiBin === undefined) delete process.env.GEMINI_BIN;
+    else process.env.GEMINI_BIN = oldGeminiBin;
+    process.exitCode = oldExitCode;
+  }
 });
 
 test("formatPassReport prints a compact human report", () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 - Gemini auth resiliente e update de extensoes
+
+- Faz `ogb check` atualizar Gemini Extensions antes do sync, com `--no-extension-update` para pular a etapa quando necessario.
+- Adiciona `ogb update-extensions --auto-consent`/`--yes`, captura stderr/stdout e transforma falhas do Gemini CLI em diagnostico acionavel.
+- Melhora o fallback de quota Gemini para tentar clientes OAuth Gemini e Antigravity, ignorar project IDs corrompidos e mostrar erros reais do Google OAuth.
+- Mantem OpenAI/Claude/Gemini na UI de limites com mensagens mais claras quando OpenUsage esta offline ou o token precisa ser reautenticado.
+
 ## 0.1.1 - Progresso publico e perfil seguro
 
 - Estabiliza `--progress-json` como contrato publico NDJSON para `install`, `update`, `check`, `reset` e aliases legados.

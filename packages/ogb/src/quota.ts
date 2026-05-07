@@ -77,6 +77,12 @@ interface RefreshParts {
   managedProjectId?: string;
 }
 
+interface OAuthClient {
+  id: string;
+  secret: string;
+  source: string;
+}
+
 interface RetrieveUserQuotaBucket {
   remainingAmount?: string;
   remainingFraction?: number;
@@ -156,14 +162,14 @@ function extractExportedString(text: string | undefined, name: string): string |
   return match?.[1];
 }
 
-function geminiAuthPackageDirs(homeDir: string): string[] {
+function pluginPackageDirs(homeDir: string, packageName: string): string[] {
   const packagesDir = path.join(homeDir, ".cache", "opencode", "packages");
   const dirs = new Set<string>([
-    path.join(packagesDir, "opencode-gemini-auth@latest"),
+    path.join(packagesDir, `${packageName}@latest`),
   ]);
   try {
     for (const entry of fs.readdirSync(packagesDir, { withFileTypes: true })) {
-      if (entry.isDirectory() && entry.name.startsWith("opencode-gemini-auth@")) {
+      if (entry.isDirectory() && entry.name.startsWith(`${packageName}@`)) {
         dirs.add(path.join(packagesDir, entry.name));
       }
     }
@@ -173,62 +179,165 @@ function geminiAuthPackageDirs(homeDir: string): string[] {
   return [...dirs];
 }
 
-function geminiOAuthClientFromPlugin(homeDir: string): { id: string; secret: string } | undefined {
+function geminiAuthPackageDirs(homeDir: string): string[] {
+  return pluginPackageDirs(homeDir, "opencode-gemini-auth");
+}
+
+function antigravityAuthPackageDirs(homeDir: string): string[] {
+  return pluginPackageDirs(homeDir, "opencode-google-antigravity-auth");
+}
+
+function clientFromConstantsFile(filePath: string, idName: string, secretName: string): OAuthClient | undefined {
+  const text = readText(filePath);
+  const id = extractExportedString(text, idName);
+  const secret = extractExportedString(text, secretName);
+  if (!id || !secret) return undefined;
+  return { id, secret, source: filePath };
+}
+
+function geminiOAuthClientsFromPlugin(homeDir: string): OAuthClient[] {
   const candidates = geminiAuthPackageDirs(homeDir).flatMap((dir) => [
     path.join(dir, "node_modules", "opencode-gemini-auth", "src", "constants.ts"),
     path.join(dir, "node_modules", "opencode-gemini-auth", "dist", "constants.js"),
   ]);
-  for (const filePath of candidates) {
-    const text = readText(filePath);
-    const id = extractExportedString(text, "GEMINI_CLIENT_ID");
-    const secret = extractExportedString(text, "GEMINI_CLIENT_SECRET");
-    if (id && secret) return { id, secret };
-  }
-  return undefined;
+  return candidates
+    .map((filePath) => clientFromConstantsFile(filePath, "GEMINI_CLIENT_ID", "GEMINI_CLIENT_SECRET"))
+    .filter((client): client is OAuthClient => Boolean(client));
 }
 
-function geminiOAuthClient(homeDir: string): { id: string; secret: string } | undefined {
+function antigravityOAuthClientsFromPlugin(homeDir: string): OAuthClient[] {
+  const candidates = antigravityAuthPackageDirs(homeDir).flatMap((dir) => [
+    path.join(dir, "node_modules", "opencode-google-antigravity-auth", "src", "constants.ts"),
+    path.join(dir, "node_modules", "opencode-google-antigravity-auth", "dist", "constants.js"),
+  ]);
+  return candidates
+    .map((filePath) => clientFromConstantsFile(filePath, "ANTIGRAVITY_CLIENT_ID", "ANTIGRAVITY_CLIENT_SECRET"))
+    .filter((client): client is OAuthClient => Boolean(client));
+}
+
+function uniqueOAuthClients(clients: OAuthClient[]): OAuthClient[] {
+  const seen = new Set<string>();
+  const unique: OAuthClient[] = [];
+  for (const client of clients) {
+    const key = `${client.id}\0${client.secret}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(client);
+  }
+  return unique;
+}
+
+function geminiOAuthClients(homeDir: string): OAuthClient[] {
+  const clients: OAuthClient[] = [];
   const id = process.env.OGB_GEMINI_CLIENT_ID || process.env.GEMINI_OAUTH_CLIENT_ID;
   const secret = process.env.OGB_GEMINI_CLIENT_SECRET || process.env.GEMINI_OAUTH_CLIENT_SECRET;
-  if (id && secret) return { id, secret };
-  return geminiOAuthClientFromPlugin(homeDir);
+  if (id && secret) clients.push({ id, secret, source: "environment" });
+  clients.push(...geminiOAuthClientsFromPlugin(homeDir));
+  clients.push(...antigravityOAuthClientsFromPlugin(homeDir));
+  return uniqueOAuthClients(clients);
 }
 
-async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promise<OAuthAuthRecord | undefined> {
-  const parts = parseRefreshParts(auth.refresh);
-  const client = geminiOAuthClient(homeDir);
-  if (!parts.refreshToken) return undefined;
-  if (!client) return undefined;
+function parseOAuthErrorPayload(text: string | undefined): { code?: string; description?: string } {
+  if (!text) return {};
+  try {
+    const payload = JSON.parse(text) as {
+      error?: string | { code?: string; status?: string; message?: string };
+      error_description?: string;
+    };
+    if (!payload || typeof payload !== "object") return { description: text };
+    if (typeof payload.error === "string") {
+      return { code: payload.error, description: payload.error_description };
+    }
+    if (payload.error && typeof payload.error === "object") {
+      return {
+        code: payload.error.status ?? payload.error.code,
+        description: payload.error_description ?? payload.error.message,
+      };
+    }
+    return { description: payload.error_description };
+  } catch {
+    return { description: text };
+  }
+}
 
+async function responseErrorMessage(prefix: string, response: Response): Promise<string> {
+  let text: string | undefined;
+  try {
+    text = await response.clone().text();
+  } catch {
+    text = undefined;
+  }
+  const parsed = parseOAuthErrorPayload(text);
+  const details = [parsed.code, parsed.description ?? text].filter(Boolean).join(": ");
+  return `${prefix} HTTP ${response.status}${details ? ` - ${details}` : ""}`;
+}
+
+function isLikelyGoogleProjectId(value: string | undefined): value is string {
+  if (!value) return false;
+  return /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/.test(value);
+}
+
+function usableProjectId(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return isLikelyGoogleProjectId(trimmed) ? trimmed : undefined;
+}
+
+async function requestAccessToken(refreshToken: string, client: OAuthClient): Promise<{ access_token?: string; expires_in?: number; refresh_token?: string }> {
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
-      refresh_token: parts.refreshToken,
+      refresh_token: refreshToken,
       client_id: client.id,
       client_secret: client.secret,
     }),
   });
 
-  if (!response.ok) return undefined;
-  const payload = await response.json() as { access_token?: string; expires_in?: number; refresh_token?: string };
-  if (!payload.access_token) return undefined;
+  if (!response.ok) throw new Error(await responseErrorMessage(`Google OAuth refresh via ${client.source}`, response));
+  return await response.json() as { access_token?: string; expires_in?: number; refresh_token?: string };
+}
 
-  const authFile = readJson(authPath(homeDir)) as OpenCodeAuthFile | undefined;
-  const nextParts = {
-    refreshToken: payload.refresh_token ?? parts.refreshToken,
-    projectId: parts.projectId,
-    managedProjectId: parts.managedProjectId,
+async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promise<{ auth?: OAuthAuthRecord; message?: string }> {
+  const parts = parseRefreshParts(auth.refresh);
+  if (!parts.refreshToken) return { message: "Google OAuth sem refresh_token salvo. Refaca opencode auth login." };
+
+  const clients = geminiOAuthClients(homeDir);
+  if (clients.length === 0) {
+    return { message: "Cliente OAuth Google indisponivel nos plugins do OpenCode. Reinstale ou reautentique o provider Google." };
+  }
+
+  const errors: string[] = [];
+  for (const client of clients) {
+    try {
+      const payload = await requestAccessToken(parts.refreshToken, client);
+      if (!payload.access_token) {
+        errors.push(`Google OAuth refresh via ${client.source} returned no access_token`);
+        continue;
+      }
+
+      const authFile = readJson(authPath(homeDir)) as OpenCodeAuthFile | undefined;
+      const nextParts = {
+        refreshToken: payload.refresh_token ?? parts.refreshToken,
+        projectId: parts.projectId,
+        managedProjectId: parts.managedProjectId,
+      };
+      const updated: OAuthAuthRecord = {
+        ...auth,
+        access: payload.access_token,
+        expires: Date.now() + Math.max(1, Number(payload.expires_in ?? 3600)) * 1000,
+        refresh: [nextParts.refreshToken, nextParts.projectId ?? "", nextParts.managedProjectId ?? ""].join("|"),
+      };
+      writeJson(authPath(homeDir), { ...(authFile ?? {}), google: updated });
+      return { auth: updated };
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return {
+    message: `Google OAuth refresh falhou: ${errors.join("; ")}. Refaca opencode auth login para gerar um refresh token novo.`,
   };
-  const updated: OAuthAuthRecord = {
-    ...auth,
-    access: payload.access_token,
-    expires: Date.now() + Math.max(1, Number(payload.expires_in ?? 3600)) * 1000,
-    refresh: [nextParts.refreshToken, nextParts.projectId ?? "", nextParts.managedProjectId ?? ""].join("|"),
-  };
-  writeJson(authPath(homeDir), { ...(authFile ?? {}), google: updated });
-  return updated;
 }
 
 async function resolveAuth(options: { homeDir: string }): Promise<{ accessToken?: string; projectId?: string; message?: string }> {
@@ -239,11 +348,14 @@ async function resolveAuth(options: { homeDir: string }): Promise<{ accessToken?
   }
 
   const parts = parseRefreshParts(auth.refresh);
-  const projectId = parts.managedProjectId ?? parts.projectId ?? process.env.OPENCODE_GEMINI_PROJECT_ID ?? process.env.GOOGLE_CLOUD_PROJECT;
-  const refreshed = accessTokenExpired(auth) ? await refreshAccessToken(auth, options.homeDir) : auth;
-  const accessToken = refreshed?.access;
+  const projectId = usableProjectId(parts.managedProjectId)
+    ?? usableProjectId(parts.projectId)
+    ?? usableProjectId(process.env.OPENCODE_GEMINI_PROJECT_ID)
+    ?? usableProjectId(process.env.GOOGLE_CLOUD_PROJECT);
+  const refreshed = accessTokenExpired(auth) ? await refreshAccessToken(auth, options.homeDir) : { auth };
+  const accessToken = refreshed.auth?.access;
   if (!accessToken) {
-    return { projectId, message: "Token Google indisponivel. Rode /gquota ou refaca opencode auth login." };
+    return { projectId, message: refreshed.message ?? "Token Google indisponivel. Rode /gquota ou refaca opencode auth login." };
   }
 
   return { accessToken, projectId };
@@ -260,7 +372,7 @@ async function retrieveUserQuota(accessToken: string, projectId: string): Promis
     },
     body: JSON.stringify({ project: projectId }),
   });
-  if (!response.ok) return undefined;
+  if (!response.ok) throw new Error(await responseErrorMessage("Gemini Code Assist quota", response));
   return await response.json() as RetrieveUserQuotaResponse;
 }
 

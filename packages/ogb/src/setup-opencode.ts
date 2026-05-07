@@ -72,7 +72,7 @@ const OGB_DIRECT_COMMANDS = {
   },
   "update-extensions": {
     description: "Atualiza Gemini Extensions e reprojeta OpenCode",
-    template: "Roda dry-run por padrao. Use --apply para atualizar de verdade.",
+    template: "Roda dry-run por padrao. Use --apply --auto-consent para atualizar sem prompts.",
   },
   "upgrade-ogb": {
     description: "Atualiza o OpenCode Gemini Bridge pela release oficial",

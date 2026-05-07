@@ -173,12 +173,15 @@ Roda o caminho verde completo e escreve `.opencode/generated/ogb-pass.json`.
 ogb check
 ogb check --accept-hooks
 ogb check --force
+ogb check --no-extension-update
 ogb check --json
 ogb check --progress-json
 ```
 
-O comando executa setup local, sync, doctor, validation, security-check e
-dashboard. `--accept-hooks` registra por hash os hooks Gemini revisados; se o
+O comando executa setup local, update de Gemini Extensions, sync, doctor,
+validation, security-check e dashboard. O update de extensões roda antes do
+sync; se falhar, vira warning e o sync continua. `--no-extension-update` pula
+essa etapa. `--accept-hooks` registra por hash os hooks Gemini revisados; se o
 arquivo mudar, o doctor volta a pedir revisão.
 
 Para automações que precisam de progresso em tempo real, `--progress-json`
@@ -709,6 +712,7 @@ Status: implementado no CLI.
 ```bash
 ogb update-extensions
 ogb update-extensions --dry-run
+ogb update-extensions --auto-consent
 ```
 
 Fluxo:

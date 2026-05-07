@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runDashboard, type DashboardReport } from "./dashboard.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
+import { updateGeminiExtensions, type ExtensionCommandReport } from "./extensions.js";
 import { sha256File } from "./file-hash.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { buildInventory } from "./inventory.js";
@@ -26,6 +27,7 @@ export interface PassOptions {
   windows?: boolean;
   skipSetup?: boolean;
   skipSync?: boolean;
+  skipExtensionUpdate?: boolean;
   skipValidation?: boolean;
   skipSecurity?: boolean;
   skipDashboard?: boolean;
@@ -37,7 +39,7 @@ export interface PassOptions {
 
 export interface PassBlocker {
   severity: "warn" | "fail";
-  source: "doctor" | "validation" | "security" | "setup" | "sync" | "dashboard";
+  source: "doctor" | "validation" | "security" | "setup" | "extension-update" | "sync" | "dashboard";
   message: string;
   action: string;
 }
@@ -134,6 +136,17 @@ function firstSecurityIssue(report: SecurityReport | undefined, status: Security
 function firstDashboardIssue(report: DashboardReport | undefined, severity: "fail" | "warn"): string | undefined {
   const items = severity === "fail" ? report?.errors : report?.warnings;
   return compactLine(items?.find((item) => item.trim().length > 0), 240);
+}
+
+function extensionUpdateMessage(report: ExtensionCommandReport): string {
+  if (report.status === "preview") return "Would run Gemini extension update.";
+  if (report.status === "applied") return report.stdoutTail ?? "Gemini extensions are up to date.";
+  const detail = report.stderrTail ?? report.stdoutTail ?? report.error ?? `exit code ${String(report.exitCode ?? "unknown")}`;
+  return report.timedOut ? `Gemini extension update timed out: ${detail}` : `Gemini extension update failed: ${detail}`;
+}
+
+function extensionUpdateAction(): string {
+  return "Rode `ogb update-extensions --auto-consent` para ver o erro do Gemini CLI; depois rode `ogb check` novamente.";
 }
 
 function validationAction(options: PassOptions): string {
@@ -304,6 +317,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   const automated: string[] = [];
   const blockers: PassBlocker[] = [];
   let setup: SetupOpenCodeReport | undefined;
+  let extensionUpdate: ExtensionCommandReport | undefined;
   let sync: SyncReport | undefined;
   let validation: ValidationReport | undefined;
   let security: SecurityReport | undefined;
@@ -332,6 +346,26 @@ export function runPass(options: PassOptions = {}): PassReport {
     );
     automated.push("setup-opencode");
     for (const warning of setup.warnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
+  }
+
+  if (!options.skipSync && !options.skipExtensionUpdate) {
+    emitCheckProgress(options.onProgress, "extensionUpdate", "running");
+    extensionUpdate = updateGeminiExtensions({
+      all: true,
+      dryRun: options.dryRun,
+      autoConsent: true,
+    });
+    const message = extensionUpdateMessage(extensionUpdate);
+    emitCheckProgress(
+      options.onProgress,
+      "extensionUpdate",
+      extensionUpdate.status === "error" ? "warn" : progressStatusFromOutcome(extensionUpdate.status),
+      message,
+    );
+    automated.push("update-extensions");
+    if (extensionUpdate.status === "error") {
+      blockers.push(blocker("extension-update", "warn", message, extensionUpdateAction()));
+    }
   }
 
   if (!options.skipSync) {
@@ -480,6 +514,13 @@ export function runPass(options: PassOptions = {}): PassReport {
       name: "setup-opencode",
       status: setup.warnings.length > 0 ? "warn" : "pass",
       detail: setup.warnings.length > 0 ? `${setup.warnings.length} warning(s)` : undefined,
+    });
+  }
+  if (extensionUpdate) {
+    steps.push({
+      name: "update-extensions",
+      status: extensionUpdate.status === "error" ? "warn" : "pass",
+      detail: extensionUpdate.status === "preview" ? "preview" : extensionUpdate.status === "error" ? "warning" : undefined,
     });
   }
   if (sync) {

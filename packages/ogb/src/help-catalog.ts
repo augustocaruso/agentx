@@ -30,7 +30,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     summary: "Update OGB from the release pack and run the post-update ritual.",
     description: "Downloads the selected release, runs the platform bootstrap installer, and refreshes the bridge check afterward.",
     usage: "ogb update [--release <tag>] [--dry-run] [--plain] [--progress-json]",
-    examples: ["ogb update", "ogb update --release v0.1.1", "ogb update --dry-run", "ogb update --dry-run --progress-json"],
+    examples: ["ogb update", "ogb update --release v0.1.2", "ogb update --dry-run", "ogb update --dry-run --progress-json"],
   },
   {
     name: "check",
@@ -173,9 +173,9 @@ export const HELP_COMMANDS: HelpCommand[] = [
     name: "update-extensions",
     category: "Extensions",
     summary: "Update Gemini CLI extensions, then sync and doctor.",
-    description: "Updates one or all Gemini CLI extensions and refreshes the OpenCode projection afterward.",
-    usage: "ogb update-extensions [name] [--dry-run]",
-    examples: ["ogb update-extensions", "ogb update-extensions gemini-md-export"],
+    description: "Updates one or all Gemini CLI extensions and refreshes the OpenCode projection afterward. Use --auto-consent for unattended runs.",
+    usage: "ogb update-extensions [name] [--dry-run] [--auto-consent]",
+    examples: ["ogb update-extensions --dry-run", "ogb update-extensions --auto-consent", "ogb update-extensions gemini-md-export --auto-consent"],
   },
   {
     name: "trust-report",

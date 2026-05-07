@@ -74,7 +74,7 @@ opencode
 ## Quando atualizar extensoes
 
 ```bash
-ogb update-extensions
+ogb update-extensions --auto-consent
 ogb sync
 ogb doctor
 ```

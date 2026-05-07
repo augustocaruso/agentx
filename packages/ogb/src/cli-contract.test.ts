@@ -43,6 +43,17 @@ test("user-facing ritual verbs expose versioned progress NDJSON", () => {
   }
 });
 
+test("check exposes an extension-update escape hatch", () => {
+  for (const name of ["check", "pass"]) {
+    assert.ok(command(name).options.some((option) => option.long === "--no-extension-update"), `expected ogb ${name} to support --no-extension-update`);
+  }
+});
+
+test("update-extensions exposes unattended consent flags", () => {
+  assert.ok(command("update-extensions").options.some((option) => option.long === "--auto-consent"));
+  assert.ok(command("update-extensions").options.some((option) => option.long === "--yes"));
+});
+
 function runCli(args: string[]) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-progress-contract-"));
   const tsx = path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
@@ -84,6 +95,22 @@ test("check --accept-hooks --progress-json uses canonical hook-review step id", 
   const stepIds = events.filter((event) => event.type === "ritual.step").map((event) => event.stepId);
   assert.ok(stepIds.includes("hook-review"));
   assert.equal(stepIds.includes("hooks"), false);
+});
+
+test("check --progress-json includes extension-update before sync unless skipped", () => {
+  const withUpdate = runCli(["check", "--dry-run", "--no-setup", "--no-validation", "--no-security", "--no-dashboard", "--progress-json"]);
+  assert.ok(withUpdate.status === 0 || withUpdate.status === 1, withUpdate.stderr);
+  const withUpdateEvents = parseNdjson(withUpdate.stdout);
+  assert.deepEqual(withUpdateEvents[0].steps.map((step: any) => step.stepId), ["extension-update", "sync", "doctor"]);
+  assert.deepEqual(
+    withUpdateEvents.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId),
+    ["extension-update", "sync", "doctor"],
+  );
+
+  const skipped = runCli(["check", "--dry-run", "--no-setup", "--no-extension-update", "--no-validation", "--no-security", "--no-dashboard", "--progress-json"]);
+  assert.ok(skipped.status === 0 || skipped.status === 1, skipped.stderr);
+  const skippedEvents = parseNdjson(skipped.stdout);
+  assert.deepEqual(skippedEvents[0].steps.map((step: any) => step.stepId), ["sync", "doctor"]);
 });
 
 test("--progress-json rejects plain and final-json output modes", () => {

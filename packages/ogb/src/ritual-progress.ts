@@ -76,6 +76,7 @@ export type RitualProgressJsonEvent =
 export interface CheckProgressOptions {
   setup?: boolean;
   sync?: boolean;
+  extensionUpdate?: boolean;
   acceptHooks?: boolean;
   validation?: boolean;
   security?: boolean;
@@ -119,6 +120,11 @@ export const CHECK_PROGRESS_STEPS = {
     stepId: "sync",
     label: "Sync Gemini resources into OpenCode.",
     detail: "Projects context, MCPs, agents, commands, and skills into the right scope.",
+  },
+  extensionUpdate: {
+    stepId: "extension-update",
+    label: "Update Gemini extensions.",
+    detail: "Runs Gemini CLI extension updates before projecting resources into OpenCode.",
   },
   doctor: {
     stepId: "doctor",
@@ -254,6 +260,7 @@ export const UPDATE_PROGRESS_STEPS = {
 export function checkProgressSteps(options: CheckProgressOptions = {}): RitualProgressDefinition[] {
   return [
     ...(options.setup === false ? [] : [CHECK_PROGRESS_STEPS.setup]),
+    ...(options.sync === false || options.extensionUpdate === false ? [] : [CHECK_PROGRESS_STEPS.extensionUpdate]),
     ...(options.sync === false ? [] : [CHECK_PROGRESS_STEPS.sync]),
     CHECK_PROGRESS_STEPS.doctor,
     ...(options.acceptHooks ? [CHECK_PROGRESS_STEPS.hookReview] : []),

@@ -24,6 +24,16 @@ function writeGeminiAuthConstants(homeDir: string, packageDir = "opencode-gemini
   ].join("\n"), "utf8");
 }
 
+function writeAntigravityAuthConstants(homeDir: string, packageDir = "opencode-google-antigravity-auth@latest"): void {
+  const constants = path.join(homeDir, ".cache", "opencode", "packages", packageDir, "node_modules", "opencode-google-antigravity-auth", "src", "constants.ts");
+  fs.mkdirSync(path.dirname(constants), { recursive: true });
+  fs.writeFileSync(constants, [
+    'export const ANTIGRAVITY_CLIENT_ID = "antigravity-client-id";',
+    'export const ANTIGRAVITY_CLIENT_SECRET = "antigravity-client-secret";',
+    "",
+  ].join("\n"), "utf8");
+}
+
 test("parseRefreshParts reads OpenCode Gemini managed project ids", () => {
   assert.deepEqual(parseRefreshParts("refresh-token|user-project|managed-project"), {
     refreshToken: "refresh-token",
@@ -130,7 +140,7 @@ test("refreshQuota does not refresh expired Gemini OAuth without configured clie
   try {
     const report = await refreshQuota({ projectRoot, homeDir, force: true });
     assert.equal(report.status, "unavailable");
-    assert.match(report.message ?? "", /Token Google indisponivel/);
+    assert.match(report.message ?? "", /Cliente OAuth Google indisponivel/);
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -179,6 +189,128 @@ test("refreshQuota finds Gemini auth constants in versioned OpenCode plugin pack
     ]);
   } finally {
     globalThis.fetch = previousFetch;
+  }
+});
+
+test("refreshQuota tries installed Antigravity OAuth client when Gemini client cannot refresh token", async () => {
+  const projectRoot = tempDir("ogb-quota-project-");
+  const homeDir = tempDir("ogb-quota-home-");
+  const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
+  writeGeminiAuthConstants(homeDir);
+  writeAntigravityAuthConstants(homeDir);
+  writeJson(authFile, {
+    google: {
+      type: "oauth",
+      access: "expired-access-token",
+      refresh: "refresh-token|user-project|managed-project",
+      expires: Date.now() - 60 * 1000,
+    },
+  });
+
+  const clientIds: string[] = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input) === "https://oauth2.googleapis.com/token") {
+      const body = init?.body as URLSearchParams;
+      clientIds.push(body.get("client_id") ?? "");
+      if (body.get("client_id") === "client-id") {
+        return new Response(JSON.stringify({
+          error: "unauthorized_client",
+          error_description: "Unauthorized",
+        }), { status: 401, statusText: "Unauthorized", headers: { "Content-Type": "application/json" } });
+      }
+      assert.equal(body.get("client_id"), "antigravity-client-id");
+      assert.equal(body.get("client_secret"), "antigravity-client-secret");
+      return new Response(JSON.stringify({ access_token: "fresh-antigravity-token", expires_in: 3600 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    assert.equal(String(input), "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota");
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer fresh-antigravity-token");
+    return new Response(JSON.stringify({
+      buckets: [
+        { modelId: "gemini-3-flash-preview", remainingFraction: 0.75 },
+      ],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const report = await refreshQuota({ projectRoot, homeDir, force: true });
+    assert.equal(report.status, "ok");
+    assert.deepEqual(clientIds, ["client-id", "antigravity-client-id"]);
+    assert.equal(report.summary.label, "25% used");
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("refreshQuota reports Google OAuth refresh error details when all clients fail", async () => {
+  const projectRoot = tempDir("ogb-quota-project-");
+  const homeDir = tempDir("ogb-quota-home-");
+  const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
+  writeGeminiAuthConstants(homeDir);
+  writeJson(authFile, {
+    google: {
+      type: "oauth",
+      access: "expired-access-token",
+      refresh: "refresh-token|user-project|managed-project",
+      expires: Date.now() - 60 * 1000,
+    },
+  });
+
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    assert.equal(String(input), "https://oauth2.googleapis.com/token");
+    return new Response(JSON.stringify({
+      error: "unauthorized_client",
+      error_description: "Unauthorized",
+    }), { status: 401, statusText: "Unauthorized", headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const report = await refreshQuota({ projectRoot, homeDir, force: true });
+    assert.equal(report.status, "unavailable");
+    assert.match(report.message ?? "", /unauthorized_client: Unauthorized/);
+    assert.match(report.message ?? "", /opencode auth login/);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("refreshQuota ignores corrupt project ids stored beside refresh token", async () => {
+  const projectRoot = tempDir("ogb-quota-project-");
+  const homeDir = tempDir("ogb-quota-home-");
+  const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
+  writeJson(authFile, {
+    google: {
+      type: "oauth",
+      access: "access-token",
+      refresh: "refresh-token|35;64;25M35;65;25M|35;64;25M35;65;25M",
+      expires: Date.now() + 60 * 60 * 1000,
+    },
+  });
+
+  const previousProject = process.env.OPENCODE_GEMINI_PROJECT_ID;
+  process.env.OPENCODE_GEMINI_PROJECT_ID = "fallback-project";
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    assert.equal(init?.body, JSON.stringify({ project: "fallback-project" }));
+    return new Response(JSON.stringify({
+      buckets: [
+        { modelId: "gemini-3-flash-preview", remainingFraction: 0.9 },
+      ],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const report = await refreshQuota({ projectRoot, homeDir, force: true });
+    assert.equal(report.status, "ok");
+    assert.equal(report.projectId, "fallback-project");
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousProject === undefined) delete process.env.OPENCODE_GEMINI_PROJECT_ID;
+    else process.env.OPENCODE_GEMINI_PROJECT_ID = previousProject;
   }
 });
 

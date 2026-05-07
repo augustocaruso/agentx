@@ -280,10 +280,16 @@ function maybePostExtensionSync(opts: { dryRun?: boolean; skipSync?: boolean; sk
   }
 }
 
-function printExtensionReport(report: { status: string; command: string[]; inspection?: { warnings: string[] } }) {
+function printExtensionReport(report: { status: string; command: string[]; inspection?: { warnings: string[] }; stdoutTail?: string; stderrTail?: string; error?: string; timedOut?: boolean }) {
   console.log(`Gemini extension command: ${report.status}`);
   console.log(formatCommand(report.command));
   for (const warning of report.inspection?.warnings ?? []) console.log(`Warning: ${warning}`);
+  if (report.status === "error") {
+    if (report.timedOut) console.log("Warning: Gemini extension command timed out.");
+    if (report.stderrTail) console.log(`stderr: ${report.stderrTail.split(/\r?\n/).slice(-5).join("\n")}`);
+    else if (report.stdoutTail) console.log(`stdout: ${report.stdoutTail.split(/\r?\n/).slice(-5).join("\n")}`);
+    if (report.error) console.log(`error: ${report.error}`);
+  }
 }
 
 function telemetryPayloadLevel(value: string | undefined): TelemetryPayloadLevel {
@@ -358,6 +364,7 @@ type CheckCliOptions = {
   windows?: boolean;
   setup?: boolean;
   sync?: boolean;
+  extensionUpdate?: boolean;
   validation?: boolean;
   security?: boolean;
   dashboard?: boolean;
@@ -373,6 +380,7 @@ function addCheckOptions(command: Command): Command {
     .option("--accept-hooks", "Record current Gemini hooks as reviewed by hash")
     .option("--windows", "Include Windows installer/static checks during validation")
     .option("--no-setup", "Skip setup-opencode")
+    .option("--no-extension-update", "Skip automatic Gemini CLI extension updates before sync")
     .option("--no-sync", "Skip sync")
     .option("--no-validation", "Skip validate")
     .option("--no-security", "Skip security-check")
@@ -403,6 +411,7 @@ async function runCheckCli(opts: CheckCliOptions, workflow: "check" | "pass", le
       windows: opts.windows,
       skipSetup: opts.setup === false,
       skipSync: opts.sync === false,
+      skipExtensionUpdate: opts.extensionUpdate === false,
       skipValidation: opts.validation === false,
       skipSecurity: opts.security === false,
       skipDashboard: opts.dashboard === false,
@@ -1291,6 +1300,8 @@ program.command("update-extensions")
   .argument("[name]", "Specific Gemini extension name; defaults to all")
   .option("--all", "Update all Gemini CLI extensions", true)
   .option("--dry-run", "Preview Gemini update and bridge follow-up without writing")
+  .option("--auto-consent", "Answer Gemini CLI consent prompts automatically")
+  .option("--yes", "Alias for --auto-consent")
   .option("--skip-sync", "Do not run ogb sync after update")
   .option("--skip-doctor", "Do not run ogb doctor after update")
   .option("--force", "Pass force to the post-update sync")
@@ -1299,6 +1310,7 @@ program.command("update-extensions")
       name,
       all: opts.all,
       dryRun: opts.dryRun,
+      autoConsent: Boolean(opts.autoConsent || opts.yes),
     });
     printExtensionReport(report);
 
