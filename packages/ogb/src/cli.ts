@@ -732,6 +732,9 @@ program.command("install")
   .description("Install or reinstall the OGB OpenCode profile and run the full check")
   .option("--dry-run", "Preview install actions without writing")
   .option("--force", "Overwrite OGB-managed files previously changed outside ogb management")
+  .option("--rulesync <mode>", "Rulesync mode used by the final check", "auto")
+  .option("--no-rulesync", "Disable Rulesync during the final check")
+  .option("--no-ux", "Do not reapply the global OpenCode UX profile")
   .option("--reset-global", "Replace the global OpenCode config from OGB defaults instead of merging existing fields")
   .option("--no-install-opencode", "Do not install OpenCode when it is missing")
   .option("--no-plugins", "Do not run global OpenCode plugin installers")
@@ -748,6 +751,7 @@ program.command("install")
         projectRoot: project,
         dryRun: opts.dryRun,
         force: opts.force,
+        ux: opts.ux,
         resetGlobal: opts.resetGlobal,
         installOpenCode: opts.installOpencode,
         installPlugins: opts.plugins,
@@ -756,6 +760,7 @@ program.command("install")
         check: opts.check,
         acceptHooks: opts.acceptHooks,
         windows: opts.windows,
+        rulesyncMode: normalizeRulesyncMode(opts.rulesync),
       });
       printInstallReport(report, opts.json);
       process.exitCode = report.outcome === "fail" ? 2 : report.outcome === "warn" ? 1 : 0;

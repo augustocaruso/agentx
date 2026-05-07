@@ -8,20 +8,27 @@ export interface OpenCodePathOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-function resolvedHomeDir(homeDir: string | undefined): string {
-  return path.resolve(normalizePathInput(homeDir ?? os.homedir()));
+function useWin32Path(platform: NodeJS.Platform, normalizedHomeDir: string): boolean {
+  return platform === "win32" && !normalizedHomeDir.startsWith("/");
+}
+
+function resolvedHomeDir(homeDir: string | undefined, platform = process.platform): string {
+  const normalized = normalizePathInput(homeDir ?? os.homedir());
+  return useWin32Path(platform, normalized) ? path.win32.resolve(normalized) : path.resolve(normalized);
 }
 
 export function globalOpenCodeConfigDir(options: OpenCodePathOptions = {}): string {
   const platform = options.platform ?? process.platform;
-  const homeDir = resolvedHomeDir(options.homeDir);
+  const normalizedHomeDir = normalizePathInput(options.homeDir ?? os.homedir());
+  const pathApi = useWin32Path(platform, normalizedHomeDir) ? path.win32 : path;
+  const homeDir = resolvedHomeDir(options.homeDir, platform);
   const env = options.env ?? process.env;
 
   if (platform !== "win32" && env.XDG_CONFIG_HOME && homeDir === path.resolve(os.homedir())) {
     return path.join(env.XDG_CONFIG_HOME, "opencode");
   }
 
-  return path.join(homeDir, ".config", "opencode");
+  return pathApi.join(homeDir, ".config", "opencode");
 }
 
 export function globalOpenCodeConfigFiles(options: OpenCodePathOptions = {}): string[] {
@@ -36,8 +43,10 @@ export function legacyWindowsAppDataOpenCodeConfigDir(options: OpenCodePathOptio
   const platform = options.platform ?? process.platform;
   if (platform !== "win32") return undefined;
 
-  const homeDir = resolvedHomeDir(options.homeDir);
+  const normalizedHomeDir = normalizePathInput(options.homeDir ?? os.homedir());
+  const pathApi = useWin32Path(platform, normalizedHomeDir) ? path.win32 : path;
+  const homeDir = resolvedHomeDir(options.homeDir, platform);
   const env = options.env ?? process.env;
-  const appData = env.APPDATA || path.join(homeDir, "AppData", "Roaming");
-  return path.join(appData, "opencode");
+  const appData = env.APPDATA || pathApi.join(homeDir, "AppData", "Roaming");
+  return pathApi.join(appData, "opencode");
 }

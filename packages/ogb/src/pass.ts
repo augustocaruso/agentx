@@ -11,6 +11,7 @@ import { syncToOpenCode, type SyncReport } from "./sync.js";
 import { hookTrustKey, readTrustFile, writeTrustFile } from "./trust.js";
 import { OGB_VERSION } from "./types.js";
 import { runValidation, type ValidationReport } from "./validation.js";
+import type { RulesyncMode } from "./rulesync.js";
 
 export interface PassOptions {
   projectRoot?: string;
@@ -27,6 +28,7 @@ export interface PassOptions {
   skipDashboard?: boolean;
   silent?: boolean;
   setExitCode?: boolean;
+  rulesyncMode?: RulesyncMode;
 }
 
 export interface PassBlocker {
@@ -260,6 +262,7 @@ export function runPass(options: PassOptions = {}): PassReport {
       dryRun: options.dryRun,
       force: options.force,
       silent: true,
+      rulesyncMode: options.rulesyncMode,
     });
     automated.push("sync");
     for (const warning of sync.warnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));

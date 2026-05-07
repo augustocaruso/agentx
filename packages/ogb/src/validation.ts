@@ -312,19 +312,22 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["bootstrap-windows.ps1 release asset", scripts.windowsBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
     ["bootstrap-windows.ps1 installer", scripts.windowsBootstrap, "install-windows.ps1"],
     ["bootstrap-windows.ps1 path arg normalization", scripts.windowsBootstrap, "Normalize-PathArgument"],
-    ["install-mac.sh cleanup-home", scripts.macInstaller, "cleanup-home"],
-    ["install-mac.sh setup-ux", scripts.macInstaller, "setup-ux"],
-    ["install-mac.sh setup-opencode", scripts.macInstaller, "setup-opencode"],
-    ["install-mac.sh final check", scripts.macInstaller, "run_final_check"],
+    ["install-mac.sh delegates install", scripts.macInstaller, "install --rulesync"],
+    ["install-mac.sh ritual message", scripts.macInstaller, "Running OGB install ritual"],
+    ["install-mac.sh no ux flag", scripts.macInstaller, "--no-ux"],
+    ["install-mac.sh no opencode flag", scripts.macInstaller, "--no-install-opencode"],
+    ["install-mac.sh no check flag", scripts.macInstaller, "--no-check"],
     ["install-mac.sh home sync", scripts.macInstaller, "RUN_HOME_SYNC"],
     ["install-mac.sh reset global", scripts.macInstaller, "--reset-global"],
     ["install-mac.sh Exa websearch env", scripts.macInstaller, "OPENCODE_ENABLE_EXA"],
     ["install-mac.sh zsh config", scripts.macInstaller, ".config/zsh/.zshrc"],
-    ["install-windows.ps1 cleanup-home", scripts.windowsInstaller, "cleanup-home"],
     ["install-windows.ps1 path arg normalization", scripts.windowsInstaller, "Normalize-PathArgument"],
-    ["install-windows.ps1 setup-ux", scripts.windowsInstaller, "setup-ux"],
-    ["install-windows.ps1 setup-opencode", scripts.windowsInstaller, "setup-opencode"],
-    ["install-windows.ps1 final check", scripts.windowsInstaller, "Invoke-FinalOgbCheck"],
+    ["install-windows.ps1 delegates install", scripts.windowsInstaller, "\"install\", \"--rulesync\""],
+    ["install-windows.ps1 ritual message", scripts.windowsInstaller, "Running OGB install ritual"],
+    ["install-windows.ps1 no ux flag", scripts.windowsInstaller, "--no-ux"],
+    ["install-windows.ps1 no opencode flag", scripts.windowsInstaller, "--no-install-opencode"],
+    ["install-windows.ps1 no check flag", scripts.windowsInstaller, "--no-check"],
+    ["install-windows.ps1 windows flag", scripts.windowsInstaller, "--windows"],
     ["install-windows.ps1 home sync", scripts.windowsInstaller, "RunHomeSync"],
     ["install-windows.ps1 reset global", scripts.windowsInstaller, "--reset-global"],
     ["install-windows.ps1 Exa websearch env", scripts.windowsInstaller, "OPENCODE_ENABLE_EXA"],
@@ -336,7 +339,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     status: missing.length ? "fail" : "pass",
     message: missing.length
       ? `Missing expected release/bootstrap token(s): ${missing.join(", ")}.`
-      : "Bootstrap scripts download the release pack, clean old home artifacts, set Exa websearch env, reset home global config when forced, and installers apply setup-ux, project setup, home global sync, and final check.",
+      : "Bootstrap scripts download the release pack, set Exa websearch env, and thin installers delegate the ritual to ogb install with the expected platform flags.",
     details: { repoRoot },
   });
 }
@@ -374,15 +377,15 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "Installed ogb verification returned no version output.",
     "node `\"$CliTarget`\" %*",
     "ogb.cmd",
-    "import",
-    "cleanup-home",
-    "setup-opencode",
-    "setup-ux",
-    "check",
+    "\"install\", \"--rulesync\"",
+    "--no-ux",
+    "--no-install-opencode",
+    "--no-check",
     "--windows",
     "SetEnvironmentVariable(\"Path\"",
     "SetEnvironmentVariable(\"OPENCODE_ENABLE_EXA\"",
     "Ensure-OpenCodeExaEnvironment",
+    "Running OGB install ritual",
     "Verified ogb",
     "ogb command:",
   ];
@@ -402,7 +405,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
       ? `Missing expected installer token(s): ${missing.join(", ")}.`
       : forbidden.length
         ? `Forbidden unsafe installer token(s): ${forbidden.join(", ")}.`
-        : "PowerShell installer has safe native command capture, build, install, Exa websearch env, setup and final check steps.",
+        : "PowerShell installer has safe native command capture, build, install, Exa websearch env, and delegates the install ritual to the ogb CLI.",
   });
 }
 
