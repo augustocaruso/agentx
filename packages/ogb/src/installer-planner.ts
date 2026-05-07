@@ -1,5 +1,5 @@
+import os from "node:os";
 import { createPlatformAdapter, type PlatformAdapter } from "./platform-adapter.js";
-import { resolveProjectPaths } from "./paths.js";
 import type { RulesyncMode } from "./rulesync.js";
 
 export type InstallerIntent = "install" | "update" | "check" | "reset";
@@ -35,7 +35,20 @@ export interface InstallerPlan {
   homeMode: boolean;
   platform: PlatformAdapter["platform"];
   dryRun: boolean;
-  adapter: Pick<PlatformAdapter, "scriptKind" | "pathSeparator" | "globalConfigDir" | "defaultInstallPrefix">;
+  adapter: Pick<
+    PlatformAdapter,
+    "scriptKind"
+    | "pathSeparator"
+    | "globalConfigDir"
+    | "globalConfigFiles"
+    | "legacyGlobalConfigDir"
+    | "bridgeConfigDir"
+    | "generatedDir"
+    | "defaultInstallPrefix"
+    | "npmGlobalDir"
+    | "shellCommand"
+    | "powershellCommands"
+  >;
   delegation: {
     command: "ogb";
     args: string[];
@@ -64,14 +77,21 @@ function step(id: string, kind: InstallerPlanStep["kind"], writes: boolean, comm
 }
 
 export function buildInstallerPlan(input: InstallerPlanInput): InstallerPlan {
-  const paths = resolveProjectPaths(input.projectRoot, input.homeDir);
+  const homeAdapter = createPlatformAdapter({
+    platform: input.platform,
+    homeDir: input.homeDir ?? os.homedir(),
+    env: input.env,
+  });
+  const projectRoot = input.projectRoot ? homeAdapter.resolvePath(input.projectRoot) : homeAdapter.resolvePath(process.cwd());
+  const homeDir = homeAdapter.homeDir;
+  const homeMode = homeAdapter.isHomeProject(projectRoot);
   const adapter = createPlatformAdapter({
     platform: input.platform,
-    homeDir: paths.homeDir,
+    homeDir,
     env: input.env,
   });
   const dryRun = input.dryRun === true;
-  const delegationArgs = baseDelegationArgs({ projectRoot: paths.projectRoot }, input.intent, input);
+  const delegationArgs = baseDelegationArgs({ projectRoot }, input.intent, input);
   const command = { tool: "ogb" as const, args: delegationArgs };
   const writes = !dryRun;
   const steps: InstallerPlanStep[] = [];
@@ -82,28 +102,35 @@ export function buildInstallerPlan(input: InstallerPlanInput): InstallerPlan {
     steps.push(step("run-check", "check", writes, command));
   } else if (input.intent === "update") {
     steps.push(step("download-release-pack", "update", writes));
-    steps.push(step("run-post-update-check", "check", writes, { tool: "ogb", args: ["--project", paths.projectRoot, "check", "--force", ...(input.windows ? ["--windows"] : [])] }));
+    steps.push(step("run-post-update-check", "check", writes, { tool: "ogb", args: ["--project", projectRoot, "check", "--force", ...(input.windows ? ["--windows"] : [])] }));
   } else if (input.intent === "check") {
     steps.push(step("run-check", "check", writes, command));
   } else {
     steps.push(step("guard-home-reset", "guard", false));
     steps.push(step("cleanup-home-artifacts", "cleanup", writes));
     steps.push(step("reset-global-profile", "reset", writes));
-    steps.push(step("run-check", "check", writes, { tool: "ogb", args: ["--project", paths.projectRoot, "check", "--force", ...(input.windows ? ["--windows"] : [])] }));
+    steps.push(step("run-check", "check", writes, { tool: "ogb", args: ["--project", projectRoot, "check", "--force", ...(input.windows ? ["--windows"] : [])] }));
   }
 
   return {
     intent: input.intent,
-    projectRoot: paths.projectRoot,
-    homeDir: paths.homeDir,
-    homeMode: paths.homeMode,
+    projectRoot,
+    homeDir,
+    homeMode,
     platform: adapter.platform,
     dryRun,
     adapter: {
       scriptKind: adapter.scriptKind,
       pathSeparator: adapter.pathSeparator,
       globalConfigDir: adapter.globalConfigDir,
+      globalConfigFiles: adapter.globalConfigFiles,
+      legacyGlobalConfigDir: adapter.legacyGlobalConfigDir,
+      bridgeConfigDir: adapter.bridgeConfigDir,
+      generatedDir: adapter.generatedDir,
       defaultInstallPrefix: adapter.defaultInstallPrefix,
+      npmGlobalDir: adapter.npmGlobalDir,
+      shellCommand: adapter.shellCommand,
+      powershellCommands: adapter.powershellCommands,
     },
     delegation: {
       command: "ogb",
@@ -113,7 +140,7 @@ export function buildInstallerPlan(input: InstallerPlanInput): InstallerPlan {
     safety: {
       destructive: input.intent === "reset",
       requiresHome: input.intent === "reset",
-      normalizedProjectInput: paths.projectRoot,
+      normalizedProjectInput: projectRoot,
     },
   };
 }

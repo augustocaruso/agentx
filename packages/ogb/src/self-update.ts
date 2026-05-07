@@ -1,8 +1,8 @@
-import path from "node:path";
 import { resolveCommand } from "./command-resolution.js";
 import { formatCommand } from "./extensions.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { runNativeCommand } from "./native-runner.js";
+import { createPlatformAdapter } from "./platform-adapter.js";
 import { normalizePathInput, resolveProjectPaths } from "./paths.js";
 import { writeStateRecord } from "./state-store.js";
 import { OGB_VERSION } from "./types.js";
@@ -183,9 +183,10 @@ function outputTail(value: unknown, maxChars = 4000): string | undefined {
 }
 
 export function buildPostUpdateRitualCommand(options: SelfUpdateOptions = {}, platform: NodeJS.Platform = process.platform): string[] {
-  const paths = resolveProjectPaths(options.projectRoot);
-  const ogb = resolveCommand("ogb", { homeDir: paths.homeDir }) ?? "ogb";
-  const args = ["--project", paths.projectRoot, "check", "--force"];
+  const adapter = createPlatformAdapter({ platform, homeDir: options.projectRoot ?? process.cwd() });
+  const projectRoot = adapter.resolvePath(options.projectRoot ?? process.cwd());
+  const ogb = resolveCommand("ogb", { homeDir: projectRoot, platform: adapter.platform, env: adapter.env }) ?? "ogb";
+  const args = ["--project", projectRoot, "check", "--force"];
   if (platform === "win32") args.push("--windows");
   return [ogb, ...args];
 }
@@ -324,7 +325,8 @@ function windowsBootstrapArgs(options: SelfUpdateOptions, repo: string, version:
 export function buildSelfUpdateCommand(options: SelfUpdateOptions = {}, platform: NodeJS.Platform = process.platform): string[] {
   const repo = normalizeRepo(options.repo);
   const version = normalizeVersion(options.version);
-  const projectRoot = path.resolve(normalizePathInput(options.projectRoot ?? process.cwd()));
+  const adapter = createPlatformAdapter({ platform, homeDir: options.projectRoot ?? process.cwd() });
+  const projectRoot = adapter.resolvePath(options.projectRoot ?? process.cwd());
 
   if (platform === "win32") {
     const bootstrapUrl = `https://raw.githubusercontent.com/${repo}/main/scripts/bootstrap-windows.ps1`;

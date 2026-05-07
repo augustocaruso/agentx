@@ -8,8 +8,8 @@ import { resolveCommand } from "./command-resolution.js";
 import { GLOBAL_AGENTS_MD } from "./global-agents.js";
 import { normalizeRuntimeOptions, type OgbConfig } from "./ogb-config.js";
 import { runNativeCommand } from "./native-runner.js";
-import { globalOpenCodeConfigDir, legacyWindowsAppDataOpenCodeConfigDir } from "./opencode-paths.js";
-import { isHomeProject, normalizePathInput } from "./paths.js";
+import { createPlatformAdapter, type PlatformAdapter } from "./platform-adapter.js";
+import { isHomeProject } from "./paths.js";
 import { checkPluginSyntax, STARTUP_SYNC_PLUGIN_SOURCE, startupConfigSource } from "./setup-opencode.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import { ensureGlobalTuiSidebar } from "./tui-sidebar.js";
@@ -507,14 +507,14 @@ function removeFileIfExists(filePath: string, dryRun?: boolean): SetupUxWrite | 
   return { path: filePath, status: "removed" };
 }
 
-function dependencyPackageJsonPath(root: string, dependency: string): string {
-  return path.join(root, "node_modules", ...dependency.split("/"), "package.json");
+function dependencyPackageJsonPath(root: string, dependency: string, pathApi: typeof path = path): string {
+  return pathApi.join(root, "node_modules", ...dependency.split("/"), "package.json");
 }
 
-export function missingGlobalTuiRuntimeDependencies(root: string): string[] {
+export function missingGlobalTuiRuntimeDependencies(root: string, pathApi: typeof path = path): string[] {
   return Object.entries(OGB_TUI_RUNTIME_DEPENDENCIES)
     .filter(([dependency, version]) => {
-      const packagePath = dependencyPackageJsonPath(root, dependency);
+      const packagePath = dependencyPackageJsonPath(root, dependency, pathApi);
       const installed = readJsonc(packagePath);
       return installed.version !== version;
     })
@@ -545,16 +545,18 @@ function globalTuiPackageText(current: Record<string, unknown>): string {
 
 function ensureGlobalTuiRuntime(options: {
   configDir: string;
+  pathApi?: typeof path;
   dryRun?: boolean;
   install?: boolean;
 }): { packageJson: SetupUxWrite; commands: SetupUxCommand[] } {
-  const packagePath = path.join(options.configDir, "package.json");
+  const pathApi = options.pathApi ?? path;
+  const packagePath = pathApi.join(options.configDir, "package.json");
   const packageJson = writeText({
     filePath: packagePath,
     text: globalTuiPackageText(readJsonc(packagePath)),
     dryRun: options.dryRun,
   });
-  const missing = missingGlobalTuiRuntimeDependencies(options.configDir);
+  const missing = missingGlobalTuiRuntimeDependencies(options.configDir, pathApi);
   const commands = missing.length > 0 && options.install !== false
     ? [runCommand(globalTuiRuntimeInstallCommand(), options.dryRun, options.configDir)]
     : [];
@@ -661,12 +663,6 @@ function runAuthProbe(opencodeCommand: string, provider: "openai" | "google", dr
   };
 }
 
-function installOpenCodeCommand(): string[] {
-  return process.platform === "win32"
-    ? ["npm", "install", "-g", "opencode-ai@latest"]
-    : ["sh", "-c", "curl -fsSL https://opencode.ai/install | bash"];
-}
-
 function currentCliPath(): string | undefined {
   const modulePath = fileURLToPath(import.meta.url);
   const packagedCliPath = path.join(path.dirname(modulePath), "cli.js");
@@ -679,58 +675,63 @@ function currentCliPath(): string | undefined {
   return undefined;
 }
 
-function startupCommandPlan(homeDir: string, options: Pick<SetupUxOptions, "platform" | "env">): { command: string; baseArgs: string[] } {
+function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptions, "platform" | "env">): { command: string; baseArgs: string[] } {
   const cliPath = currentCliPath();
   if (cliPath) {
     return {
       command: process.execPath,
-      baseArgs: [cliPath, "--project", homeDir],
+      baseArgs: [cliPath, "--project", adapter.homeDir],
     };
   }
 
   const crossPlatformResolution = options.platform !== undefined && options.platform !== process.platform;
   return {
     command: resolveCommand("ogb", {
-      homeDir,
-      platform: options.platform,
-      env: options.env,
+      homeDir: adapter.homeDir,
+      platform: adapter.platform,
+      env: adapter.env,
       includeLookup: crossPlatformResolution ? false : undefined,
       includeNpmPrefix: crossPlatformResolution ? false : undefined,
     }) ?? "ogb",
-    baseArgs: ["--project", homeDir],
+    baseArgs: ["--project", adapter.homeDir],
   };
 }
 
 export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
-  const homeDir = path.resolve(normalizePathInput(options.homeDir || os.homedir()));
-  const projectRoot = options.projectRoot ? path.resolve(normalizePathInput(options.projectRoot)) : undefined;
-  const projectIsHome = Boolean(projectRoot && isHomeProject(projectRoot, homeDir));
+  const adapter = createPlatformAdapter({
+    platform: options.platform,
+    homeDir: options.homeDir || os.homedir(),
+    env: options.env,
+  });
+  const homeDir = adapter.homeDir;
+  const projectRoot = options.projectRoot ? adapter.resolvePath(options.projectRoot) : undefined;
+  const projectIsHome = Boolean(projectRoot && (adapter.isHomeProject(projectRoot) || isHomeProject(projectRoot, homeDir)));
   const commandCwd = projectRoot ?? process.cwd();
   const root = options.configDir
-    ? path.resolve(options.configDir)
-    : globalOpenCodeConfigDir({ homeDir, platform: options.platform, env: options.env });
-  const configPath = path.join(root, "opencode.json");
+    ? adapter.resolvePath(options.configDir)
+    : adapter.globalConfigDir;
+  const configPath = adapter.join(root, "opencode.json");
   const legacyRoot = options.configDir
     ? undefined
-    : legacyWindowsAppDataOpenCodeConfigDir({ homeDir, platform: options.platform, env: options.env });
-  const legacyConfigPath = legacyRoot ? path.join(legacyRoot, "opencode.json") : undefined;
-  const commandsDir = path.join(root, "commands");
-  const agentsDir = path.join(root, "agents");
-  const dcpConfigPath = path.join(root, "dcp.jsonc");
-  const fallbackConfigPath = path.join(root, "plugins", "fallback.json");
-  const globalStartupPluginPath = path.join(root, "plugins", "ogb-startup-sync.js");
-  const globalStartupConfigPath = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json");
-  const globalGeneratedDir = path.dirname(globalStartupConfigPath);
+    : adapter.legacyGlobalConfigDir;
+  const legacyConfigPath = legacyRoot ? adapter.join(legacyRoot, "opencode.json") : undefined;
+  const commandsDir = adapter.join(root, "commands");
+  const agentsDir = adapter.join(root, "agents");
+  const dcpConfigPath = adapter.join(root, "dcp.jsonc");
+  const fallbackConfigPath = adapter.join(root, "plugins", "fallback.json");
+  const globalStartupPluginPath = adapter.join(root, "plugins", "ogb-startup-sync.js");
+  const globalStartupConfigPath = adapter.join(adapter.generatedDir, "ogb-startup-sync.json");
+  const globalGeneratedDir = adapter.pathApi.dirname(globalStartupConfigPath);
   const ogbConfigPath = projectRoot
     ? projectIsHome
-      ? path.join(homeDir, ".config", "opencode-gemini-bridge", "ogb.config.jsonc")
-      : path.join(projectRoot, ".opencode", "ogb.config.jsonc")
+      ? adapter.join(adapter.bridgeConfigDir, "ogb.config.jsonc")
+      : adapter.join(projectRoot, ".opencode", "ogb.config.jsonc")
     : undefined;
   const writes: SetupUxWrite[] = [];
   const commands: SetupUxCommand[] = [];
   const warnings: string[] = [];
   const currentConfig = readJsonc(configPath);
-  const legacyConfig = legacyConfigPath && path.resolve(legacyConfigPath) !== path.resolve(configPath)
+  const legacyConfig = legacyConfigPath && adapter.resolvePath(legacyConfigPath) !== adapter.resolvePath(configPath)
     ? readJsonc(legacyConfigPath)
     : {};
   const hasCurrentConfig = Object.keys(currentConfig).length > 0;
@@ -757,14 +758,14 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     }
   }
 
-  const existingOpenCode = resolveCommand("opencode", { homeDir });
-  const startupCommand = startupCommandPlan(homeDir, options);
+  const existingOpenCode = resolveCommand("opencode", { homeDir, platform: adapter.platform, env: adapter.env });
+  const startupCommand = startupCommandPlan(adapter, options);
   if (options.installOpenCode === false) {
     if (!existingOpenCode) {
       warnings.push("OpenCode is not installed. Re-run with --install-opencode or install OpenCode first.");
     }
   } else {
-    commands.push(runCommand(installOpenCodeCommand(), options.dryRun));
+    commands.push(runCommand(adapter.installOpenCodeCommand(), options.dryRun));
   }
 
   const desiredPlugins = [
@@ -795,6 +796,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   }));
   const globalTuiRuntime = ensureGlobalTuiRuntime({
     configDir: root,
+    pathApi: adapter.pathApi,
     dryRun: options.dryRun,
     install: options.installTuiDependencies,
   });
@@ -816,26 +818,26 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     dryRun: options.dryRun,
   }));
   writes.push(writeText({
-    filePath: path.join(commandsDir, "research.md"),
+    filePath: adapter.join(commandsDir, "research.md"),
     text: RESEARCH_COMMAND,
     dryRun: options.dryRun,
   }));
   for (const command of REMOVED_GLOBAL_UX_COMMANDS) {
-    const removed = removeFileIfExists(path.join(commandsDir, `${command}.md`), options.dryRun);
+    const removed = removeFileIfExists(adapter.join(commandsDir, `${command}.md`), options.dryRun);
     if (removed) writes.push(removed);
   }
   writes.push(writeText({
-    filePath: path.join(commandsDir, "upgrade-ogb.md"),
+    filePath: adapter.join(commandsDir, "upgrade-ogb.md"),
     text: globalBuiltInCommandContent("upgrade-ogb"),
     dryRun: options.dryRun,
   }));
   writes.push(writeText({
-    filePath: path.join(agentsDir, "YOLO.md"),
+    filePath: adapter.join(agentsDir, "YOLO.md"),
     text: yoloAgentContent(),
     dryRun: options.dryRun,
   }));
   writes.push(writeText({
-    filePath: path.join(root, "AGENTS.md"),
+    filePath: adapter.join(root, "AGENTS.md"),
     text: GLOBAL_AGENTS_MD,
     dryRun: options.dryRun,
   }));
@@ -851,7 +853,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   }
 
   if (options.installPlugins !== false) {
-    const opencodeCommand = options.dryRun === true ? "opencode" : resolveCommand("opencode", { homeDir });
+    const opencodeCommand = options.dryRun === true ? "opencode" : resolveCommand("opencode", { homeDir, platform: adapter.platform, env: adapter.env });
     for (const plugin of installablePlugins) {
       if (!opencodeCommand) {
         commands.push({ command: ["opencode", "plugin", plugin, "--global", "--force"], status: "skipped", message: "OpenCode is not available" });
@@ -881,8 +883,8 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const pluginCheck = options.dryRun ? checkPluginSyntax() : checkPluginSyntax(globalStartupPluginPath);
   if (!pluginCheck.ok) warnings.push(pluginCheck.message);
   recoverStaleStartupStatus({
-    statusPath: path.join(globalGeneratedDir, "ogb-plugin-status.json"),
-    lockPath: path.join(globalGeneratedDir, "ogb-startup-sync.lock"),
+    statusPath: adapter.join(globalGeneratedDir, "ogb-plugin-status.json"),
+    lockPath: adapter.join(globalGeneratedDir, "ogb-startup-sync.lock"),
     cwd: homeDir,
     reason: "setup-ux.recovered-stale",
     dryRun: Boolean(options.dryRun),

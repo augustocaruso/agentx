@@ -48,9 +48,23 @@ test("buildSelfUpdateCommand uses PowerShell bootstrap on Windows", () => {
   assert.match(command.join(" "), /PSNativeCommandUseErrorActionPreference = \$false/);
   assert.match(command.join(" "), /-Repo 'acme\/bridge'/);
   assert.match(command.join(" "), /-Version 'v9\.9\.9'/);
+  assert.match(command.join(" "), /-Project 'C:\\Users\\Friend\\Project'/);
   assert.match(command.join(" "), /-NoSetup/);
   assert.match(command.join(" "), /-NoUx/);
   assert.match(command.join(" "), /-NoOpenCode/);
+});
+
+test("buildSelfUpdateCommand preserves Windows drive paths while running on POSIX", () => {
+  const command = buildSelfUpdateCommand({
+    projectRoot: `'"C:\\Users\\leona"'`,
+    prefix: `'\\"C:\\Users\\leona\\AppData\\Roaming\\npm\\"'`,
+  }, "win32");
+  const script = command.join(" ");
+
+  assert.match(script, /-Project 'C:\\Users\\leona'/);
+  assert.match(script, /-Prefix 'C:\\Users\\leona\\AppData\\Roaming\\npm'/);
+  assert.doesNotMatch(script, /\/Users\/augustocaruso\/Documents\/opencode-gemini-bridge\/C:/);
+  assert.doesNotMatch(script, /\\"C:\\Users/);
 });
 
 test("buildSelfUpdateCommand strips accidental quotes from project and prefix paths", () => {

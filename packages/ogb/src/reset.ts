@@ -6,8 +6,8 @@ import { cleanupHomeProjectArtifacts, type HomeCleanupReport } from "./home-clea
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { runNativeCommand } from "./native-runner.js";
-import { globalOpenCodeConfigDir } from "./opencode-paths.js";
 import { runPass, type PassReport } from "./pass.js";
+import { createPlatformAdapter } from "./platform-adapter.js";
 import { resolveProjectPaths } from "./paths.js";
 import { setupUx, type SetupUxReport } from "./setup-ux.js";
 import { syncToOpenCode, type SyncReport } from "./sync.js";
@@ -76,20 +76,19 @@ function appendLineIfMissing(filePath: string, line: string, pattern: RegExp, dr
   return { path: filePath, status: "configured", message: `Added OPENCODE_ENABLE_EXA=1 to ${filePath}.` };
 }
 
-function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; dryRun?: boolean }): ResetEnvReport {
-  const platform = options.platform ?? process.platform;
-  if (platform === "win32") {
+function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv; dryRun?: boolean }): ResetEnvReport {
+  const adapter = createPlatformAdapter({ homeDir: options.homeDir, platform: options.platform, env: options.env });
+  if (adapter.platform === "win32") {
     process.env.OPENCODE_ENABLE_EXA = "1";
     if (options.dryRun) {
       return { status: "preview", message: "Would set OPENCODE_ENABLE_EXA=1 for the Windows user environment." };
     }
 
-    const script = "[Environment]::SetEnvironmentVariable('OPENCODE_ENABLE_EXA','1','User')";
-    const shells = ["powershell.exe", "pwsh", "powershell"];
-    for (const shell of shells) {
+    for (const plan of adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1")) {
+      if (!plan.command) continue;
       const result = runNativeCommand({
-        command: shell,
-        args: ["-NoProfile", "-Command", script],
+        command: plan.command[0],
+        args: plan.command.slice(1),
         stdio: "pipe",
       });
       if (result.ok) {
@@ -102,8 +101,9 @@ function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; dr
     };
   }
 
+  const envPlan = adapter.persistEnv("OPENCODE_ENABLE_EXA", "1");
   return appendLineIfMissing(
-    path.join(options.homeDir, ".config", "zsh", ".zshrc"),
+    envPlan.path ?? adapter.join(adapter.homeDir, ".config", "zsh", ".zshrc"),
     "export OPENCODE_ENABLE_EXA=1",
     /^[ \t]*(export[ \t]+)?OPENCODE_ENABLE_EXA=1([ \t]*(#.*)?)?$/m,
     options.dryRun,
@@ -152,6 +152,7 @@ async function promptResetConfirmation(plan: ResetPlan): Promise<boolean> {
 export async function runReset(options: ResetOptions = {}): Promise<ResetReport> {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   if (!paths.homeMode) throw new ResetNotHomeError(paths.projectRoot, paths.homeDir);
+  const adapter = createPlatformAdapter({ homeDir: paths.homeDir, platform: options.platform, env: options.env });
   const installerPlan = buildInstallerPlan({
     intent: "reset",
     projectRoot: paths.projectRoot,
@@ -164,7 +165,7 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
     windows: (options.platform ?? process.platform) === "win32",
   });
 
-  const globalConfigPath = path.join(globalOpenCodeConfigDir({ homeDir: paths.homeDir, platform: options.platform, env: options.env }), "opencode.json");
+  const globalConfigPath = adapter.join(adapter.globalConfigDir, "opencode.json");
   const cleanupPreview = cleanupHomeProjectArtifacts({ homeDir: paths.homeDir, dryRun: true });
   const plan: ResetPlan = {
     homeDir: paths.homeDir,
@@ -189,7 +190,7 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
     }
   }
 
-  const exaEnv = ensureExaEnv({ homeDir: paths.homeDir, platform: options.platform, dryRun: options.dryRun });
+  const exaEnv = ensureExaEnv({ homeDir: paths.homeDir, platform: options.platform, env: options.env, dryRun: options.dryRun });
   if (exaEnv.status === "warning") warnings.push(exaEnv.message);
 
   if (options.dryRun) {
