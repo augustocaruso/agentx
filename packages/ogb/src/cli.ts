@@ -11,6 +11,7 @@ import { externalOpenCodePlugins } from "./external-integrations.js";
 import { formatCommand, installGeminiExtension, updateGeminiExtensions } from "./extensions.js";
 import { flattenGeminiMd } from "./flatten.js";
 import { cleanupHomeProjectArtifacts, printHomeCleanupReport } from "./home-cleanup.js";
+import { printInstallReport, runInstall } from "./install.js";
 import { buildInventory, writeInventory } from "./inventory.js";
 import { formatLimits, refreshLimits } from "./limits.js";
 import { buildOpenCodeLaunchArgs } from "./launch.js";
@@ -727,6 +728,41 @@ program.command("launch")
     child.on("exit", (code) => process.exit(code ?? 0));
   });
 
+program.command("install")
+  .description("Install or reinstall the OGB OpenCode profile and run the full check")
+  .option("--dry-run", "Preview install actions without writing")
+  .option("--force", "Overwrite OGB-managed files previously changed outside ogb management")
+  .option("--reset-global", "Replace the global OpenCode config from OGB defaults instead of merging existing fields")
+  .option("--no-install-opencode", "Do not install OpenCode when it is missing")
+  .option("--no-plugins", "Do not run global OpenCode plugin installers")
+  .option("--no-project-profile", "Do not write the project OGB fallback/profile config")
+  .option("--no-cleanup-home", "Do not clean old OGB project artifacts from the home directory")
+  .option("--no-check", "Skip the final ogb check")
+  .option("--accept-hooks", "Record current Gemini hooks as reviewed during the final check")
+  .option("--windows", "Include Windows installer/static checks during the final check")
+  .option("--json", "Print JSON report")
+  .action(async (opts) => {
+    await withWorkflowTelemetry("install", () => {
+      const { project } = commonProjectOptions();
+      const report = runInstall({
+        projectRoot: project,
+        dryRun: opts.dryRun,
+        force: opts.force,
+        resetGlobal: opts.resetGlobal,
+        installOpenCode: opts.installOpencode,
+        installPlugins: opts.plugins,
+        writeProjectProfile: opts.projectProfile,
+        cleanupHome: opts.cleanupHome,
+        check: opts.check,
+        acceptHooks: opts.acceptHooks,
+        windows: opts.windows,
+      });
+      printInstallReport(report, opts.json);
+      process.exitCode = report.outcome === "fail" ? 2 : report.outcome === "warn" ? 1 : 0;
+      return report;
+    });
+  });
+
 program.command("setup-opencode")
   .description("Install the OpenCode startup sync plugin and validate the setup")
   .option("--dry-run", "Preview files and validation without writing")
@@ -816,7 +852,7 @@ program.command("reset")
         });
         printResetReport(report, opts.json);
         if (report.outcome === "cancelled") process.exitCode = 1;
-        else if ((report.doctor?.errors.length ?? 0) > 0) process.exitCode = 2;
+        else if (report.check?.outcome === "fail" || (report.doctor?.errors.length ?? 0) > 0) process.exitCode = 2;
         return report;
       } catch (error) {
         const expected = error instanceof ResetNotHomeError || error instanceof ResetConfirmationError;

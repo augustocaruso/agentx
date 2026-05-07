@@ -338,6 +338,35 @@ ogb validate --opencode-run
 
 O `--opencode-run` e opcional porque pode gastar tokens.
 
+### `ogb install`
+
+Reaplica a instalacao OGB quando o CLI ja esta disponivel. Ele nao substitui o
+bootstrap externo ainda; o papel dele no Release 1 e estabilizar o caminho
+publico depois que o binario existe.
+
+```bash
+ogb --project "$PWD" install
+ogb --project "$PWD" install --dry-run
+ogb --project "$PWD" install --force
+ogb --project "$PWD" install --reset-global
+```
+
+Modelo mental:
+
+```text
+ogb install
+  -> cleanup seguro de artefatos antigos no home
+  -> setup-ux global
+  -> setup/sync/doctor/validate/security/dashboard via ogb check
+```
+
+Flags importantes:
+
+- `--no-install-opencode`: nao tenta instalar OpenCode quando ele falta.
+- `--no-plugins`: nao roda instaladores globais de plugins OpenCode.
+- `--no-project-profile`: nao escreve `.opencode/ogb.config.jsonc`.
+- `--no-check`: deixa de rodar o check final; uso de debug/automacao.
+
 ### `ogb update`
 
 Atualiza o OGB a partir do GitHub Release oficial e reaplica o perfil local.

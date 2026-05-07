@@ -25,6 +25,8 @@ export interface PassOptions {
   skipValidation?: boolean;
   skipSecurity?: boolean;
   skipDashboard?: boolean;
+  silent?: boolean;
+  setExitCode?: boolean;
 }
 
 export interface PassBlocker {
@@ -357,8 +359,10 @@ export function runPass(options: PassOptions = {}): PassReport {
   };
 
   if (!options.dryRun) writeReport(paths.passPath, report);
-  if (options.json) console.log(JSON.stringify(report, null, 2));
-  else console.log(formatPassReport(report).trimEnd());
-  process.exitCode = outcome === "fail" ? 2 : outcome === "warn" ? 1 : 0;
+  if (!options.silent) {
+    if (options.json) console.log(JSON.stringify(report, null, 2));
+    else console.log(formatPassReport(report).trimEnd());
+  }
+  if (options.setExitCode !== false) process.exitCode = outcome === "fail" ? 2 : outcome === "warn" ? 1 : 0;
   return report;
 }

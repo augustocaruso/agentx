@@ -61,6 +61,7 @@ test("runReset accepts an accidentally quoted home project path", async () => {
   const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
 
   assert.equal(report.outcome, "pass");
+  assert.ok(report.check);
   assert.equal(report.homeDir, path.resolve(homeDir));
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated")), false);
   assert.deepEqual(startupConfig.baseArgs, ["--project", path.resolve(homeDir)]);
@@ -141,6 +142,7 @@ test("runReset cleans home project artifacts and recreates global config", async
   });
 
   assert.equal(report.outcome, "pass");
+  assert.ok(report.check);
   assert.equal(fs.existsSync(path.join(homeDir, "opencode.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands", "sync.md")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "ogb-startup-sync.lock")), false);
@@ -167,8 +169,8 @@ test("runReset cleans home project artifacts and recreates global config", async
   assert.equal(startupConfig.autoUpdate, false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-update-status.json")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-validation.json")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-security.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-validation.json")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-security.json")), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
   assert.match(fs.readFileSync(path.join(homeDir, ".config", "zsh", ".zshrc"), "utf8"), /OPENCODE_ENABLE_EXA=1/);
   assert.equal(report.doctor?.warnings.some((warning) => warning.includes("Last OpenCode startup sync failed")), false);

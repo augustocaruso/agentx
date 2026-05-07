@@ -110,6 +110,19 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 & $env:TEMP\ogb\install.ps1 -Project $PWD -Force
 ```
 
+Quando o CLI `ogb` ja esta instalado e voce quer reaplicar o perfil sem baixar
+release pack de novo:
+
+```bash
+ogb --project "$PWD" install
+ogb --project "$PWD" install --dry-run
+ogb --project "$PWD" install --force
+```
+
+O `install` e o wrapper publico para reinstalar perfil OpenCode, plugin de
+startup, comandos globais/projeto e rodar `ogb check` no final. O bootstrap
+externo continua sendo o caminho para instalar o binario do zero.
+
 Update depois que o `ogb` ja esta instalado:
 
 ```bash

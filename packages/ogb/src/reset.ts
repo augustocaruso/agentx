@@ -5,6 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { cleanupHomeProjectArtifacts, type HomeCleanupReport } from "./home-cleanup.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { globalOpenCodeConfigDir } from "./opencode-paths.js";
+import { runPass, type PassReport } from "./pass.js";
 import { resolveProjectPaths } from "./paths.js";
 import { spawnCommandSync } from "./process.js";
 import { setupUx, type SetupUxReport } from "./setup-ux.js";
@@ -48,6 +49,7 @@ export interface ResetReport {
   setup?: SetupUxReport;
   sync?: SyncReport;
   doctor?: DoctorReport;
+  check?: PassReport;
   warnings: string[];
 }
 
@@ -230,7 +232,23 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
   });
   clearStartupSyncStatus(paths.homeDir);
   const doctor = runDoctor({ projectRoot: paths.homeDir, homeDir: paths.homeDir, silent: true });
-  warnings.push(...cleanup.warnings, ...setup.warnings, ...sync.warnings, ...doctor.warnings);
+  const check = runPass({
+    projectRoot: paths.homeDir,
+    homeDir: paths.homeDir,
+    force: true,
+    skipSetup: true,
+    skipSync: true,
+    windows: (options.platform ?? process.platform) === "win32",
+    silent: true,
+    setExitCode: false,
+  });
+  warnings.push(
+    ...cleanup.warnings,
+    ...setup.warnings,
+    ...sync.warnings,
+    ...doctor.warnings,
+    ...check.blockers.filter((blocker) => blocker.severity === "warn").map((blocker) => `${blocker.source}: ${blocker.message}`),
+  );
 
   return {
     version: OGB_VERSION,
@@ -242,6 +260,7 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
     setup,
     sync,
     doctor,
+    check,
     warnings,
   };
 }
@@ -271,6 +290,9 @@ export function printResetReport(report: ResetReport, json = false): void {
   }
   if (report.doctor) {
     console.log(`Doctor: ${report.doctor.errors.length} error(s), ${report.doctor.warnings.length} warning(s)`);
+  }
+  if (report.check) {
+    console.log(`Check: ${report.check.outcome.toUpperCase()}`);
   }
   if (report.warnings.length > 0) {
     console.log("Warnings:");
