@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0 - Release 2 do instalador cargo-like
+
+- Consolida a API publica em `ogb install`, `ogb update`, `ogb check` e `ogb reset`, mantendo aliases antigos com aviso.
+- Extrai o core comum de instalacao em planner, runner nativo, state store e platform adapters para Mac e Windows.
+- Faz os scripts de plataforma delegarem o ritual ao CLI comum, reduzindo duplicacao entre install, update, check e reset.
+- Adiciona UI Ink responsiva para rituais e `ogb help`, com lista interativa, selecao por Enter e execucao do comando selecionado.
+- Amplia a cobertura de testes para contratos do planner, runner, state store, adapters, scripts Mac/Windows, dashboard e help interativo.
+
 ## 0.0.61 - Limpa restart do self-update latest
 
 - Corrige o dashboard para consumir o aviso de restart tambem quando `self-update` foi feito contra `latest` e o status antigo nao registrou `latestTag`.

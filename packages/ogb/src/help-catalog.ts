@@ -30,7 +30,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     summary: "Update OGB from the release pack and run the post-update ritual.",
     description: "Downloads the selected release, runs the platform bootstrap installer, and refreshes the bridge check afterward.",
     usage: "ogb update [--release <tag>] [--dry-run] [--plain]",
-    examples: ["ogb update", "ogb update --release v0.0.61", "ogb update --dry-run"],
+    examples: ["ogb update", "ogb update --release v0.1.0", "ogb update --dry-run"],
   },
   {
     name: "check",
