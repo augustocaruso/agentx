@@ -5,6 +5,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
 import { runDoctor } from "./doctor.js";
+import { diagnoseOpenCodeMcpConfig } from "./mcp-projection.js";
 import { runNativeCommand, type NativeCommandResult } from "./native-runner.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { resolveProjectPaths } from "./paths.js";
@@ -157,6 +158,7 @@ function validateHomeGlobalFiles(paths: ReturnType<typeof resolveProjectPaths>, 
   });
 
   const mcp = config?.mcp;
+  const mcpShapeWarnings = diagnoseOpenCodeMcpConfig(mcp);
   checks.push({
     name: "Global OpenCode MCP config",
     status: mcp === undefined || isRecord(mcp) ? "pass" : "fail",
@@ -166,6 +168,16 @@ function validateHomeGlobalFiles(paths: ReturnType<typeof resolveProjectPaths>, 
         ? "No global MCP servers configured."
         : "Global OpenCode mcp field must be an object.",
   });
+  if (isRecord(mcp)) {
+    checks.push({
+      name: "Global OpenCode MCP shape",
+      status: mcpShapeWarnings.length > 0 ? "warn" : "pass",
+      message: mcpShapeWarnings.length > 0
+        ? `${mcpShapeWarnings.length} MCP shape warning(s).`
+        : "Global MCP entries use the OpenCode shape.",
+      details: mcpShapeWarnings,
+    });
+  }
 
   checks.push({
     name: "Global OGB startup plugin",

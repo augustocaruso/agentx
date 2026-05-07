@@ -7,6 +7,7 @@ import { commandExists, resolveCommand } from "./command-resolution.js";
 import { buildInventory } from "./inventory.js";
 import { AUTO_FALLBACK_PLUGIN, resolveFallbackConfigPath } from "./external-integrations.js";
 import { sha256File } from "./file-hash.js";
+import { diagnoseOpenCodeMcpConfig } from "./mcp-projection.js";
 import { readOgbConfig } from "./ogb-config.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { configReferencesExpandedGemini, projectConfigPath } from "./project-config.js";
@@ -403,6 +404,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   const opencodeConfig = paths.homeMode
     ? globalOpenCodeConfigPath(paths.homeDir)
     : projectConfigPath(paths.projectRoot);
+  const opencodeConfigObject = readJsonc(opencodeConfig);
   const rulesyncCommand = resolveRulesyncCommand(paths.projectRoot);
   const state = readSyncState(paths.projectRoot, paths.homeDir);
   let warnings = collectWarnings(inv, paths.projectRoot, paths.homeDir);
@@ -474,6 +476,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   };
   const runtimeFallback = readRuntimeFallback(paths.projectRoot, paths.homeDir);
   const modelResolution = resolveOpenCodeModels(paths.projectRoot, paths.homeDir, modelRouting);
+  warnings.push(...diagnoseOpenCodeMcpConfig(opencodeConfigObject?.mcp, inv.mcps));
   const mcpCommandCheck = inv.mcps.map((mcp) => {
     if (mcp.type !== "stdio") return { name: mcp.name, command: mcp.command, ok: true };
     if (!mcp.command) return { name: mcp.name, command: mcp.command, ok: false, message: "Missing stdio command" };
@@ -498,7 +501,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
     if (inv.mcps.length > 0 && fs.existsSync(opencodeConfig)) {
       const configuredMcps = configuredMcpNames(opencodeConfig);
       const missingMcps = inv.mcps
-        .filter((mcp) => mcp.status === "ok")
+        .filter((mcp) => mcp.status === "ok" || mcp.status === "warning")
         .map((mcp) => mcp.name)
         .filter((name) => !configuredMcps.has(name));
       if (missingMcps.length > 0) warnings.push(`Global OpenCode config is missing Gemini MCP server(s): ${missingMcps.join(", ")}. Run ogb sync.`);

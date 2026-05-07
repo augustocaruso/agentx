@@ -13,6 +13,8 @@ import {
 } from "./extension-projection.js";
 import { externalOpenCodePlugins, externalTuiPlugins, projectExternalIntegrations } from "./external-integrations.js";
 import { buildInventory } from "./inventory.js";
+import { syncMcpEnvStore } from "./mcp-env-store.js";
+import { projectOpenCodeMcpFromGeminiServers } from "./mcp-projection.js";
 import {
   defaultOpenCodeAgent,
   readOgbConfig,
@@ -65,43 +67,29 @@ export interface SyncReport {
 }
 
 function generatedOpenCodeConfig(projectRoot: string, homeDir?: string) {
-  const mcp = openCodeMcpFromInventory(projectRoot, homeDir);
+  const projectedMcp = openCodeMcpFromInventory(projectRoot, homeDir);
 
   return {
-    $schema: "https://opencode.ai/config.json",
-    _generated: {
-      tool: "ogb",
-      version: OGB_VERSION,
-      warning: "DO NOT EDIT. Regenerate with ogb sync.",
+    config: {
+      $schema: "https://opencode.ai/config.json",
+      _generated: {
+        tool: "ogb",
+        version: OGB_VERSION,
+        warning: "DO NOT EDIT. Regenerate with ogb sync.",
+      },
+      instructions: [".opencode/generated/GEMINI.expanded.md"],
+      mcp: projectedMcp.mcp,
     },
-    instructions: [".opencode/generated/GEMINI.expanded.md"],
-    mcp,
+    warnings: projectedMcp.warnings,
   };
 }
 
-function openCodeMcpFromInventory(projectRoot: string, homeDir?: string): Record<string, unknown> {
+function openCodeMcpFromInventory(projectRoot: string, homeDir?: string): {
+  mcp: Record<string, unknown>;
+  warnings: string[];
+} {
   const inv = buildInventory({ projectRoot, homeDir });
-  const mcp: Record<string, unknown> = {};
-  for (const server of inv.mcps) {
-    if (server.type === "stdio" && server.command) {
-      const localServer: Record<string, unknown> = {
-        type: "local",
-        command: [server.command, ...(server.args ?? [])],
-        enabled: true,
-      };
-      if (server.environment && Object.keys(server.environment).length > 0) {
-        localServer.environment = server.environment;
-      }
-      mcp[server.name] = localServer;
-    } else if (server.type === "http" && server.url) {
-      mcp[server.name] = {
-        type: "remote",
-        url: server.url,
-        enabled: true,
-      };
-    }
-  }
-  return mcp;
+  return projectOpenCodeMcpFromGeminiServers(inv.mcps);
 }
 
 function expandedContentBody(content: string): string {
@@ -1512,6 +1500,12 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
   });
   const state = readSyncState(paths.projectRoot, paths.homeDir) ?? emptySyncState(OGB_VERSION);
   const warnings: string[] = [];
+  const mcpEnvStore = syncMcpEnvStore({
+    projectRoot: paths.homeDir,
+    homeDir: paths.homeDir,
+    dryRun: options.dryRun,
+  });
+  warnings.push(...mcpEnvStore.warnings);
   const usedCommandRelPaths = new Set<string>();
   const usedAgentRelPaths = new Set<string>();
   const modelFallbacks: GeminiExtensionProjectionMap["modelFallbacks"] = [];
@@ -1528,13 +1522,14 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
   if (projectedContext.warning) warnings.push(projectedContext.warning);
 
   const globalMcp = openCodeMcpFromInventory(paths.homeDir, paths.homeDir);
-  const hasGlobalMcp = Object.keys(globalMcp).length > 0;
+  warnings.push(...globalMcp.warnings);
+  const hasGlobalMcp = Object.keys(globalMcp.mcp).length > 0;
   const projectedConfig = projectedContext.expanded || hasGlobalMcp
     ? ensureGlobalOpenCodeConfig({
         state,
         globalRoot,
         expandedPath: projectedContext.expanded ? paths.expandedGeminiPath : undefined,
-        mcp: globalMcp,
+        mcp: globalMcp.mcp,
         backupSession,
         dryRun: options.dryRun,
         force: options.force,
@@ -1704,9 +1699,15 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     dryRun: options.dryRun,
   });
 
-  const generated = generatedOpenCodeConfig(paths.projectRoot, paths.homeDir);
+  const mcpEnvStore = syncMcpEnvStore({
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    dryRun: options.dryRun,
+  });
+  const generatedResult = generatedOpenCodeConfig(paths.projectRoot, paths.homeDir);
+  const generated = generatedResult.config;
   const mcp = generated.mcp as Record<string, unknown>;
-  const warnings: string[] = [];
+  const warnings: string[] = [...mcpEnvStore.warnings, ...generatedResult.warnings];
   let projectConfigBackups: BackupRecord[] = [];
   let projectConfigRetentionWarnings: string[] = [];
 

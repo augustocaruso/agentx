@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { bridgeConfigDirForHome, createBackupSession, type BackupRecord } from "./backup-policy.js";
 import { resolveProjectPaths } from "./paths.js";
 import { OGB_VERSION } from "./types.js";
 
@@ -18,6 +19,7 @@ export interface QuotaOptions {
   homeDir?: string;
   force?: boolean;
   write?: boolean;
+  repairAuth?: boolean;
   ttlMs?: number;
 }
 
@@ -47,6 +49,7 @@ export interface QuotaReport {
   generatedAt: string;
   status: "ok" | "unavailable" | "error";
   projectId?: string;
+  authRepair?: GeminiAuthRepairResult;
   summary: QuotaSummary;
   buckets: QuotaBucketSummary[];
   message?: string;
@@ -77,6 +80,13 @@ interface RefreshParts {
   managedProjectId?: string;
 }
 
+export interface GeminiAuthRepairResult {
+  status: "clean" | "repaired" | "skipped";
+  reason?: string;
+  backup?: string;
+  backups?: BackupRecord[];
+}
+
 interface OAuthClient {
   id: string;
   secret: string;
@@ -93,6 +103,14 @@ interface RetrieveUserQuotaBucket {
 
 interface RetrieveUserQuotaResponse {
   buckets?: RetrieveUserQuotaBucket[];
+}
+
+interface LoadCodeAssistPayload {
+  cloudaicompanionProject?: string | { id?: string };
+  currentTier?: {
+    id?: string;
+    name?: string;
+  };
 }
 
 function sourceInfo(): QuotaReport["source"] {
@@ -146,6 +164,11 @@ export function parseRefreshParts(refresh: string | undefined): RefreshParts {
     projectId: projectId || undefined,
     managedProjectId: managedProjectId || undefined,
   };
+}
+
+function formatRefreshParts(parts: RefreshParts): string {
+  if (!parts.projectId && !parts.managedProjectId) return parts.refreshToken;
+  return [parts.refreshToken, parts.projectId ?? "", parts.managedProjectId ?? ""].join("|");
 }
 
 function accessTokenExpired(auth: OAuthAuthRecord): boolean {
@@ -282,6 +305,26 @@ function usableProjectId(value: string | undefined): string | undefined {
   return isLikelyGoogleProjectId(trimmed) ? trimmed : undefined;
 }
 
+function sanitizedRefreshParts(parts: RefreshParts): RefreshParts {
+  return {
+    refreshToken: parts.refreshToken,
+    projectId: usableProjectId(parts.projectId),
+    managedProjectId: usableProjectId(parts.managedProjectId),
+  };
+}
+
+function hasInvalidStoredProject(parts: RefreshParts): boolean {
+  return Boolean(
+    (parts.projectId && !usableProjectId(parts.projectId))
+      || (parts.managedProjectId && !usableProjectId(parts.managedProjectId)),
+  );
+}
+
+function normalizeCloudAiCompanionProject(value: LoadCodeAssistPayload["cloudaicompanionProject"]): string | undefined {
+  const raw = typeof value === "string" ? value : value?.id;
+  return usableProjectId(raw);
+}
+
 async function requestAccessToken(refreshToken: string, client: OAuthClient): Promise<{ access_token?: string; expires_in?: number; refresh_token?: string }> {
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -319,14 +362,14 @@ async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promi
       const authFile = readJson(authPath(homeDir)) as OpenCodeAuthFile | undefined;
       const nextParts = {
         refreshToken: payload.refresh_token ?? parts.refreshToken,
-        projectId: parts.projectId,
-        managedProjectId: parts.managedProjectId,
+        projectId: usableProjectId(parts.projectId),
+        managedProjectId: usableProjectId(parts.managedProjectId),
       };
       const updated: OAuthAuthRecord = {
         ...auth,
         access: payload.access_token,
         expires: Date.now() + Math.max(1, Number(payload.expires_in ?? 3600)) * 1000,
-        refresh: [nextParts.refreshToken, nextParts.projectId ?? "", nextParts.managedProjectId ?? ""].join("|"),
+        refresh: formatRefreshParts(nextParts),
       };
       writeJson(authPath(homeDir), { ...(authFile ?? {}), google: updated });
       return { auth: updated };
@@ -340,25 +383,123 @@ async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promi
   };
 }
 
-async function resolveAuth(options: { homeDir: string }): Promise<{ accessToken?: string; projectId?: string; message?: string }> {
+function repairStoredGeminiAuth(options: {
+  homeDir: string;
+  auth: OAuthAuthRecord;
+  parts: RefreshParts;
+  reason: string;
+}): GeminiAuthRepairResult {
+  const authFilePath = authPath(options.homeDir);
+  const authFile = readJson(authFilePath) as OpenCodeAuthFile | undefined;
+  const nextRefresh = formatRefreshParts(options.parts);
+  if (options.auth.refresh === nextRefresh) return { status: "clean" };
+
+  const backupSession = createBackupSession({
+    bridgeConfigDir: bridgeConfigDirForHome(options.homeDir),
+    operation: "gemini-auth-repair",
+    roots: [{ root: options.homeDir, prefix: "home" }],
+  });
+  const backup = backupSession.backupExisting(authFilePath);
+  writeJson(authFilePath, {
+    ...(authFile ?? {}),
+    google: {
+      ...options.auth,
+      refresh: nextRefresh,
+    },
+  });
+  return {
+    status: "repaired",
+    reason: options.reason,
+    backup,
+    backups: backupSession.backups,
+  };
+}
+
+function buildCodeAssistMetadata(projectId?: string): Record<string, string> {
+  const metadata: Record<string, string> = {
+    ideType: "IDE_UNSPECIFIED",
+    platform: "PLATFORM_UNSPECIFIED",
+    pluginType: "GEMINI",
+  };
+  if (projectId) metadata.duetProject = projectId;
+  return metadata;
+}
+
+async function loadManagedProject(accessToken: string, projectId?: string): Promise<string | undefined> {
+  const body: Record<string, unknown> = {
+    metadata: buildCodeAssistMetadata(projectId),
+  };
+  if (projectId) body.cloudaicompanionProject = projectId;
+
+  try {
+    const response = await fetch(`${GEMINI_CODE_ASSIST_ENDPOINT}/v1internal:loadCodeAssist`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        "User-Agent": buildGeminiCliUserAgent(),
+        "x-activity-request-id": crypto.randomUUID(),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) return undefined;
+    const payload = await response.json() as LoadCodeAssistPayload;
+    return normalizeCloudAiCompanionProject(payload.cloudaicompanionProject);
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveAuth(options: { homeDir: string; repairAuth?: boolean }): Promise<{ accessToken?: string; projectId?: string; authRepair?: GeminiAuthRepairResult; message?: string }> {
   const authFile = readJson(authPath(options.homeDir)) as OpenCodeAuthFile | undefined;
   const auth = authFile?.google;
   if (!auth || auth.type !== "oauth") {
     return { message: "Google OAuth do OpenCode nao encontrado. Use /gquota depois de autenticar." };
   }
 
-  const parts = parseRefreshParts(auth.refresh);
-  const projectId = usableProjectId(parts.managedProjectId)
-    ?? usableProjectId(parts.projectId)
-    ?? usableProjectId(process.env.OPENCODE_GEMINI_PROJECT_ID)
-    ?? usableProjectId(process.env.GOOGLE_CLOUD_PROJECT);
+  const initialParts = parseRefreshParts(auth.refresh);
+  let authRepair: GeminiAuthRepairResult | undefined;
   const refreshed = accessTokenExpired(auth) ? await refreshAccessToken(auth, options.homeDir) : { auth };
+  const effectiveAuth = refreshed.auth ?? auth;
+  const parts = parseRefreshParts(effectiveAuth.refresh);
+  const sanitizedParts = sanitizedRefreshParts(parts);
+  const storedProjectId = sanitizedParts.managedProjectId ?? sanitizedParts.projectId;
+  const envProjectId = usableProjectId(process.env.OPENCODE_GEMINI_PROJECT_ID) ?? usableProjectId(process.env.GOOGLE_CLOUD_PROJECT);
+  let projectId = storedProjectId ?? envProjectId;
+
   const accessToken = refreshed.auth?.access;
   if (!accessToken) {
-    return { projectId, message: refreshed.message ?? "Token Google indisponivel. Rode /gquota ou refaca opencode auth login." };
+    if (options.repairAuth !== false && hasInvalidStoredProject(initialParts)) {
+      authRepair = repairStoredGeminiAuth({
+        homeDir: options.homeDir,
+        auth: effectiveAuth,
+        parts: sanitizedParts,
+        reason: "Removed invalid Gemini project id segment from OpenCode auth.",
+      });
+    }
+    return { projectId, authRepair, message: refreshed.message ?? "Token Google indisponivel. Rode /gquota ou refaca opencode auth login." };
   }
 
-  return { accessToken, projectId };
+  if (!storedProjectId && !envProjectId) {
+    const discoveredProjectId = await loadManagedProject(accessToken);
+    if (discoveredProjectId) {
+      projectId = discoveredProjectId;
+      sanitizedParts.managedProjectId = discoveredProjectId;
+    }
+  }
+
+  if (options.repairAuth !== false && (hasInvalidStoredProject(parts) || (!storedProjectId && sanitizedParts.managedProjectId))) {
+    authRepair = repairStoredGeminiAuth({
+      homeDir: options.homeDir,
+      auth: effectiveAuth,
+      parts: sanitizedParts,
+      reason: sanitizedParts.managedProjectId
+        ? "Stored discovered Gemini Code Assist managed project id in OpenCode auth."
+        : "Removed invalid Gemini project id segment from OpenCode auth.",
+    });
+  }
+
+  return { accessToken, projectId, authRepair };
 }
 
 async function retrieveUserQuota(accessToken: string, projectId: string): Promise<RetrieveUserQuotaResponse | undefined> {
@@ -463,6 +604,7 @@ function baseReport(projectRoot: string, status: QuotaReport["status"], message?
 export async function refreshQuota(options: QuotaOptions = {}): Promise<QuotaReport> {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   const write = options.write !== false;
+  const repairAuth = options.repairAuth ?? write;
   const ttlMs = options.ttlMs ?? DEFAULT_CACHE_TTL_MS;
 
   if (!options.force) {
@@ -472,22 +614,26 @@ export async function refreshQuota(options: QuotaOptions = {}): Promise<QuotaRep
 
   let report: QuotaReport;
   try {
-    const auth = await resolveAuth({ homeDir: paths.homeDir });
+    const auth = await resolveAuth({ homeDir: paths.homeDir, repairAuth });
     if (!auth.accessToken) {
       report = baseReport(paths.projectRoot, "unavailable", auth.message);
       if (auth.projectId) report.projectId = auth.projectId;
+      if (auth.authRepair) report.authRepair = auth.authRepair;
     } else if (!auth.projectId) {
       report = baseReport(paths.projectRoot, "unavailable", "Projeto Gemini Code Assist nao encontrado no auth do OpenCode.");
+      if (auth.authRepair) report.authRepair = auth.authRepair;
     } else {
       const quota = await retrieveUserQuota(auth.accessToken, auth.projectId);
       if (!quota?.buckets?.length) {
         report = baseReport(paths.projectRoot, "unavailable", `Nenhum bucket de quota retornado para ${auth.projectId}.`);
         report.projectId = auth.projectId;
+        if (auth.authRepair) report.authRepair = auth.authRepair;
       } else {
         const summarized = summarizeQuotaBuckets(quota.buckets);
         report = {
           ...baseReport(paths.projectRoot, "ok"),
           projectId: auth.projectId,
+          authRepair: auth.authRepair,
           summary: summarized.summary,
           buckets: summarized.buckets,
         };
@@ -509,6 +655,9 @@ export function formatQuota(report: QuotaReport): string {
   ];
   if (report.projectId) lines.push(`Project: ${report.projectId}`);
   lines.push(`Summary: ${report.summary.label}${report.summary.resetIn ? `, reset ${report.summary.resetIn}` : ""}`);
+  if (report.authRepair?.status === "repaired") {
+    lines.push(`Auth repair: ${report.authRepair.reason ?? "OpenCode Google auth repaired."}${report.authRepair.backup ? ` Backup: ${report.authRepair.backup}` : ""}`);
+  }
   if (report.message) lines.push(`Message: ${report.message}`);
   return `${lines.join("\n")}\n`;
 }

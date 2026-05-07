@@ -1,4 +1,4 @@
-export const OGB_VERSION = "0.1.2";
+export const OGB_VERSION = "0.1.3";
 
 export type ResourceStatus = "ok" | "warning" | "error" | "needs_review";
 export type ResourceScope = "project" | "global";
@@ -21,8 +21,11 @@ export interface GeminiMcpServer {
   args?: string[];
   url?: string;
   cwd?: string;
+  timeout?: number;
   environment?: Record<string, string>;
   envKeys?: string[];
+  secretEnvKeys?: string[];
+  environmentWarnings?: string[];
   status: ResourceStatus;
   message?: string;
 }

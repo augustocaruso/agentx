@@ -305,12 +305,74 @@ test("refreshQuota ignores corrupt project ids stored beside refresh token", asy
 
   try {
     const report = await refreshQuota({ projectRoot, homeDir, force: true });
+    const stored = JSON.parse(fs.readFileSync(authFile, "utf8"));
+
     assert.equal(report.status, "ok");
     assert.equal(report.projectId, "fallback-project");
+    assert.equal(stored.google.refresh, "refresh-token");
   } finally {
     globalThis.fetch = previousFetch;
     if (previousProject === undefined) delete process.env.OPENCODE_GEMINI_PROJECT_ID;
     else process.env.OPENCODE_GEMINI_PROJECT_ID = previousProject;
+  }
+});
+
+test("refreshQuota repairs corrupt Gemini project ids by discovering the managed Code Assist project", async () => {
+  const projectRoot = tempDir("ogb-quota-project-");
+  const homeDir = tempDir("ogb-quota-home-");
+  const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
+  writeJson(authFile, {
+    google: {
+      type: "oauth",
+      access: "access-token",
+      refresh: "refresh-token|35;64;25M35;65;25M|35;64;25M35;65;25M",
+      expires: Date.now() + 60 * 60 * 1000,
+    },
+  });
+
+  const calls: string[] = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push(String(input));
+    if (String(input).endsWith(":loadCodeAssist")) {
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        metadata: {
+          ideType: "IDE_UNSPECIFIED",
+          platform: "PLATFORM_UNSPECIFIED",
+          pluginType: "GEMINI",
+        },
+      });
+      return new Response(JSON.stringify({
+        cloudaicompanionProject: { id: "managed-project" },
+        currentTier: { id: "standard-tier" },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    assert.equal(String(input), "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota");
+    assert.equal(init?.body, JSON.stringify({ project: "managed-project" }));
+    return new Response(JSON.stringify({
+      buckets: [
+        { modelId: "gemini-3-flash-preview", remainingFraction: 0.812 },
+      ],
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  try {
+    const report = await refreshQuota({ projectRoot, homeDir, force: true });
+    const stored = JSON.parse(fs.readFileSync(authFile, "utf8"));
+
+    assert.equal(report.status, "ok");
+    assert.equal(report.projectId, "managed-project");
+    assert.equal(report.authRepair?.status, "repaired");
+    assert.ok(report.authRepair?.backup);
+    assert.equal(fs.existsSync(report.authRepair.backup), true);
+    assert.match(fs.readFileSync(report.authRepair.backup, "utf8"), /35;64;25M/);
+    assert.equal(stored.google.refresh, "refresh-token||managed-project");
+    assert.deepEqual(calls, [
+      "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist",
+      "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota",
+    ]);
+  } finally {
+    globalThis.fetch = previousFetch;
   }
 });
 

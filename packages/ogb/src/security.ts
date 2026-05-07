@@ -203,14 +203,15 @@ function checkOpenCodeEnvironment(configPath: string, displayPath: string): Secu
   const config = readJsonc(configPath);
   const hits: string[] = [];
   const sensitiveKey = /(SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL|AUTH|PRIVATE)/i;
-  const safePlaceholder = /^(|false|true|0|1|<.*>|\$\{.*\}|process\.env\..*)$/;
+  const safePlaceholder = /^(|false|true|0|1|<.*>|\$\{.*\}|\{env:[A-Za-z_][A-Za-z0-9_]*\}|process\.env\..*)$/;
+  const sensitiveValue = /(\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|\b(?:sk-|ntn_|ghp_|github_pat_|xox[baprs]-|AIza)[A-Za-z0-9._-]{8,}|["']?(?:authorization|api[_-]?key|token|secret|password)["']?\s*[:=]\s*["'][^"']{8,}["'])/i;
 
   for (const [mcpName, mcpConfig] of Object.entries<any>(config?.mcp ?? {})) {
     const env = mcpConfig?.environment;
     if (!env || typeof env !== "object" || Array.isArray(env)) continue;
     for (const [key, value] of Object.entries(env)) {
-      if (!sensitiveKey.test(key)) continue;
       if (typeof value === "string" && safePlaceholder.test(value)) continue;
+      if (!sensitiveKey.test(key) && !(typeof value === "string" && sensitiveValue.test(value))) continue;
       hits.push(`${mcpName}.${key}`);
     }
   }

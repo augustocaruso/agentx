@@ -102,6 +102,48 @@ test("runSecurityCheck fails on high-confidence secret patterns", () => {
   assert.ok(report.findings.some((finding) => finding.name === "Secret patterns" && finding.status === "fail"));
 });
 
+test("runSecurityCheck allows OpenCode env-reference placeholders for MCP secrets", () => {
+  const projectRoot = tempProject();
+  writeCleanBridgeFiles(projectRoot);
+  fs.writeFileSync(path.join(projectRoot, "opencode.jsonc"), JSON.stringify({
+    mcp: {
+      notion: {
+        type: "local",
+        command: ["npx", "-y", "@notionhq/notion-mcp-server"],
+        enabled: true,
+        environment: {
+          OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+        },
+      },
+    },
+  }));
+
+  const report = runSecurityCheck({ projectRoot, json: true });
+
+  assert.equal(report.findings.find((finding) => finding.name === "OpenCode MCP environment")?.status, "pass");
+});
+
+test("runSecurityCheck still fails on materialized OpenCode MCP secrets", () => {
+  const projectRoot = tempProject();
+  writeCleanBridgeFiles(projectRoot);
+  fs.writeFileSync(path.join(projectRoot, "opencode.jsonc"), JSON.stringify({
+    mcp: {
+      notion: {
+        type: "local",
+        command: ["npx", "-y", "@notionhq/notion-mcp-server"],
+        enabled: true,
+        environment: {
+          OPENAPI_MCP_HEADERS: "{\"Authorization\":\"Bearer ntn_secret\"}",
+        },
+      },
+    },
+  }));
+
+  const report = runSecurityCheck({ projectRoot, json: true });
+
+  assert.equal(report.findings.find((finding) => finding.name === "OpenCode MCP environment")?.status, "fail");
+});
+
 test("runSecurityCheck skips unreadable directories", { skip: process.platform === "win32" }, () => {
   const projectRoot = tempProject();
   writeCleanBridgeFiles(projectRoot);

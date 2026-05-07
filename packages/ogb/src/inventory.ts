@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { flattenGeminiMd } from "./flatten.js";
+import { projectGeminiMcpEnvironment } from "./mcp-projection.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import {
   OGB_VERSION,
@@ -110,38 +111,29 @@ function safeStringArray(value: unknown, mapValue: (input: string) => string = (
   return value.map((item) => mapValue(String(item)));
 }
 
-function envKeys(rawEnv: unknown): string[] | undefined {
-  if (!rawEnv || typeof rawEnv !== "object" || Array.isArray(rawEnv)) return undefined;
-  return Object.keys(rawEnv).sort();
-}
-
-function safePortableEnvironment(rawEnv: unknown, mapValue: (input: string) => string = (input) => input): Record<string, string> | undefined {
-  if (!rawEnv || typeof rawEnv !== "object" || Array.isArray(rawEnv)) return undefined;
-  const sensitiveKey = /(SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL|AUTH|PRIVATE)/i;
-  const out: Record<string, string> = {};
-
-  for (const [key, rawValue] of Object.entries(rawEnv)) {
-    if (sensitiveKey.test(key) || typeof rawValue !== "string") continue;
-    out[key] = mapValue(rawValue);
-  }
-
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
 function mcpServerFromConfig(
   name: string,
   source: string,
   cfg: any,
   options: {
     mapValue?: (input: string) => string;
-    includePortableEnvironment?: boolean;
   } = {},
 ): GeminiMcpServer {
   const mapValue = options.mapValue ?? ((input: string) => input);
+  const environmentProjection = projectGeminiMcpEnvironment(cfg.env, { serverName: name, mapValue });
   let type: GeminiMcpServer["type"] = "unknown";
   if (cfg.command) type = "stdio";
   else if (cfg.httpUrl || cfg.url) type = "http";
   else if (cfg.sseUrl) type = "sse";
+  const baseMessage = type === "sse"
+    ? "SSE compatibility needs review"
+    : type === "unknown"
+      ? "Unknown MCP shape"
+      : undefined;
+  const messages = [
+    ...(baseMessage ? [baseMessage] : []),
+    ...environmentProjection.warnings,
+  ];
 
   return {
     name,
@@ -151,14 +143,17 @@ function mcpServerFromConfig(
     args: safeStringArray(cfg.args, mapValue),
     url: typeof (cfg.httpUrl || cfg.url || cfg.sseUrl) === "string" ? mapValue(cfg.httpUrl || cfg.url || cfg.sseUrl) : undefined,
     cwd: typeof cfg.cwd === "string" ? mapValue(cfg.cwd) : undefined,
-    environment: options.includePortableEnvironment ? safePortableEnvironment(cfg.env, mapValue) : undefined,
-    envKeys: envKeys(cfg.env),
-    status: type === "sse" || type === "unknown" ? "needs_review" : "ok",
-    message: type === "sse"
-      ? "SSE compatibility needs review"
-      : type === "unknown"
-        ? "Unknown MCP shape"
-        : undefined,
+    timeout: typeof cfg.timeout === "number" && Number.isFinite(cfg.timeout) && cfg.timeout > 0 ? cfg.timeout : undefined,
+    environment: environmentProjection.environment,
+    envKeys: environmentProjection.envKeys,
+    secretEnvKeys: environmentProjection.secretEnvKeys,
+    environmentWarnings: environmentProjection.warnings.length > 0 ? environmentProjection.warnings : undefined,
+    status: type === "sse" || type === "unknown"
+      ? "needs_review"
+      : environmentProjection.warnings.length > 0
+        ? "warning"
+        : "ok",
+    message: messages.length > 0 ? messages.join("; ") : undefined,
   };
 }
 
@@ -282,7 +277,6 @@ function collectMcps(projectRoot: string, homeDir: string): GeminiMcpServer[] {
       for (const [name, rawCfg] of Object.entries<any>(servers)) {
         out.push(mcpServerFromConfig(name, manifestPath, rawCfg ?? {}, {
           mapValue: (input) => expandGeminiExtensionValue(input, extensionDir),
-          includePortableEnvironment: true,
         }));
       }
     }

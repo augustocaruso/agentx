@@ -170,3 +170,40 @@ test("runDoctor warns when global TUI plugin runtime dependencies are missing", 
     && warning.includes("solid-js@1.9.12")
   ), true);
 });
+
+test("runDoctor reports OpenCode MCP entries written with Gemini shape", () => {
+  const homeDir = tempRoot();
+  fs.mkdirSync(path.join(homeDir, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        env: {
+          OPENAPI_MCP_HEADERS: "$OPENAPI_MCP_HEADERS",
+        },
+      },
+    },
+  }, null, 2), "utf8");
+  fs.mkdirSync(path.join(homeDir, ".config", "opencode"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".config", "opencode", "opencode.json"), JSON.stringify({
+    mcp: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        env: {
+          OPENAPI_MCP_HEADERS: "$OPENAPI_MCP_HEADERS",
+        },
+        enabled: true,
+      },
+    },
+  }, null, 2), "utf8");
+
+  const report = runDoctor({ projectRoot: homeDir, homeDir, silent: true });
+
+  assert.ok(report.warnings.some((warning) => warning.includes("notion.env uses Gemini shape")));
+  assert.ok(report.warnings.some((warning) => warning.includes("notion.args uses Gemini shape")));
+  assert.ok(report.warnings.some((warning) => warning.includes("notion.command must be an array")));
+  assert.ok(report.warnings.some((warning) => warning.includes("notion.type is missing")));
+  assert.ok(report.warnings.some((warning) => warning.includes("notion.environment is missing Gemini env key(s): OPENAPI_MCP_HEADERS")));
+});

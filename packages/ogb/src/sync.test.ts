@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { sha256Text } from "./file-hash.js";
+import { mcpEnvStorePath, readMcpEnvValues } from "./mcp-env-store.js";
 import { syncToOpenCode } from "./sync.js";
 import { TUI_CONFIG_PATH, TUI_SIDEBAR_PLUGIN_PATH, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 import { OGB_VERSION } from "./types.js";
@@ -187,6 +188,10 @@ test("syncToOpenCode builds global context from Gemini extensions and imports gl
   assert.deepEqual(globalConfig.mcp["gemini-md-export"].command, ["node", path.join(extensionDir, "src", "mcp-server.js")]);
   assert.deepEqual(globalConfig.mcp["gemini-md-export"].environment, {
     GEMINI_MCP_CHROME_LAUNCH_IF_CLOSED: "false",
+    SECRET_TOKEN: "{env:SECRET_TOKEN}",
+  });
+  assert.deepEqual(readMcpEnvValues({ homeDir }), {
+    SECRET_TOKEN: "do-not-copy",
   });
   assert.equal(JSON.stringify(globalConfig).includes("do-not-copy"), false);
   assert.equal(fs.readFileSync(path.join(globalRoot, "AGENTS.md"), "utf8"), "Manual OpenCode global rules\n");
@@ -639,8 +644,117 @@ test("syncToOpenCode projects Gemini extension MCPs into project config", () => 
   assert.deepEqual(projectedMcp.command, ["node", path.join(extensionDir, "src", "mcp-server.js")]);
   assert.deepEqual(projectedMcp.environment, {
     GEMINI_MCP_CHROME_LAUNCH_IF_CLOSED: "false",
+    SECRET_TOKEN: "{env:SECRET_TOKEN}",
   });
   assert.equal(JSON.stringify(projectConfig).includes("do-not-copy"), false);
+  assert.deepEqual(readMcpEnvValues({ homeDir }), {
+    SECRET_TOKEN: "do-not-copy",
+  });
+});
+
+test("syncToOpenCode projects local Notion MCP env references without parsing JSON env strings", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        env: {
+          OPENAPI_MCP_HEADERS: "$OPENAPI_MCP_HEADERS",
+        },
+      },
+    },
+  }));
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projectConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
+
+  assert.deepEqual(projectConfig.mcp.notion, {
+    type: "local",
+    command: ["npx", "-y", "@notionhq/notion-mcp-server"],
+    enabled: true,
+    environment: {
+      OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+    },
+  });
+  assert.deepEqual(report.warnings.filter((warning) => warning.includes("OPENAPI_MCP_HEADERS")), []);
+});
+
+test("syncToOpenCode stores sensitive local MCP env literals and projects env references", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const fakeNotionToken = "ntn_" + "a".repeat(32);
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        env: {
+          OPENAPI_MCP_HEADERS: `{"Authorization":"Bearer ${fakeNotionToken}","Notion-Version":"2022-06-28"}`,
+        },
+      },
+    },
+  }));
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projectConfigText = fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8");
+  const projectConfig = JSON.parse(projectConfigText);
+
+  assert.equal(projectConfigText.includes(fakeNotionToken), false);
+  assert.equal(JSON.stringify(report).includes(fakeNotionToken), false);
+  assert.deepEqual(projectConfig.mcp.notion.environment, {
+    OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+  });
+  assert.deepEqual(report.warnings.filter((warning) => warning.includes("OPENAPI_MCP_HEADERS")), []);
+  assert.deepEqual(readMcpEnvValues({ homeDir }), {
+    OPENAPI_MCP_HEADERS: `{"Authorization":"Bearer ${fakeNotionToken}","Notion-Version":"2022-06-28"}`,
+  });
+  const storeStat = fs.statSync(mcpEnvStorePath({ homeDir }));
+  assert.equal(storeStat.mode & 0o777, 0o600);
+});
+
+test("syncToOpenCode repairs global OpenCode MCP entries written with Gemini shape", () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  fs.mkdirSync(path.join(homeDir, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        env: {
+          OPENAPI_MCP_HEADERS: "$OPENAPI_MCP_HEADERS",
+        },
+      },
+    },
+  }));
+  fs.mkdirSync(path.join(homeDir, ".config", "opencode"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".config", "opencode", "opencode.json"), JSON.stringify({
+    mcp: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        env: {
+          OPENAPI_MCP_HEADERS: "$OPENAPI_MCP_HEADERS",
+        },
+        enabled: true,
+      },
+    },
+  }, null, 2));
+
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+  const globalConfig = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode", "opencode.json"), "utf8"));
+
+  assert.deepEqual(globalConfig.mcp.notion, {
+    type: "local",
+    command: ["npx", "-y", "@notionhq/notion-mcp-server"],
+    enabled: true,
+    environment: {
+      OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+    },
+  });
 });
 
 test("syncToOpenCode can wire external quota UI and runtime fallback plugins", () => {

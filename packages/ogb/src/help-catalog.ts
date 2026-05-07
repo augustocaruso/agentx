@@ -1,3 +1,11 @@
+export interface HelpAction {
+  label: string;
+  description: string;
+  args?: string[];
+  runnable?: boolean;
+  hint?: string;
+}
+
 export interface HelpCommand {
   name: string;
   aliases?: string[];
@@ -10,6 +18,7 @@ export interface HelpCommand {
   runArgs?: string[];
   runnable?: boolean;
   runHint?: string;
+  actions?: HelpAction[];
 }
 
 export const HELP_COMMANDS: HelpCommand[] = [
@@ -30,7 +39,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     summary: "Update OGB from the release pack and run the post-update ritual.",
     description: "Downloads the selected release, runs the platform bootstrap installer, and refreshes the bridge check afterward.",
     usage: "ogb update [--release <tag>] [--dry-run] [--plain] [--progress-json]",
-    examples: ["ogb update", "ogb update --release v0.1.2", "ogb update --dry-run", "ogb update --dry-run --progress-json"],
+    examples: ["ogb update", "ogb update --release v0.1.3", "ogb update --dry-run", "ogb update --dry-run --progress-json"],
   },
   {
     name: "check",
@@ -38,9 +47,9 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Core",
     recommended: true,
     summary: "Run the complete bridge health ritual.",
-    description: "Runs setup, sync, doctor, validation, security-check, and dashboard in one user-facing flow.",
-    usage: "ogb check [--force] [--plain] [--json] [--progress-json]",
-    examples: ["ogb check", "ogb check --force", "ogb check --plain", "ogb check --progress-json"],
+    description: "Runs setup, Gemini extension update, sync, doctor, validation, security-check, and dashboard in one user-facing flow.",
+    usage: "ogb check [--force] [--no-extension-update] [--plain] [--json] [--progress-json]",
+    examples: ["ogb check", "ogb check --force", "ogb check --no-extension-update", "ogb check --plain", "ogb check --progress-json"],
   },
   {
     name: "reset",
@@ -50,6 +59,23 @@ export const HELP_COMMANDS: HelpCommand[] = [
     description: "Only runs in the home directory. Cleans old accidental home-project artifacts, reapplies global config, syncs, and verifies.",
     usage: "ogb reset --yes [--dry-run] [--progress-json]",
     examples: ["cd ~ && ogb reset --yes", "cd ~ && ogb reset --dry-run --yes", "cd ~ && ogb reset --dry-run --yes --progress-json"],
+    actions: [
+      {
+        label: "Preview reset from home",
+        description: "Shows cleanup, global profile writes, sync and checks without changing files.",
+        args: ["reset", "--dry-run", "--yes"],
+      },
+      {
+        label: "Run reset from home",
+        description: "Rebuilds the global profile. The reset command itself refuses unsafe non-home contexts.",
+        args: ["reset", "--yes"],
+      },
+      {
+        label: "Automation progress stream",
+        description: "Preview reset with versioned NDJSON progress events.",
+        args: ["reset", "--dry-run", "--yes", "--progress-json"],
+      },
+    ],
   },
   {
     name: "dashboard",
@@ -58,8 +84,75 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: "Show the current bridge status summary.",
     description: "Combines doctor, validation, security, startup sync, update, telemetry, limits, model routing, and extension state.",
-    usage: "ogb dashboard [--plain] [--json]",
-    examples: ["ogb dashboard", "ogb bridge", "ogb dashboard --json"],
+    usage: "ogb dashboard [--json] [--no-refresh] [--write-only] [--strict]",
+    examples: ["ogb dashboard", "ogb bridge", "ogb dashboard --json", "ogb dashboard --no-refresh", "ogb dashboard --write-only", "ogb dashboard --strict"],
+    actions: [
+      {
+        label: "Show dashboard",
+        description: "Prints the human bridge summary after refreshing the supporting status files.",
+        args: ["dashboard"],
+      },
+      {
+        label: "Show dashboard via alias",
+        description: "Runs the same dashboard through the shorter bridge alias.",
+        args: ["bridge"],
+      },
+      {
+        label: "Print dashboard JSON",
+        description: "Prints the dashboard report as machine-readable JSON.",
+        args: ["dashboard", "--json"],
+      },
+      {
+        label: "Read current dashboard only",
+        description: "Builds the dashboard without refreshing doctor or limits first.",
+        args: ["dashboard", "--no-refresh"],
+      },
+      {
+        label: "Write reports silently",
+        description: "Refreshes the dashboard files without printing the human report.",
+        args: ["dashboard", "--write-only"],
+      },
+      {
+        label: "Strict dashboard check",
+        description: "Exits non-zero when the dashboard is not clean.",
+        args: ["dashboard", "--strict"],
+      },
+    ],
+  },
+  {
+    name: "help",
+    category: "Inspect",
+    summary: "Browse OGB commands and actions.",
+    description: "Opens the interactive command guide, prints classic help, or explains one command in detail.",
+    usage: "ogb help [command] [--plain] [--json]",
+    examples: ["ogb help", "ogb help check", "ogb help dashboard --plain", "ogb help --json"],
+    actions: [
+      {
+        label: "Open interactive guide",
+        description: "Browses commands, then actions/subcommands, in the terminal UI.",
+        args: ["help"],
+      },
+      {
+        label: "Print classic command list",
+        description: "Prints the non-interactive help catalog.",
+        args: ["help", "--plain"],
+      },
+      {
+        label: "Explain check",
+        description: "Shows detailed help and runnable actions for ogb check.",
+        args: ["help", "check"],
+      },
+      {
+        label: "Explain dashboard in plain mode",
+        description: "Shows dashboard help without opening the interactive UI.",
+        args: ["help", "dashboard", "--plain"],
+      },
+      {
+        label: "Print help metadata JSON",
+        description: "Prints the full command catalog as JSON for tooling.",
+        args: ["help", "--json"],
+      },
+    ],
   },
   {
     name: "doctor",
@@ -142,6 +235,23 @@ export const HELP_COMMANDS: HelpCommand[] = [
     usage: "ogb maintainer <enable|disable|status> [--json]",
     examples: ["ogb maintainer status", "ogb maintainer enable", "ogb maintainer disable"],
     runArgs: ["maintainer", "status"],
+    actions: [
+      {
+        label: "Show maintainer status",
+        description: "Prints whether this machine is protected from OGB preset overwrites.",
+        args: ["maintainer", "status"],
+      },
+      {
+        label: "Enable maintainer protection",
+        description: "Protects local OpenCode profile files from being overwritten by OGB defaults.",
+        args: ["maintainer", "enable"],
+      },
+      {
+        label: "Disable maintainer protection",
+        description: "Allows OGB preset writes on this machine again.",
+        args: ["maintainer", "disable"],
+      },
+    ],
   },
   {
     name: "cleanup-home",
@@ -259,12 +369,146 @@ export const HELP_COMMANDS: HelpCommand[] = [
     usage: "ogb telemetry <subcommand>",
     examples: ["ogb telemetry status", "ogb telemetry preview"],
     runArgs: ["telemetry", "status"],
+    actions: [
+      {
+        label: "Show telemetry status",
+        description: "Shows local telemetry configuration without exposing the auth token.",
+        args: ["telemetry", "status"],
+      },
+      {
+        label: "Preview telemetry envelope",
+        description: "Prints the redacted payload that would be sent.",
+        args: ["telemetry", "preview"],
+      },
+      {
+        label: "Send queued telemetry",
+        description: "Sends queued records when telemetry is enabled.",
+        args: ["telemetry", "send"],
+      },
+      {
+        label: "Disable telemetry",
+        description: "Turns telemetry off and keeps distribution defaults from re-enabling this install.",
+        args: ["telemetry", "disable"],
+      },
+      {
+        label: "Prepare email telemetry setup",
+        description: "Dry-runs the Cloudflare Worker + Resend setup flow.",
+        args: ["telemetry", "setup-email", "--dry-run"],
+      },
+      {
+        label: "Enable telemetry manually",
+        description: "Needs endpoint and token values before it can run.",
+        args: ["telemetry", "enable", "--endpoint", "<url>", "--token", "<token>"],
+        runnable: false,
+        hint: "Replace <url> and <token>, then run the command from your shell.",
+      },
+      {
+        label: "Record workflow telemetry",
+        description: "Internal diagnostic command; needs workflow metadata before it can run.",
+        args: ["telemetry", "record", "--workflow", "<name>"],
+        runnable: false,
+        hint: "This is an internal/debug command. Prefer telemetry status, preview, send, enable, or disable.",
+      },
+    ],
   },
 ];
 
+function shellishSplit(value: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let quote: "'" | "\"" | undefined;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote) {
+      if (char === quote) quote = undefined;
+      else current += char;
+      continue;
+    }
+    if (char === "'" || char === "\"") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        result.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (current) result.push(current);
+  return result;
+}
+
+function argsFromHelpExample(example: string): string[] | undefined {
+  const trimmed = example.trim();
+  const homePrefix = /^cd\s+~\s+&&\s+ogb\s+(.+)$/u.exec(trimmed);
+  if (homePrefix) return shellishSplit(homePrefix[1]);
+  const ogbPrefix = /^ogb\s+(.+)$/u.exec(trimmed);
+  if (ogbPrefix) return shellishSplit(ogbPrefix[1]);
+  return undefined;
+}
+
+function hasPlaceholder(args: readonly string[] | undefined): boolean {
+  return Boolean(args?.some((arg) => /^<[^>]+>$/.test(arg) || arg.includes("<") || arg.includes(">")));
+}
+
+function actionKey(action: HelpAction): string {
+  return action.args?.join("\0") ?? action.label;
+}
+
+function inferredActionDescription(command: HelpCommand, args: string[] | undefined, example: string): string {
+  if (!args) return "Shell example from the command docs; run it manually from your shell.";
+  const commandName = args[0];
+  const aliasTarget = command.aliases?.includes(commandName) ? command.name : undefined;
+  if (aliasTarget) return `Runs ${command.name} through its ${commandName} alias.`;
+  if (example.startsWith("cd ~")) return "Runs from the home directory, which OGB treats as global scope.";
+  if (args.includes("--progress-json")) return "Emits versioned NDJSON progress events for automation.";
+  if (args.includes("--json")) return "Prints machine-readable JSON instead of the human report.";
+  if (args.includes("--plain")) return "Uses the classic plain-text output instead of the interactive UI.";
+  if (args.includes("--dry-run")) return "Previews the action without applying file or install changes.";
+  if (args.includes("--force")) return "Allows OGB-managed files to be overwritten after conflict checks.";
+  if (args.includes("--strict")) return "Exits non-zero when warnings or an unclean state are present.";
+  if (args.includes("--windows")) return "Includes Windows-specific validation and installer checks.";
+  if (args.includes("--cached")) return "Uses a fresh cached provider-usage result when available.";
+  if (args.includes("--no-refresh")) return "Reads existing generated reports without refreshing supporting checks first.";
+  if (args.includes("--write-only")) return "Writes generated reports without printing the human summary.";
+  if (args.includes("--no-sync") || args.includes("--skip-sync")) return "Skips the sync/projection part of the flow.";
+  if (args.includes("--no-extension-update")) return "Skips the automatic Gemini extension update before sync.";
+  if (args.includes("--accept-hooks")) return "Records current Gemini hooks as reviewed by hash during the check.";
+  if (args.includes("--auto-consent") || args.includes("--yes")) return "Runs unattended by answering supported confirmation prompts automatically.";
+  if (args.includes("--reset-global")) return "Rebuilds the global OpenCode profile from OGB defaults.";
+  return command.summary;
+}
+
+export function helpActionsForCommand(command: HelpCommand): HelpAction[] {
+  const explicit = command.actions ?? [];
+  const inferred = command.examples.map((example): HelpAction => {
+    const args = argsFromHelpExample(example);
+    const runnable = command.runnable !== false && Boolean(args) && !hasPlaceholder(args);
+    return {
+      label: args ? formatHelpRunLine(args) : example,
+      description: inferredActionDescription(command, args, example),
+      args,
+      runnable,
+      hint: runnable ? undefined : command.runHint ?? "Replace placeholders or run this example manually from your shell.",
+    };
+  });
+  const all = [...explicit, ...inferred];
+  const seen = new Set<string>();
+  return all.filter((action) => {
+    const key = actionKey(action);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function runArgsForHelpCommand(command: HelpCommand): string[] | undefined {
   if (command.runnable === false) return undefined;
-  return command.runArgs ?? [command.name];
+  if (command.runArgs) return command.runArgs;
+  return helpActionsForCommand(command).find((action) => action.runnable !== false && action.args)?.args;
 }
 
 export function formatHelpRunLine(args: readonly string[]): string {
@@ -322,6 +566,17 @@ export function formatHelpCommand(command: HelpCommand): string {
   if (command.examples.length > 0) {
     lines.push("", "Examples");
     for (const example of command.examples) lines.push(`  ${example}`);
+  }
+  const actions = helpActionsForCommand(command);
+  if (actions.length > 0) {
+    lines.push("", "Actions");
+    for (const action of actions) {
+      const commandLine = action.args ? formatHelpRunLine(action.args) : action.label;
+      const state = action.runnable === false ? "manual" : "run";
+      lines.push(`  ${state.padEnd(6)} ${commandLine}`);
+      lines.push(`         ${action.description}`);
+      if (action.runnable === false && action.hint) lines.push(`         ${action.hint}`);
+    }
   }
   return `${lines.join("\n")}\n`;
 }

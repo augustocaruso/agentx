@@ -18,6 +18,7 @@ import { buildInventory, writeInventory } from "./inventory.js";
 import { formatLimits, refreshLimits } from "./limits.js";
 import { buildOpenCodeLaunchArgs } from "./launch.js";
 import { disableMaintainerRole, enableMaintainerRole, readLocalRole, type LocalRoleStatus } from "./local-role.js";
+import { readMcpEnvValues } from "./mcp-env-store.js";
 import { readOgbConfig } from "./ogb-config.js";
 import { runPass } from "./pass.js";
 import { defaultGeminiInput, isHomeProject, resolveProjectPaths } from "./paths.js";
@@ -1008,7 +1009,11 @@ program.command("launch")
       runDoctor({ projectRoot: paths.projectRoot, strict: opts.doctor === "strict" });
     }
     const args = buildOpenCodeLaunchArgs({ agent: opts.agent, yolo: opts.yolo });
-    const child = spawnCommand("opencode", args, { cwd: paths.projectRoot, stdio: "inherit" });
+    const child = spawnCommand("opencode", args, {
+      cwd: paths.projectRoot,
+      stdio: "inherit",
+      env: { ...process.env, ...readMcpEnvValues({ homeDir: paths.homeDir }) },
+    });
     child.on("exit", (code) => process.exit(code ?? 0));
   });
 

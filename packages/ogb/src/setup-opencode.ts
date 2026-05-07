@@ -36,6 +36,7 @@ const STATUS_FILE = "ogb-plugin-status.json";
 const STARTUP_LOCK_FILE = "ogb-startup-sync.lock";
 const UPDATE_STATUS_FILE = "ogb-update-status.json";
 const DASHBOARD_FILE = "ogb-dashboard.md";
+const MCP_ENV_FILE = path.join(os.homedir(), ".config", "opencode-gemini-bridge", "mcp-env.json");
 const STARTUP_DELAY_MS = 2500;
 const OGB_DIRECT_COMMANDS = {
   bridge: {
@@ -81,6 +82,21 @@ const OGB_DIRECT_COMMANDS = {
 };
 const BRIDGE_COMMANDS = new Set([...Object.keys(OGB_DIRECT_COMMANDS), "sync"]);
 const COMMAND_REGISTRATION_SKIP = new Set(["sync"]);
+
+function hydrateMcpEnvironment() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(MCP_ENV_FILE, "utf8"));
+    const values = parsed && parsed.schema === "opencode-gemini-bridge.mcp-env.v1" && parsed.values && typeof parsed.values === "object" && !Array.isArray(parsed.values)
+      ? parsed.values
+      : {};
+    for (const [key, value] of Object.entries(values)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== "string") continue;
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  } catch {
+    // Missing or unreadable local env store is fine; MCPs can still use normal process env.
+  }
+}
 
 function splitArgs(raw, fallback = DEFAULT_ARGS) {
   if (!raw || !raw.trim()) return fallback;
@@ -918,6 +934,7 @@ async function runCommand({ cwd, client, reason, notifications, failureBackoffMs
 }
 
 export const OgbStartupSync = async ({ client, directory, worktree }) => {
+  hydrateMcpEnvironment();
   const cwd = resolveCwd({ directory, worktree });
   if (!cwd) {
     await log(client, {

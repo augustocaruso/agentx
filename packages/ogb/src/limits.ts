@@ -34,6 +34,7 @@ export interface LimitsSourceStatus {
   status: "ok" | "unavailable" | "error" | "skipped";
   message?: string;
   providerCount?: number;
+  authRepair?: QuotaReport["authRepair"];
 }
 
 export interface LimitsReport {
@@ -518,16 +519,18 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
       homeDir: paths.homeDir,
       force: options.force,
       write: false,
+      repairAuth: write,
       ttlMs,
     });
     const geminiProvider = quotaReportToProvider(quota);
     if (geminiProvider) {
       providers = [...providers, geminiProvider];
-      geminiCodeAssist = { status: "ok", providerCount: 1 };
+      geminiCodeAssist = { status: "ok", providerCount: 1, authRepair: quota.authRepair };
     } else {
       geminiCodeAssist = {
         status: quota.status === "error" ? "error" : "unavailable",
         message: quota.message,
+        authRepair: quota.authRepair,
       };
     }
   }

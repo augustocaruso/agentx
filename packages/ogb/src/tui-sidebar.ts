@@ -133,6 +133,10 @@ function metricUsageLabel(metric) {
   return metric.endsWith("%") ? metric + " used" : metric;
 }
 
+function usageLabelForLine(lineData) {
+  return metricUsageLabel(lineMetric(lineData));
+}
+
 function providerMeta(provider) {
   const plan = provider?.plan ? String(provider.plan) : "";
   return plan;
@@ -147,6 +151,16 @@ function providerPrimaryLine(provider) {
     || lines[0];
 }
 
+function progressLines(provider) {
+  return (Array.isArray(provider?.lines) ? provider.lines : [])
+    .filter((item) => item?.type === "progress" || lineUsedPercent(item) !== undefined);
+}
+
+function lineWithLabel(lines, label) {
+  const wanted = String(label || "").toLowerCase();
+  return lines.find((item) => String(item?.label || "").toLowerCase() === wanted);
+}
+
 function providerLabel(provider) {
   const name = String(provider?.displayName || "Provider");
   const meta = providerMeta(provider);
@@ -159,6 +173,18 @@ function providerKind(providerID) {
   if (id.includes("openai") || id.includes("gpt") || id.includes("codex")) return "openai";
   if (id.includes("google") || id.includes("gemini")) return "gemini";
   return id ? "other" : "unknown";
+}
+
+function providerFooterLine(provider) {
+  const lines = progressLines(provider);
+  const providerId = String(provider?.providerId || "") + " " + String(provider?.displayName || "");
+  const session = lineWithLabel(lines, "Session");
+  const weekly = lineWithLabel(lines, "Weekly");
+  const quota = lineWithLabel(lines, "Quota");
+  if (providerKind(providerId) === "gemini") return quota || lines[0] || providerPrimaryLine(provider);
+  if ((lineUsedPercent(weekly) ?? 0) >= 100) return weekly;
+  if ((lineUsedPercent(session) ?? 0) >= 100) return session;
+  return session || quota || weekly || lines[0] || providerPrimaryLine(provider);
 }
 
 function readLimits(root) {
@@ -356,15 +382,15 @@ function providerMatches(provider, providerID) {
 function limitForProvider(root, providerID) {
   const providers = readLimits(root).providers;
   const provider = providerID ? providers.find((item) => providerMatches(item, providerID)) : providers[0];
-  const primary = providerPrimaryLine(provider);
-  const metric = lineMetric(primary);
-  if (!provider || !metric) return undefined;
-  const usageLabel = metricUsageLabel(metric);
+  const primary = providerFooterLine(provider);
+  const usageLabel = usageLabelForLine(primary);
+  if (!provider || !usageLabel) return undefined;
   return {
     available: true,
     source: "limits",
     label: providerLabel(provider) + " " + usageLabel,
-    promptLabel: String(provider.displayName || "Limits") + " " + usageLabel,
+    promptLabel: usageLabel,
+    usedPercent: lineUsedPercent(primary),
     resetIn: resetText(primary),
   };
 }
@@ -701,7 +727,8 @@ function quotaFromGquotaText(output) {
     available: true,
     source: "/gquota",
     label: used ? used + " used" : "quota n/a",
-    promptLabel: used ? "Gemini " + used + " used" : "Gemini quota n/a",
+    promptLabel: used ? used + " used" : "quota n/a",
+    usedPercent: clampPercent(worst.used),
     resetIn: worst.resetIn && worst.resetIn !== "-" ? worst.resetIn : undefined,
     projectId,
   };
@@ -755,6 +782,13 @@ function quotaForUi(api, sessionId, root, usage, selectedModel) {
     label: "",
     promptLabel: "",
   };
+}
+
+function quotaUsageColor(theme, percent) {
+  const value = clampPercent(percent) ?? 0;
+  if (value >= 100) return theme.error;
+  if (value >= 85) return theme.warning;
+  return theme.text;
 }
 
 function readPanel(root) {
@@ -819,16 +853,16 @@ function outcomeLabel(outcome) {
   return String(outcome || "unknown").toUpperCase();
 }
 
-function SyncText(props) {
+function SyncInline(props) {
   const data = () => props.panel();
-  return line({ fg: props.theme().textMuted }, "sync ", data().startupState, " ", formatTime(data().startupTime));
+  return el("span", { style: { fg: props.theme().textMuted } }, "sync " + data().startupState + " " + formatTime(data().startupTime));
 }
 
 function LimitsRows(props) {
   const rows = () => quotaRows(props.root);
   const unavailable = () => unavailableLimitRows(props.root);
   return box({ gap: 0 },
-    line({ fg: props.theme().text }, "Quota"),
+    line({ fg: props.theme().text }, el("b", {}, "Usage")),
     () => {
       const data = rows();
       const missing = unavailable();
@@ -839,19 +873,9 @@ function LimitsRows(props) {
   );
 }
 
-function StatusBlock(props) {
-  return box({ gap: 0 },
-    line({ fg: props.theme().text }, "OGB ", () => {
-      const data = props.panel();
-      return el("span", { style: { fg: outcomeColor(props.theme(), data.outcome) } }, outcomeLabel(data.outcome));
-    }),
-    createComponent(SyncText, { panel: props.panel, theme: props.theme }),
-  );
-}
-
 function bridgeInventoryText(data) {
-  return String(data.geminiFiles || 0) + " GEMINI.md files · "
-    + String(data.mcps || 0) + " MCP servers · "
+  return String(data.geminiFiles || 0) + " GEMINI.md · "
+    + String(data.mcps || 0) + " MCP · "
     + String(data.skills || 0) + " skills";
 }
 
@@ -862,17 +886,32 @@ function updateText(data) {
   return "";
 }
 
+function authRepairText(data) {
+  const repair = data.limits?.sources?.geminiCodeAssist?.authRepair;
+  return repair?.status === "repaired" ? "Gemini auth repaired · restart OpenCode" : "";
+}
+
 function BridgeRows(props) {
   const data = () => props.panel();
   return box({ gap: 0 },
-    line({ fg: props.theme().info }, "BRIDGE"),
-    line({ fg: props.theme().text }, "OGB ", () => {
-      const current = data();
-      return el("span", { style: { fg: outcomeColor(props.theme(), current.outcome) } }, outcomeLabel(current.outcome));
-    }),
-    createComponent(SyncText, { panel: props.panel, theme: props.theme }),
+    line({ fg: props.theme().text },
+      el("span", { style: { fg: props.theme().info } }, "BRIDGE"),
+      " ",
+      () => {
+        const current = data();
+        return el("span", { style: { fg: outcomeColor(props.theme(), current.outcome) } }, outcomeLabel(current.outcome));
+      },
+      " ",
+      createComponent(SyncInline, { panel: props.panel, theme: props.theme }),
+    ),
     line({ fg: props.theme().textMuted }, ""),
-    line({ fg: props.theme().text }, () => el("b", {}, bridgeInventoryText(data()))),
+    line({ fg: props.theme().text }, () => bridgeInventoryText(data())),
+    () => {
+      const current = data();
+      const text = authRepairText(current);
+      if (!text) return undefined;
+      return line({ fg: props.theme().warning }, text);
+    },
     () => {
       const current = data();
       const text = updateText(current);
@@ -982,7 +1021,10 @@ function PromptRight(props) {
 
   return box({ flexDirection: "row", gap: 0, flexShrink: 0 },
     line({ fg: theme().textMuted, wrapMode: "none" }, () => elapsed()),
-    line({ fg: theme().textMuted, wrapMode: "none" }, () => hasQuota() ? (elapsed() ? " · " : "") + quota().promptLabel : ""),
+    line({ fg: theme().textMuted, wrapMode: "none" }, () => hasQuota() ? (elapsed() ? " · " : "") + "quota " : ""),
+    line({ fg: theme().text, wrapMode: "none" }, () => hasQuota()
+      ? el("span", { style: { fg: quotaUsageColor(theme(), quota().usedPercent) } }, quota().promptLabel)
+      : ""),
     line({ fg: theme().textMuted, wrapMode: "none" }, () => hasReset() ? " · reset " + compactDurationLabel(quota().resetIn) : ""),
   );
 }

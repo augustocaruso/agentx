@@ -70,12 +70,53 @@ test("buildInventory collects Gemini files, imports, skills, agents, commands, h
   assert.deepEqual(inv.mcps.find((mcp) => mcp.name === "gemini-md-export")?.args, [path.join(extensionDir, "src", "mcp-server.js")]);
   assert.deepEqual(inv.mcps.find((mcp) => mcp.name === "gemini-md-export")?.environment, {
     GEMINI_MCP_CHROME_LAUNCH_IF_CLOSED: "false",
+    SECRET_TOKEN: "{env:SECRET_TOKEN}",
   });
+  assert.deepEqual(inv.mcps.find((mcp) => mcp.name === "gemini-md-export")?.secretEnvKeys, ["SECRET_TOKEN"]);
+  assert.equal(inv.mcps.find((mcp) => mcp.name === "gemini-md-export")?.status, "ok");
   assert.deepEqual(inv.mcps.find((mcp) => mcp.name === "local")?.envKeys, ["SECRET_TOKEN"]);
+  assert.deepEqual(inv.mcps.find((mcp) => mcp.name === "local")?.environment, {
+    SECRET_TOKEN: "{env:SECRET_TOKEN}",
+  });
+  assert.deepEqual(inv.mcps.find((mcp) => mcp.name === "local")?.secretEnvKeys, ["SECRET_TOKEN"]);
   assert.equal(inv.mcps.find((mcp) => mcp.name === "local")?.status, "ok");
   assert.equal(inv.mcps.find((mcp) => mcp.name === "stream")?.status, "needs_review");
   assert.equal(JSON.stringify(inv).includes("do-not-copy"), false);
   assert.equal(JSON.stringify(inv).includes("extension-secret"), false);
+});
+
+test("buildInventory preserves env references and replaces sensitive MCP literals", () => {
+  const projectRoot = tempDir("ogb-inventory-project-");
+  const homeDir = tempDir("ogb-inventory-home-");
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        timeout: 30_000,
+        env: {
+          OPENAPI_MCP_HEADERS: "$OPENAPI_MCP_HEADERS",
+          LITERAL_HEADERS: "{\"Authorization\":\"Bearer ntn_" + "a".repeat(20) + "\"}",
+          RETRIES: 2,
+        },
+      },
+    },
+  }));
+
+  const inv = buildInventory({ projectRoot, homeDir });
+  const notion = inv.mcps.find((mcp) => mcp.name === "notion");
+
+  assert.deepEqual(notion?.environment, {
+    LITERAL_HEADERS: "{env:LITERAL_HEADERS}",
+    OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+  });
+  assert.equal(notion?.timeout, 30_000);
+  assert.equal(notion?.status, "warning");
+  assert.deepEqual(notion?.secretEnvKeys, ["LITERAL_HEADERS"]);
+  assert.doesNotMatch(notion?.message ?? "", /LITERAL_HEADERS/);
+  assert.match(notion?.message ?? "", /RETRIES is not a string/);
+  assert.equal(JSON.stringify(inv).includes("ntn_"), false);
 });
 
 test("buildInventory does not duplicate home resources when projectRoot is homeDir", () => {

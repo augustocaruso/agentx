@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, useApp, useInput, type Instance } from "ink";
-import { filterHelpCommands, formatHelpRunLine, runArgsForHelpCommand, type HelpCommand } from "./help-catalog.js";
+import { filterHelpCommands, formatHelpRunLine, helpActionsForCommand, type HelpAction, type HelpCommand } from "./help-catalog.js";
 
 export interface InteractiveHelpSelection {
   command: HelpCommand;
+  action: HelpAction;
   args: string[];
 }
 
@@ -61,7 +62,6 @@ function HelpDetails(props: { command: HelpCommand | undefined; detailMode?: boo
       React.createElement(Text, { color: "gray" }, "Clear the filter or type a broader term."),
     );
   }
-  const runArgs = runArgsForHelpCommand(command);
   return React.createElement(
     Box,
     { flexDirection: "column", marginTop: 1 },
@@ -81,14 +81,65 @@ function HelpDetails(props: { command: HelpCommand | undefined; detailMode?: boo
       React.createElement(Text, { bold: true }, "Examples"),
       ...command.examples.map((example) => React.createElement(Text, { key: example, color: "gray" }, `- ${example}`)),
     ),
-    props.detailMode
-      ? React.createElement(Box, { marginTop: 1, flexDirection: "column" },
-        React.createElement(Text, { bold: true }, "Action"),
-        runArgs
-          ? React.createElement(Text, { color: "green" }, `Enter runs ${formatHelpRunLine(runArgs)}`)
-          : React.createElement(Text, { color: "yellow" }, command.runHint ?? "This command needs arguments before it can run from the guide."),
-      )
-      : null,
+  );
+}
+
+function actionRunnable(action: HelpAction | undefined): action is HelpAction & { args: string[] } {
+  return Boolean(action?.args && action.runnable !== false);
+}
+
+function HelpActionList(props: {
+  actions: HelpAction[];
+  selected: number;
+  width: number;
+  narrow: boolean;
+  message?: string;
+}) {
+  if (props.actions.length === 0) {
+    return React.createElement(Box, { flexDirection: "column", marginTop: 1 },
+      React.createElement(Text, { bold: true }, "Actions"),
+      React.createElement(Text, { color: "yellow" }, "No runnable actions are documented for this command yet."),
+    );
+  }
+  const window = visibleWindow(props.actions, props.selected, props.narrow ? 5 : 8);
+  const labelWidth = props.narrow ? Math.max(16, props.width - 10) : Math.min(34, Math.max(20, Math.floor(props.width * 0.34)));
+  const commandWidth = props.narrow ? Math.max(18, props.width - 8) : Math.max(20, props.width - labelWidth - 20);
+  return React.createElement(
+    Box,
+    { flexDirection: "column", marginTop: 1 },
+    React.createElement(Text, { bold: true }, "Actions and subcommands"),
+    React.createElement(Text, { color: "gray" }, "Select one action, then press Enter to run it."),
+    React.createElement(
+      Box,
+      { flexDirection: "column", marginTop: 1 },
+      ...window.items.map((action, index) => {
+        const actualIndex = window.offset + index;
+        const active = actualIndex === props.selected;
+        const runnable = actionRunnable(action);
+        const commandLine = action.args ? formatHelpRunLine(action.args) : action.label;
+        const status = runnable ? "run" : "manual";
+        const color = active ? runnable ? "green" : "yellow" : "gray";
+        return props.narrow
+          ? React.createElement(Box, { key: `${action.label}-${actualIndex}`, flexDirection: "column", marginBottom: 1 },
+            React.createElement(Text, { color, bold: active }, `${active ? ">" : " "} ${action.label}`),
+            React.createElement(Text, { color: runnable ? "cyan" : "yellow" }, `  ${status} ${truncate(commandLine, commandWidth)}`),
+            React.createElement(Text, { color: active ? "white" : "gray" }, `  ${action.description}`),
+            active && !runnable && action.hint ? React.createElement(Text, { color: "yellow" }, `  ${action.hint}`) : null,
+          )
+          : React.createElement(Box, { key: `${action.label}-${actualIndex}`, flexDirection: "column", marginBottom: 1 },
+            React.createElement(Box, { flexDirection: "row" },
+              React.createElement(Text, { color, bold: active }, `${active ? ">" : " "} ${truncate(action.label, labelWidth).padEnd(labelWidth)} `),
+              React.createElement(Text, { color: runnable ? "cyan" : "yellow" }, `${status.padEnd(6)} `),
+              React.createElement(Text, { color: active ? "white" : "gray" }, truncate(commandLine, commandWidth)),
+            ),
+            React.createElement(Text, { color: active ? "white" : "gray" }, `    ${action.description}`),
+            active && !runnable && action.hint ? React.createElement(Text, { color: "yellow" }, `    ${action.hint}`) : null,
+          );
+      }),
+    ),
+    props.message ? React.createElement(Box, { marginTop: 1 },
+      React.createElement(Text, { color: "yellow" }, props.message),
+    ) : null,
   );
 }
 
@@ -97,6 +148,8 @@ function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: Interac
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [detailMode, setDetailMode] = useState(false);
+  const [actionSelected, setActionSelected] = useState(0);
+  const [actionMessage, setActionMessage] = useState<string | undefined>();
   const width = useTerminalWidth();
   const narrow = width < 72;
   const nameWidth = narrow ? Math.max(10, width - 22) : Math.min(18, Math.max(12, Math.floor(width * 0.22)));
@@ -105,20 +158,47 @@ function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: Interac
   const safeSelected = filtered.length === 0 ? 0 : clamp(selected, 0, filtered.length - 1);
   const window = visibleWindow(filtered, safeSelected, narrow ? 8 : 12);
   const current = filtered[safeSelected];
-  const currentRunArgs = current ? runArgsForHelpCommand(current) : undefined;
+  const actions = current ? helpActionsForCommand(current) : [];
+  const safeActionSelected = actions.length === 0 ? 0 : clamp(actionSelected, 0, actions.length - 1);
+  const currentAction = actions[safeActionSelected];
   const controls = detailMode
-    ? currentRunArgs ? "Enter run  Esc/backspace back  q exit" : "needs args  Esc/backspace back  q exit"
+    ? actionRunnable(currentAction) ? "Enter run action  Esc/backspace back  ↑↓ move  q exit" : "manual action  Esc/backspace back  ↑↓ move  q exit"
     : "Enter select  q/Esc exit  ↑↓ move  type filter";
 
   useInput((input, key) => {
     if (detailMode) {
-      if (key.return && currentRunArgs && current) {
-        props.onLaunch({ command: current, args: currentRunArgs });
+      if (key.return && current && actionRunnable(currentAction)) {
+        props.onLaunch({ command: current, action: currentAction, args: currentAction.args });
         exit();
+        return;
+      }
+      if (key.return && currentAction && !actionRunnable(currentAction)) {
+        setActionMessage(currentAction.hint ?? "This action needs arguments before it can run from the guide.");
+        return;
+      }
+      if (key.upArrow || input === "k") {
+        setActionSelected((value) => clamp(value - 1, 0, Math.max(0, actions.length - 1)));
+        setActionMessage(undefined);
+        return;
+      }
+      if (key.downArrow || input === "j") {
+        setActionSelected((value) => clamp(value + 1, 0, Math.max(0, actions.length - 1)));
+        setActionMessage(undefined);
+        return;
+      }
+      if (key.pageUp) {
+        setActionSelected((value) => clamp(value - 5, 0, Math.max(0, actions.length - 1)));
+        setActionMessage(undefined);
+        return;
+      }
+      if (key.pageDown) {
+        setActionSelected((value) => clamp(value + 5, 0, Math.max(0, actions.length - 1)));
+        setActionMessage(undefined);
         return;
       }
       if (key.escape || key.backspace || key.delete) {
         setDetailMode(false);
+        setActionMessage(undefined);
         return;
       }
       if (input === "q" || input === "Q") {
@@ -157,6 +237,8 @@ function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: Interac
     }
     if (key.return && current) {
       setDetailMode(true);
+      setActionSelected(0);
+      setActionMessage(undefined);
       return;
     }
     if (key.backspace || key.delete) {
@@ -185,7 +267,16 @@ function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: Interac
         React.createElement(Text, { color: "gray" }, controls),
     ),
     detailMode
-      ? React.createElement(HelpDetails, { command: current, detailMode: true, title: "Selected command" })
+      ? React.createElement(React.Fragment, null,
+        React.createElement(HelpDetails, { command: current, detailMode: true, title: "Selected command" }),
+        React.createElement(HelpActionList, {
+          actions,
+          selected: safeActionSelected,
+          width,
+          narrow,
+          message: actionMessage,
+        }),
+      )
       : React.createElement(React.Fragment, null,
         React.createElement(Text, { color: "gray" }, query ? `Filter: ${query}` : "Filter: type any command, topic, or flag"),
         React.createElement(
@@ -213,7 +304,7 @@ function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: Interac
               );
           }),
         ),
-        React.createElement(HelpDetails, { command: current, title: "Preview. Press Enter for the command page." }),
+        React.createElement(HelpDetails, { command: current, title: "Preview. Press Enter for actions and subcommands." }),
       ),
   );
 }
