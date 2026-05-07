@@ -10,8 +10,8 @@ import { runDoctor } from "./doctor.js";
 import { externalOpenCodePlugins } from "./external-integrations.js";
 import { formatCommand, installGeminiExtension, updateGeminiExtensions } from "./extensions.js";
 import { flattenGeminiMd } from "./flatten.js";
-import { findHelpCommand, formatHelpCatalog, formatHelpCommand, HELP_COMMANDS } from "./help-catalog.js";
-import { renderInteractiveHelp } from "./help-ui.js";
+import { findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS } from "./help-catalog.js";
+import { renderInteractiveHelp, type InteractiveHelpSelection } from "./help-ui.js";
 import { cleanupHomeProjectArtifacts, printHomeCleanupReport } from "./home-cleanup.js";
 import { printInstallReport, runInstall } from "./install.js";
 import { buildInventory, writeInventory } from "./inventory.js";
@@ -20,7 +20,7 @@ import { buildOpenCodeLaunchArgs } from "./launch.js";
 import { readOgbConfig } from "./ogb-config.js";
 import { runPass } from "./pass.js";
 import { defaultGeminiInput, isHomeProject, resolveProjectPaths } from "./paths.js";
-import { spawnCommand } from "./process.js";
+import { spawnCommand, spawnCommandSync } from "./process.js";
 import { ensureProjectConfig } from "./project-config.js";
 import { printResetReport, ResetConfirmationError, ResetNotHomeError, runReset } from "./reset.js";
 import { rulesyncDefaultFeatures, type RulesyncMode } from "./rulesync.js";
@@ -57,6 +57,31 @@ function splitFeatures(value: string | undefined): string[] | undefined {
 
 function commonProjectOptions() {
   return program.opts<{ project?: string }>();
+}
+
+function runInteractiveHelpSelection(selection: InteractiveHelpSelection): void {
+  const project = commonProjectOptions().project ?? process.cwd();
+  const cliPath = fileURLToPath(import.meta.url);
+  const args = [cliPath, "--project", project, ...selection.args];
+  console.log(`\nRunning ${formatHelpRunLine(selection.args)}\n`);
+  const result = spawnCommandSync(process.execPath, args, {
+    cwd: process.cwd(),
+    stdio: "inherit",
+  });
+  if (result.error) {
+    console.error(`Could not run ${formatHelpRunLine(selection.args)}: ${result.error.message}`);
+    console.error("Next: run the command manually from your shell, or run `ogb help --plain` to inspect the command list.");
+    process.exitCode = 2;
+    return;
+  }
+  if (typeof result.status === "number") {
+    process.exitCode = result.status;
+    return;
+  }
+  if (result.signal) {
+    console.error(`${formatHelpRunLine(selection.args)} stopped with signal ${result.signal}.`);
+    process.exitCode = 1;
+  }
 }
 
 function runImportWorkflow(opts: { dryRun?: boolean; force?: boolean; rulesync?: unknown; features?: string }) {
@@ -378,7 +403,8 @@ program.command("help")
     }
 
     if (shouldUseRitualUi({ plain: opts.plain })) {
-      await renderInteractiveHelp(HELP_COMMANDS);
+      const selection = await renderInteractiveHelp(HELP_COMMANDS);
+      if (selection) runInteractiveHelpSelection(selection);
       return;
     }
 

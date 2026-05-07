@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterHelpCommands, findHelpCommand, formatHelpCatalog, formatHelpCommand, HELP_COMMANDS } from "./help-catalog.js";
+import { filterHelpCommands, findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS, runArgsForHelpCommand } from "./help-catalog.js";
 
 test("help catalog exposes the recommended cargo-like commands", () => {
   const recommended = HELP_COMMANDS.filter((command) => command.recommended).map((command) => command.name);
@@ -22,6 +22,11 @@ test("help catalog filters commands by command name, alias, category, and descri
   assert.ok(filterHelpCommands("--reset-global").some((command) => command.name === "install"));
 });
 
+test("help catalog ranks direct command matches before incidental description matches", () => {
+  assert.equal(filterHelpCommands("doctor")[0]?.name, "doctor");
+  assert.equal(filterHelpCommands("bridge")[0]?.name, "dashboard");
+});
+
 test("plain help catalog and command details include descriptions and examples", () => {
   const catalog = formatHelpCatalog();
   const check = formatHelpCommand(findHelpCommand("check")!);
@@ -34,3 +39,9 @@ test("plain help catalog and command details include descriptions and examples",
   assert.match(check, /Examples/);
 });
 
+test("interactive help exposes runnable commands and blocks commands that need required arguments", () => {
+  assert.deepEqual(runArgsForHelpCommand(findHelpCommand("check")!), ["check"]);
+  assert.deepEqual(runArgsForHelpCommand(findHelpCommand("telemetry")!), ["telemetry", "status"]);
+  assert.equal(runArgsForHelpCommand(findHelpCommand("install-extension")!), undefined);
+  assert.equal(formatHelpRunLine(["telemetry", "status"]), "ogb telemetry status");
+});

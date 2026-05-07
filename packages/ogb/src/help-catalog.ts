@@ -7,6 +7,9 @@ export interface HelpCommand {
   usage: string;
   examples: string[];
   recommended?: boolean;
+  runArgs?: string[];
+  runnable?: boolean;
+  runHint?: string;
 }
 
 export const HELP_COMMANDS: HelpCommand[] = [
@@ -154,6 +157,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     description: "Wraps Gemini extension installation and runs the bridge follow-up checks. Local risky extensions require explicit trust.",
     usage: "ogb install-extension <source> [--trust] [--dry-run]",
     examples: ["ogb install-extension https://github.com/org/ext", "ogb install-extension ./my-ext --trust"],
+    runnable: false,
+    runHint: "This command needs an extension source first. Pick one of the examples and replace the source.",
   },
   {
     name: "update-extensions",
@@ -178,6 +183,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     description: "Stores reviewed hashes for extension hook/script resources after manual review.",
     usage: "ogb trust-extension <extension> [--all-hooks] [--all-scripts]",
     examples: ["ogb trust-extension browsermcp-extension --all-hooks"],
+    runnable: false,
+    runHint: "This command needs an extension name first. Use `ogb trust-report` to see available extensions.",
   },
   {
     name: "check-update",
@@ -242,8 +249,18 @@ export const HELP_COMMANDS: HelpCommand[] = [
     description: "Parent command for telemetry setup, status, preview, send, enable, and disable.",
     usage: "ogb telemetry <subcommand>",
     examples: ["ogb telemetry status", "ogb telemetry preview"],
+    runArgs: ["telemetry", "status"],
   },
 ];
+
+export function runArgsForHelpCommand(command: HelpCommand): string[] | undefined {
+  if (command.runnable === false) return undefined;
+  return command.runArgs ?? [command.name];
+}
+
+export function formatHelpRunLine(args: readonly string[]): string {
+  return `ogb ${args.join(" ")}`;
+}
 
 export function findHelpCommand(name: string | undefined, commands: readonly HelpCommand[] = HELP_COMMANDS): HelpCommand | undefined {
   const normalized = name?.trim().toLowerCase();
@@ -257,7 +274,7 @@ export function findHelpCommand(name: string | undefined, commands: readonly Hel
 export function filterHelpCommands(query: string, commands: readonly HelpCommand[] = HELP_COMMANDS): HelpCommand[] {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return [...commands];
-  return commands.filter((command) => {
+  return commands.map((command, index) => {
     const haystack = [
       command.name,
       ...(command.aliases ?? []),
@@ -267,8 +284,20 @@ export function filterHelpCommands(query: string, commands: readonly HelpCommand
       command.usage,
       ...command.examples,
     ].join(" ").toLowerCase();
-    return terms.every((term) => haystack.includes(term));
-  });
+    if (!terms.every((term) => haystack.includes(term))) return undefined;
+    const aliases = command.aliases?.map((alias) => alias.toLowerCase()) ?? [];
+    const score = Math.min(...terms.map((term) => {
+      if (command.name.toLowerCase() === term) return 0;
+      if (aliases.some((alias) => alias === term)) return 1;
+      if (command.name.toLowerCase().startsWith(term)) return 2;
+      if (aliases.some((alias) => alias.startsWith(term))) return 3;
+      if (`${command.category} ${command.summary}`.toLowerCase().includes(term)) return 4;
+      return 5;
+    }));
+    return { command, index, score };
+  }).filter((item): item is { command: HelpCommand; index: number; score: number } => Boolean(item))
+    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .map((item) => item.command);
 }
 
 export function formatHelpCommand(command: HelpCommand): string {

@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, useApp, useInput, type Instance } from "ink";
-import { filterHelpCommands, type HelpCommand } from "./help-catalog.js";
+import { filterHelpCommands, formatHelpRunLine, runArgsForHelpCommand, type HelpCommand } from "./help-catalog.js";
+
+export interface InteractiveHelpSelection {
+  command: HelpCommand;
+  args: string[];
+}
 
 function frameWidth(): number {
   return Math.max(20, process.stdout.columns ?? 100);
@@ -48,7 +53,7 @@ function visibleWindow<T>(items: readonly T[], selected: number, size: number): 
   return { items: items.slice(offset, offset + size), offset };
 }
 
-function HelpDetails(props: { command: HelpCommand | undefined; title?: string }) {
+function HelpDetails(props: { command: HelpCommand | undefined; detailMode?: boolean; title?: string }) {
   const command = props.command;
   if (!command) {
     return React.createElement(Box, { flexDirection: "column", marginTop: 1 },
@@ -56,6 +61,7 @@ function HelpDetails(props: { command: HelpCommand | undefined; title?: string }
       React.createElement(Text, { color: "gray" }, "Clear the filter or type a broader term."),
     );
   }
+  const runArgs = runArgsForHelpCommand(command);
   return React.createElement(
     Box,
     { flexDirection: "column", marginTop: 1 },
@@ -75,10 +81,18 @@ function HelpDetails(props: { command: HelpCommand | undefined; title?: string }
       React.createElement(Text, { bold: true }, "Examples"),
       ...command.examples.map((example) => React.createElement(Text, { key: example, color: "gray" }, `- ${example}`)),
     ),
+    props.detailMode
+      ? React.createElement(Box, { marginTop: 1, flexDirection: "column" },
+        React.createElement(Text, { bold: true }, "Action"),
+        runArgs
+          ? React.createElement(Text, { color: "green" }, `Enter runs ${formatHelpRunLine(runArgs)}`)
+          : React.createElement(Text, { color: "yellow" }, command.runHint ?? "This command needs arguments before it can run from the guide."),
+      )
+      : null,
   );
 }
 
-function HelpApp(props: { commands: HelpCommand[] }) {
+function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: InteractiveHelpSelection) => void }) {
   const { exit } = useApp();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
@@ -91,10 +105,18 @@ function HelpApp(props: { commands: HelpCommand[] }) {
   const safeSelected = filtered.length === 0 ? 0 : clamp(selected, 0, filtered.length - 1);
   const window = visibleWindow(filtered, safeSelected, narrow ? 8 : 12);
   const current = filtered[safeSelected];
-  const controls = detailMode ? "Esc/backspace back  q exit" : "Enter select  q/Esc exit  ↑↓ move  type filter";
+  const currentRunArgs = current ? runArgsForHelpCommand(current) : undefined;
+  const controls = detailMode
+    ? currentRunArgs ? "Enter run  Esc/backspace back  q exit" : "needs args  Esc/backspace back  q exit"
+    : "Enter select  q/Esc exit  ↑↓ move  type filter";
 
   useInput((input, key) => {
     if (detailMode) {
+      if (key.return && currentRunArgs && current) {
+        props.onLaunch({ command: current, args: currentRunArgs });
+        exit();
+        return;
+      }
       if (key.escape || key.backspace || key.delete) {
         setDetailMode(false);
         return;
@@ -161,9 +183,9 @@ function HelpApp(props: { commands: HelpCommand[] }) {
         { flexDirection: "row", justifyContent: "space-between" },
         React.createElement(Text, { bold: true, color: "green" }, "OGB command guide"),
         React.createElement(Text, { color: "gray" }, controls),
-      ),
+    ),
     detailMode
-      ? React.createElement(HelpDetails, { command: current, title: "Selected command" })
+      ? React.createElement(HelpDetails, { command: current, detailMode: true, title: "Selected command" })
       : React.createElement(React.Fragment, null,
         React.createElement(Text, { color: "gray" }, query ? `Filter: ${query}` : "Filter: type any command, topic, or flag"),
         React.createElement(
@@ -196,14 +218,21 @@ function HelpApp(props: { commands: HelpCommand[] }) {
   );
 }
 
-export async function renderInteractiveHelp(commands: HelpCommand[]): Promise<void> {
+export async function renderInteractiveHelp(commands: HelpCommand[]): Promise<InteractiveHelpSelection | undefined> {
   let instance: Instance | undefined;
+  let selection: InteractiveHelpSelection | undefined;
   try {
-    instance = render(React.createElement(HelpApp, { commands }), {
+    instance = render(React.createElement(HelpApp, {
+      commands,
+      onLaunch: (nextSelection) => {
+        selection = nextSelection;
+      },
+    }), {
       exitOnCtrlC: true,
       patchConsole: false,
     });
     await instance.waitUntilExit();
+    return selection;
   } finally {
     instance?.unmount();
     instance?.cleanup();
