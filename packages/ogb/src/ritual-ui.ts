@@ -21,6 +21,14 @@ export interface RitualStep {
   detail?: string;
 }
 
+export type RitualProgressStatus = "running" | "queued" | "waiting";
+
+export interface RitualProgressStep {
+  label: string;
+  status?: RitualProgressStatus;
+  detail?: string;
+}
+
 export interface RitualViewModel {
   title: string;
   subtitle: string;
@@ -31,6 +39,13 @@ export interface RitualViewModel {
   callouts: string[];
   next: string[];
   files: string[];
+}
+
+export interface RitualProgressModel {
+  title: string;
+  subtitle: string;
+  steps: RitualProgressStep[];
+  note: string;
 }
 
 export interface RitualUiOptions {
@@ -106,6 +121,18 @@ function statusMark(tone: RitualTone): string {
   if (tone === "fail") return "XX";
   if (tone === "preview") return "..";
   return "--";
+}
+
+function progressMark(status: RitualProgressStatus | undefined): string {
+  if (status === "running") return "RUN";
+  if (status === "waiting") return "WAIT";
+  return "NEXT";
+}
+
+function progressTone(status: RitualProgressStatus | undefined): RitualTone {
+  if (status === "running") return "neutral";
+  if (status === "waiting") return "warn";
+  return "preview";
 }
 
 function countChangedWrites(report: InstallReport | ResetReport): number | undefined {
@@ -243,6 +270,15 @@ export function ritualViewModel(kind: RitualKind, report: InstallReport | PassRe
   return checkModel(report as PassReport);
 }
 
+export function ritualProgressModel(kind: RitualKind, subtitle: string, steps: RitualProgressStep[]): RitualProgressModel {
+  return {
+    title: `${titleForKind(kind)} in progress`,
+    subtitle,
+    steps: steps.length > 0 ? steps : [{ label: "prepare ritual", status: "running" }],
+    note: "Working now. The final report will appear when this ritual finishes.",
+  };
+}
+
 export function shouldUseRitualUi(options: RitualUiOptions = {}): boolean {
   if (options.json || options.plain) return false;
   const env = options.env ?? process.env;
@@ -279,6 +315,17 @@ function StepRow(props: { step: RitualStep }) {
     { flexDirection: "row" },
     React.createElement(Text, { color: colorFromTone(props.step.status), bold: true }, statusMark(props.step.status).padEnd(4)),
     React.createElement(Text, { bold: true }, props.step.label),
+    props.step.detail ? React.createElement(Text, { color: "gray" }, `  ${props.step.detail}`) : null,
+  );
+}
+
+function ProgressStepRow(props: { step: RitualProgressStep }) {
+  const tone = progressTone(props.step.status);
+  return React.createElement(
+    Box,
+    { flexDirection: "row" },
+    React.createElement(Text, { color: colorFromTone(tone), bold: true }, progressMark(props.step.status).padEnd(6)),
+    React.createElement(Text, { bold: props.step.status === "running" }, props.step.label),
     props.step.detail ? React.createElement(Text, { color: "gray" }, `  ${props.step.detail}`) : null,
   );
 }
@@ -336,20 +383,74 @@ function RitualApp(props: { model: RitualViewModel }) {
     );
   }
 
-  return React.createElement(Box, { flexDirection: "column" }, ...children);
+  return React.createElement(Box, { flexDirection: "column", marginLeft: 1 }, ...children);
+}
+
+function ProgressApp(props: { model: RitualProgressModel }) {
+  const model = props.model;
+  return React.createElement(
+    Box,
+    { flexDirection: "column", marginLeft: 1 },
+    React.createElement(
+      Box,
+      { key: "hero", borderStyle: "round", borderColor: "blue", paddingX: 2, paddingY: 1, flexDirection: "column" },
+      React.createElement(
+        Box,
+        { flexDirection: "row" },
+        React.createElement(Text, { color: "blue", bold: true }, "[RUN] "),
+        React.createElement(Text, { bold: true }, model.title),
+      ),
+      React.createElement(Text, { color: "gray" }, model.subtitle),
+      React.createElement(Text, { color: "cyan" }, model.note),
+    ),
+    React.createElement(Text, null, ""),
+    React.createElement(SectionTitle, null, "Process"),
+    ...model.steps.slice(0, 12).map((step, index) => React.createElement(ProgressStepRow, {
+      key: `${step.label}-${index}`,
+      step: { ...step, status: step.status ?? (index === 0 ? "running" : "queued") },
+    })),
+  );
+}
+
+async function renderFrame(node: React.ReactNode): Promise<void> {
+  const output = new MemoryWriteStream(process.stdout.columns ?? 100);
+  const processChunks: Buffer[] = [];
+  const stdoutWrite = process.stdout.write;
+  const stderrWrite = process.stderr.write;
+  const captureProcessWrite = (chunk: unknown, encoding?: BufferEncoding | ((error?: Error | null) => void), callback?: (error?: Error | null) => void): boolean => {
+    processChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), typeof encoding === "string" ? encoding : "utf8"));
+    const done = typeof encoding === "function" ? encoding : callback;
+    done?.();
+    return true;
+  };
+
+  let instance: Instance | undefined;
+  process.stdout.write = captureProcessWrite as typeof process.stdout.write;
+  process.stderr.write = captureProcessWrite as typeof process.stderr.write;
+  try {
+    instance = render(node, {
+      stdout: output as unknown as NodeJS.WriteStream,
+      stderr: output as unknown as NodeJS.WriteStream,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    instance.unmount();
+    instance.cleanup();
+  } finally {
+    process.stdout.write = stdoutWrite;
+    process.stderr.write = stderrWrite;
+  }
+
+  const raw = `${Buffer.concat(processChunks).toString("utf8")}${output.output()}`;
+  const frame = cleanInkFrame(raw);
+  if (frame.trim().length > 0) process.stdout.write(`${frame}\n`);
+}
+
+export async function renderRitualProgress(kind: RitualKind, subtitle: string, steps: RitualProgressStep[]): Promise<void> {
+  await renderFrame(React.createElement(ProgressApp, { model: ritualProgressModel(kind, subtitle, steps) }));
 }
 
 export async function renderRitualReport(kind: RitualKind, report: InstallReport | PassReport | ResetReport | SelfUpdateReport): Promise<void> {
-  const model = ritualViewModel(kind, report);
-  const output = new MemoryWriteStream(process.stdout.columns ?? 100);
-  const instance: Instance = render(React.createElement(RitualApp, { model }), {
-    stdout: output as unknown as NodeJS.WriteStream,
-    exitOnCtrlC: false,
-    patchConsole: false,
-  });
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  instance.unmount();
-  instance.cleanup();
-  const frame = cleanInkFrame(output.output());
-  if (frame.trim().length > 0) process.stdout.write(`${frame}\n`);
+  await renderFrame(React.createElement(RitualApp, { model: ritualViewModel(kind, report) }));
 }

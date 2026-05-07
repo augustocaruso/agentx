@@ -33,7 +33,7 @@ import { disableTelemetry, enableTelemetry, previewTelemetryEnvelope, printTelem
 import { runTrustExtension, runTrustReview } from "./trust.js";
 import { OGB_VERSION } from "./types.js";
 import { runValidation } from "./validation.js";
-import { renderRitualReport, shouldUseRitualUi } from "./ritual-ui.js";
+import { renderRitualProgress, renderRitualReport, shouldUseRitualUi, type RitualProgressStep } from "./ritual-ui.js";
 
 export const program = new Command();
 
@@ -203,11 +203,27 @@ function addCheckOptions(command: Command): Command {
     .option("--no-dashboard", "Skip dashboard");
 }
 
+function projectSubtitle(project: string | undefined): string {
+  return resolveProjectPaths(project).projectRoot;
+}
+
+function checkProgressSteps(opts: CheckCliOptions): RitualProgressStep[] {
+  return [
+    ...(opts.setup === false ? [] : [{ label: "setup OpenCode plugin", detail: "startup sync and command wiring" }]),
+    ...(opts.sync === false ? [] : [{ label: "sync bridge assets", detail: "context, MCPs, agents, commands and skills" }]),
+    { label: "run doctor", detail: "inventory and compatibility checks" },
+    ...(opts.validation === false ? [] : [{ label: "validate resolved config", detail: opts.windows ? "including Windows static checks" : "global/project config" }]),
+    ...(opts.security === false ? [] : [{ label: "run security-check", detail: "YOLO, MCP env and extension safety" }]),
+    ...(opts.dashboard === false ? [] : [{ label: "refresh dashboard", detail: "final human summary" }]),
+  ];
+}
+
 async function runCheckCli(opts: CheckCliOptions, workflow: "check" | "pass", legacyWarning?: string): Promise<void> {
   if (legacyWarning) warnLegacyCommand(legacyWarning);
   const useUi = shouldUseRitualUi({ json: opts.json, plain: opts.plain });
   await withWorkflowTelemetry(workflow, async () => {
     const { project } = commonProjectOptions();
+    if (useUi) await renderRitualProgress("check", projectSubtitle(project), checkProgressSteps(opts));
     const report = runPass({
       projectRoot: project,
       json: opts.json,
@@ -257,10 +273,20 @@ function addUpdateOptions(command: Command): Command {
     .option("--plain", "Use the classic text report instead of the rich terminal UI");
 }
 
+function updateProgressSteps(opts: UpdateCliOptions): RitualProgressStep[] {
+  return [
+    { label: "resolve release", detail: opts.release && opts.release !== "latest" ? opts.release : "latest GitHub release" },
+    { label: "download release pack", detail: "official bootstrap script" },
+    { label: "run installer", detail: opts.dryRun ? "preview only" : "replace OGB CLI and profile files" },
+    ...(opts.setup === false ? [] : [{ label: "run post-update check", detail: opts.installOpencode === false ? "without installing OpenCode" : "full ritual after update" }]),
+  ];
+}
+
 async function runUpdateCli(opts: UpdateCliOptions, legacyWarning?: string): Promise<void> {
   if (legacyWarning) warnLegacyCommand(legacyWarning);
   const { project } = commonProjectOptions();
   const useUi = shouldUseRitualUi({ json: opts.json, plain: opts.plain });
+  if (useUi) await renderRitualProgress("update", projectSubtitle(project), updateProgressSteps(opts));
   const report = runSelfUpdate({
     repo: opts.repo,
     version: opts.release,
@@ -739,6 +765,30 @@ program.command("launch")
     child.on("exit", (code) => process.exit(code ?? 0));
   });
 
+function installProgressSteps(opts: {
+  dryRun?: boolean;
+  ux?: boolean;
+  resetGlobal?: boolean;
+  installOpencode?: boolean;
+  plugins?: boolean;
+  projectProfile?: boolean;
+  cleanupHome?: boolean;
+  check?: boolean;
+  windows?: boolean;
+}): RitualProgressStep[] {
+  return [
+    ...(opts.cleanupHome === false ? [] : [{ label: "clean old home artifacts", detail: "backup first, then remove empty leftovers" }]),
+    ...(opts.ux === false ? [] : [{
+      label: "apply OpenCode profile",
+      detail: opts.resetGlobal ? "overwrite global config from OGB defaults" : "merge managed global profile",
+    }]),
+    ...(opts.installOpencode === false ? [] : [{ label: "verify OpenCode install", detail: "install/update when missing" }]),
+    ...(opts.plugins === false ? [] : [{ label: "install global plugins", detail: "auth, fallback, sidebar and OGB startup sync" }]),
+    ...(opts.projectProfile === false ? [] : [{ label: "write project profile", detail: "only outside home/global mode" }]),
+    ...(opts.check === false || opts.dryRun ? [] : [{ label: "run full check", detail: opts.windows ? "including Windows validation" : "setup, sync, doctor, validation, security and dashboard" }]),
+  ];
+}
+
 program.command("install")
   .description("Install or reinstall the OGB OpenCode profile and run the full check")
   .option("--dry-run", "Preview install actions without writing")
@@ -760,6 +810,7 @@ program.command("install")
     const useUi = shouldUseRitualUi({ json: opts.json, plain: opts.plain });
     await withWorkflowTelemetry("install", async () => {
       const { project } = commonProjectOptions();
+      if (useUi) await renderRitualProgress("install", projectSubtitle(project), installProgressSteps(opts));
       const report = runInstall({
         projectRoot: project,
         dryRun: opts.dryRun,
@@ -849,6 +900,24 @@ program.command("cleanup-home")
     if (report.warnings.length > 0) process.exitCode = 1;
   });
 
+function resetProgressSteps(opts: {
+  yes?: boolean;
+  dryRun?: boolean;
+  installOpencode?: boolean;
+  plugins?: boolean;
+}): RitualProgressStep[] {
+  return [
+    { label: "confirm home reset", status: opts.yes || opts.dryRun ? "running" : "waiting", detail: opts.yes ? "--yes accepted" : opts.dryRun ? "preview mode" : "type RESET when prompted" },
+    { label: "configure websearch env", detail: "OPENCODE_ENABLE_EXA=1" },
+    { label: "clean old home project artifacts", detail: "backup first" },
+    { label: "overwrite global OpenCode profile", detail: "global config, commands, agents and sidebar" },
+    ...(opts.installOpencode === false ? [] : [{ label: "verify OpenCode install", detail: "install/update when missing" }]),
+    ...(opts.plugins === false ? [] : [{ label: "install global plugins", detail: "auth, fallback, sidebar and startup sync" }]),
+    { label: "sync Gemini globals", detail: "context, MCPs, agents, commands and skills" },
+    { label: "run doctor and full check", detail: "final verification" },
+  ];
+}
+
 program.command("reset")
   .description("Reset the global OGB/OpenCode profile; only works when project is the home directory")
   .option("--yes", "Confirm the reset without the interactive prompt")
@@ -863,6 +932,8 @@ program.command("reset")
     await withWorkflowTelemetry("reset", async () => {
       const { project } = commonProjectOptions();
       try {
+        const paths = resolveProjectPaths(project);
+        if (useUi && paths.homeMode) await renderRitualProgress("reset", paths.homeDir, resetProgressSteps(opts));
         const report = await runReset({
           projectRoot: project,
           yes: opts.yes,

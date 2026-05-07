@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildInstallerPlan } from "./installer-planner.js";
-import { cleanInkFrame, ritualViewModel, shouldUseRitualUi } from "./ritual-ui.js";
+import { cleanInkFrame, ritualProgressModel, ritualViewModel, shouldUseRitualUi } from "./ritual-ui.js";
 import type { InstallReport } from "./install.js";
 import type { PassReport } from "./pass.js";
 import type { ResetReport } from "./reset.js";
@@ -65,6 +65,19 @@ test("rich ritual UI is opt-in to an interactive human terminal", () => {
 test("Ink frame cleanup keeps the final rendered frame for transcript captures", () => {
   const raw = "\u001B[?25lfirst frame\n\u001B[2J\u001B[3J\u001B[Hsecond frame\n\u001B[?25h";
   assert.equal(cleanInkFrame(raw), "second frame");
+});
+
+test("progress model gives every ritual an immediate process surface", () => {
+  const model = ritualProgressModel("check", projectRoot, [
+    { label: "setup OpenCode plugin" },
+    { label: "sync bridge assets" },
+    { label: "run doctor" },
+  ]);
+
+  assert.equal(model.title, "OGB check in progress");
+  assert.equal(model.subtitle, projectRoot);
+  assert.match(model.note, /final report/);
+  assert.deepEqual(model.steps.map((step) => step.label), ["setup OpenCode plugin", "sync bridge assets", "run doctor"]);
 });
 
 test("check ritual view model highlights projected bridge assets", () => {
