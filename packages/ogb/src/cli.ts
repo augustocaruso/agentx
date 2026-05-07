@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { runAgentSyncAdoption } from "./agent-sync-adoption.js";
 import { runBidirectionalSync } from "./bidirectional-sync.js";
@@ -32,7 +33,11 @@ import { runTrustExtension, runTrustReview } from "./trust.js";
 import { OGB_VERSION } from "./types.js";
 import { runValidation } from "./validation.js";
 
-const program = new Command();
+export const program = new Command();
+
+export const LEGACY_PASS_WARNING = "warning: ogb pass is deprecated; use ogb check.";
+export const LEGACY_SELF_UPDATE_WARNING = "warning: ogb self-update is deprecated; use ogb update.";
+export const LEGACY_UPGRADE_WARNING = "warning: ogb upgrade-ogb is deprecated; use ogb update.";
 
 function normalizeRulesyncMode(raw: unknown): RulesyncMode {
   if (raw === false) return "off";
@@ -161,6 +166,104 @@ async function withWorkflowTelemetry<T>(workflow: string, action: () => T | Prom
     }, { homeDir: paths.homeDir });
     process.exitCode = previousExitCode;
   }
+}
+
+function warnLegacyCommand(message: string): void {
+  console.error(message);
+}
+
+type CheckCliOptions = {
+  json?: boolean;
+  dryRun?: boolean;
+  force?: boolean;
+  acceptHooks?: boolean;
+  windows?: boolean;
+  setup?: boolean;
+  sync?: boolean;
+  validation?: boolean;
+  security?: boolean;
+  dashboard?: boolean;
+};
+
+function addCheckOptions(command: Command): Command {
+  return command
+    .option("--json", "Print JSON report")
+    .option("--dry-run", "Preview check actions without writing trust changes")
+    .option("--force", "Overwrite files previously changed outside ogb management")
+    .option("--accept-hooks", "Record current Gemini hooks as reviewed by hash")
+    .option("--windows", "Include Windows installer/static checks during validation")
+    .option("--no-setup", "Skip setup-opencode")
+    .option("--no-sync", "Skip sync")
+    .option("--no-validation", "Skip validate")
+    .option("--no-security", "Skip security-check")
+    .option("--no-dashboard", "Skip dashboard");
+}
+
+async function runCheckCli(opts: CheckCliOptions, workflow: "check" | "pass", legacyWarning?: string): Promise<void> {
+  if (legacyWarning) warnLegacyCommand(legacyWarning);
+  await withWorkflowTelemetry(workflow, () => {
+    const { project } = commonProjectOptions();
+    return runPass({
+      projectRoot: project,
+      json: opts.json,
+      dryRun: opts.dryRun,
+      force: opts.force,
+      acceptHooks: opts.acceptHooks,
+      windows: opts.windows,
+      skipSetup: opts.setup === false,
+      skipSync: opts.sync === false,
+      skipValidation: opts.validation === false,
+      skipSecurity: opts.security === false,
+      skipDashboard: opts.dashboard === false,
+    });
+  });
+}
+
+type UpdateCliOptions = {
+  repo?: string;
+  release?: string;
+  prefix?: string;
+  rulesync?: string;
+  setup?: boolean;
+  ux?: boolean;
+  installOpencode?: boolean;
+  force?: boolean;
+  dryRun?: boolean;
+  json?: boolean;
+};
+
+function addUpdateOptions(command: Command): Command {
+  return command
+    .description("Update OGB from the GitHub release pack and run the full post-update check")
+    .option("--repo <owner/repo>", "GitHub repo that publishes OGB releases", "augustocaruso/opencode-gemini-bridge")
+    .option("--release <tag>", "Release tag to install; defaults to latest", "latest")
+    .option("--prefix <path>", "Install prefix passed to the installer")
+    .option("--rulesync <mode>", "Rulesync mode passed to first-run setup", "auto")
+    .option("--no-setup", "Update ogb/profile only; skip import/setup/doctor validation")
+    .option("--no-ux", "Do not reapply the global OpenCode UX profile")
+    .option("--no-install-opencode", "Do not install OpenCode when it is missing")
+    .option("--force", "Pass force to the bootstrap installer")
+    .option("--dry-run", "Print the bootstrap command without running it")
+    .option("--json", "Print JSON report");
+}
+
+function runUpdateCli(opts: UpdateCliOptions, legacyWarning?: string): void {
+  if (legacyWarning) warnLegacyCommand(legacyWarning);
+  const { project } = commonProjectOptions();
+  const report = runSelfUpdate({
+    repo: opts.repo,
+    version: opts.release,
+    projectRoot: project,
+    prefix: opts.prefix,
+    rulesync: opts.rulesync,
+    setup: opts.setup,
+    ux: opts.ux,
+    installOpenCode: opts.installOpencode,
+    force: opts.force,
+    dryRun: opts.dryRun,
+  });
+  printSelfUpdateReport(report, opts.json);
+  if (report.status === "error") process.exitCode = 2;
 }
 
 async function readStdinText(): Promise<string> {
@@ -325,35 +428,16 @@ program.command("doctor")
     });
   });
 
-program.command("pass")
-  .description("Run the full bridge green-path: setup, sync, doctor, validation, security, dashboard")
-  .option("--json", "Print JSON report")
-  .option("--dry-run", "Preview pass actions without writing trust changes")
-  .option("--force", "Overwrite files previously changed outside ogb management")
-  .option("--accept-hooks", "Record current Gemini hooks as reviewed by hash")
-  .option("--windows", "Include Windows installer/static checks during validation")
-  .option("--no-setup", "Skip setup-opencode")
-  .option("--no-sync", "Skip sync")
-  .option("--no-validation", "Skip validate")
-  .option("--no-security", "Skip security-check")
-  .option("--no-dashboard", "Skip dashboard")
+addCheckOptions(program.command("check")
+  .description("Run the full bridge check: setup, sync, doctor, validation, security, dashboard"))
   .action(async (opts) => {
-    await withWorkflowTelemetry("pass", () => {
-      const { project } = commonProjectOptions();
-      return runPass({
-        projectRoot: project,
-        json: opts.json,
-        dryRun: opts.dryRun,
-        force: opts.force,
-        acceptHooks: opts.acceptHooks,
-        windows: opts.windows,
-        skipSetup: opts.setup === false,
-        skipSync: opts.sync === false,
-        skipValidation: opts.validation === false,
-        skipSecurity: opts.security === false,
-        skipDashboard: opts.dashboard === false,
-      });
-    });
+    await runCheckCli(opts, "check");
+  });
+
+addCheckOptions(program.command("pass")
+  .description("Deprecated alias for check"))
+  .action(async (opts) => {
+    await runCheckCli(opts, "pass", LEGACY_PASS_WARNING);
   });
 
 program.command("dashboard")
@@ -743,35 +827,21 @@ program.command("reset")
     });
   });
 
-program.command("self-update")
-  .alias("upgrade-ogb")
-  .description("Update OGB from the GitHub release pack and reapply the local UX profile")
-  .option("--repo <owner/repo>", "GitHub repo that publishes OGB releases", "augustocaruso/opencode-gemini-bridge")
-  .option("--release <tag>", "Release tag to install; defaults to latest", "latest")
-  .option("--prefix <path>", "Install prefix passed to the installer")
-  .option("--rulesync <mode>", "Rulesync mode passed to first-run setup", "auto")
-  .option("--no-setup", "Update ogb/profile only; skip import/setup/doctor validation")
-  .option("--no-ux", "Do not reapply the global OpenCode UX profile")
-  .option("--no-install-opencode", "Do not install OpenCode when it is missing")
-  .option("--force", "Pass force to the bootstrap installer")
-  .option("--dry-run", "Print the bootstrap command without running it")
-  .option("--json", "Print JSON report")
+addUpdateOptions(program.command("update"))
   .action((opts) => {
-    const { project } = commonProjectOptions();
-    const report = runSelfUpdate({
-      repo: opts.repo,
-      version: opts.release,
-      projectRoot: project,
-      prefix: opts.prefix,
-      rulesync: opts.rulesync,
-      setup: opts.setup,
-      ux: opts.ux,
-      installOpenCode: opts.installOpencode,
-      force: opts.force,
-      dryRun: opts.dryRun,
-    });
-    printSelfUpdateReport(report, opts.json);
-    if (report.status === "error") process.exitCode = 2;
+    runUpdateCli(opts);
+  });
+
+addUpdateOptions(program.command("self-update"))
+  .description("Deprecated alias for update")
+  .action((opts) => {
+    runUpdateCli(opts, LEGACY_SELF_UPDATE_WARNING);
+  });
+
+addUpdateOptions(program.command("upgrade-ogb"))
+  .description("Deprecated alias for update")
+  .action((opts) => {
+    runUpdateCli(opts, LEGACY_UPGRADE_WARNING);
   });
 
 program.command("check-update")
@@ -884,4 +954,16 @@ program.command("update-extensions")
     maybePostExtensionSync(opts);
   });
 
-program.parse();
+function isCliEntryPoint(): boolean {
+  if (!process.argv[1]) return false;
+  const modulePath = fileURLToPath(import.meta.url);
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(modulePath);
+  } catch {
+    return path.resolve(process.argv[1]) === modulePath;
+  }
+}
+
+if (isCliEntryPoint()) {
+  program.parse();
+}

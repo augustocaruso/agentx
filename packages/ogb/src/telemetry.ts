@@ -647,9 +647,10 @@ const NON_ACTIONABLE_ROOT_CAUSES = new Set(["no_issue_detected", "dashboard_echo
 function workflowDisplayName(workflow: string): string {
   const names: Record<string, string> = {
     "auto-update": "Auto-update",
+    check: "Check",
     dashboard: "Dashboard",
     doctor: "Doctor",
-    pass: "Pass",
+    pass: "Pass (legacy)",
     "security-check": "Security-check",
     "setup-opencode": "Setup OpenCode",
     startup: "Plugin de startup",
@@ -663,8 +664,9 @@ function workflowDisplayName(workflow: string): string {
 function workflowRecoveryCommand(workflow: string): string {
   const commands: Record<string, string> = {
     dashboard: "ogb dashboard",
+    check: "ogb check",
     doctor: "ogb doctor",
-    pass: "ogb pass",
+    pass: "ogb check",
     "security-check": "ogb security-check",
     "setup-opencode": "ogb setup-opencode",
     sync: "ogb sync",
@@ -693,7 +695,7 @@ function diagnosticContext(workflow: string, payload: unknown, summary: Record<s
   } else if (includesAny(messagesText, ["hook needs review", "needs_review", "trusted hook/script changed", "trusted hook", "hooks/scripts"])) {
     code = "trust_review_required";
     label = "Hooks/scripts precisam de revisao";
-    recovery = "Revise o recurso e rode ogb trust-extension ou ogb pass --accept-hooks quando for seguro.";
+    recovery = "Revise o recurso e rode ogb trust-extension ou ogb check --accept-hooks quando for seguro.";
   } else if (payloadBoolean(payload, "restartRequired") || payloadOutcome === "updated") {
     code = "restart_required";
     label = "OpenCode precisa reiniciar para carregar mudancas";

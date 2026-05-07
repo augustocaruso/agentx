@@ -96,18 +96,18 @@ test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   assert.equal(saved.status, "updated");
   assert.equal(saved.latestTag, "v0.0.53");
   assert.equal(saved.restartRequired, true);
-  assert.match(saved.message, /full bridge pass/);
+  assert.match(saved.message, /full bridge check/);
   assert.doesNotMatch(saved.message, /reset --yes/);
   assert.doesNotMatch(saved.message, /old failure/);
 });
 
-test("buildPostUpdateRitualCommand runs a full forced pass once after update", () => {
+test("buildPostUpdateRitualCommand runs a full forced check once after update", () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-post-update-"));
   const command = buildPostUpdateRitualCommand({ projectRoot }, "win32");
 
   assert.equal(command.slice(-5)[0], "--project");
   assert.equal(command.slice(-4)[0], projectRoot);
-  assert.equal(command.slice(-3)[0], "pass");
+  assert.equal(command.slice(-3)[0], "check");
   assert.equal(command.slice(-2)[0], "--force");
   assert.equal(command.slice(-1)[0], "--windows");
 });
@@ -154,7 +154,7 @@ test("checkOgbUpdate reports current when latest tag matches current version", a
   assert.equal(report.status, "current");
 });
 
-test("runAutoUpdate dry-run builds a self-update command without installing OpenCode", async () => {
+test("runAutoUpdate dry-run builds an update command without installing OpenCode", async () => {
   const report = await runAutoUpdate({
     currentVersion: "0.0.38",
     projectRoot: "/tmp/ogb-auto",

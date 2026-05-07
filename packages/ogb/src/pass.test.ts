@@ -112,7 +112,7 @@ test("formatPassReport prints a compact human report", () => {
 
   const text = formatPassReport(report);
 
-  assert.match(text, /^OGB pass  WARN/m);
+  assert.match(text, /^OGB check WARN/m);
   assert.match(text, /Checks\n  OK    setup-opencode/);
   assert.match(text, /Needs Attention/);
   assert.match(text, /Auto fallback esta ligado, mas o plugin externo nao carregou\./);

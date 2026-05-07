@@ -83,15 +83,15 @@ export interface PassReport {
 }
 
 function actionForWarning(warning: string): string {
-  if (/^Hook needs review:/.test(warning)) return "Revise o hook e rode `ogb pass --accept-hooks` para registrar o hash revisado.";
-  if (/Duplicate name/i.test(warning)) return "Rode `ogb pass --json` ou abra `.opencode/generated/ogb-inventory.json` para ver os paths duplicados; mantenha uma copia.";
+  if (/^Hook needs review:/.test(warning)) return "Revise o hook e rode `ogb check --accept-hooks` para registrar o hash revisado.";
+  if (/Duplicate name/i.test(warning)) return "Rode `ogb check --json` ou abra `.opencode/generated/ogb-inventory.json` para ver os paths duplicados; mantenha uma copia.";
   if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Ative o fallback gerado ou desative `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc`.";
   if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Instale `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, rode `ogb sync` e reinicie o OpenCode.";
   if (/opencode-auto-fallback/i.test(warning)) return "Revise `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc` e o plugin global do OpenCode.";
-  if (/Run ogb sync/i.test(warning)) return "O `ogb pass` ja tentou `ogb sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
+  if (/Run ogb sync/i.test(warning)) return "O `ogb check` ja tentou `ogb sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
   if (/Model resolution warning/i.test(warning)) return "Revise os modelos em `.opencode/ogb.config.jsonc` e compare com `opencode models`.";
   if (/MCP command warning/i.test(warning)) return "Instale o comando do MCP ou remova/desabilite esse MCP na configuracao de origem.";
-  return "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `ogb pass --force` depois de revisar.";
+  return "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `ogb check --force` depois de revisar.";
 }
 
 function blocker(source: PassBlocker["source"], severity: PassBlocker["severity"], message: string, action: string): PassBlocker {
@@ -166,7 +166,7 @@ function friendlyBlockerMessage(item: PassBlocker): string {
 
 export function formatPassReport(report: PassReport): string {
   const lines = [
-    `OGB pass  ${statusText(report.outcome)}`,
+    `OGB check ${statusText(report.outcome)}`,
     `Project   ${report.projectRoot}`,
     "",
     "Checks",
@@ -248,7 +248,7 @@ export function runPass(options: PassOptions = {}): PassReport {
       skipCommandCheck: true,
     });
     automated.push("setup-opencode");
-    for (const warning of setup.warnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `ogb pass --force` se quiser sobrescrever arquivos gerenciados."));
+    for (const warning of setup.warnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
   }
 
   if (!options.skipSync) {
@@ -260,7 +260,7 @@ export function runPass(options: PassOptions = {}): PassReport {
       silent: true,
     });
     automated.push("sync");
-    for (const warning of sync.warnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb pass --force` se quiser sobrescrever arquivos gerenciados."));
+    for (const warning of sync.warnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
   }
 
   let doctor = runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true });
@@ -287,7 +287,7 @@ export function runPass(options: PassOptions = {}): PassReport {
     automated.push("dashboard");
   }
 
-  for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Corrija o erro indicado pelo doctor e rode `ogb pass` novamente."));
+  for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Corrija o erro indicado pelo doctor e rode `ogb check` novamente."));
   for (const warning of doctor.warnings) blockers.push(blocker("doctor", "warn", warning, actionForWarning(warning)));
   if (validation?.outcome === "fail") blockers.push(blocker("validation", "fail", "Validation falhou.", "Rode `ogb validate` para ver os checks detalhados."));
   if (validation?.outcome === "warn") blockers.push(blocker("validation", "warn", "Validation passou com avisos.", "Rode `ogb validate` para ver os checks detalhados."));

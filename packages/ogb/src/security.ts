@@ -343,7 +343,7 @@ export function runSecurityCheck(options: SecurityOptions = {}): SecurityReport 
   fs.writeFileSync(paths.securityPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
 
   if (options.silent) {
-    // Report is written to disk for callers such as ogb pass.
+    // Report is written to disk for callers such as ogb check.
   } else if (options.json) {
     console.log(JSON.stringify(report, null, 2));
   } else {

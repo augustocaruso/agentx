@@ -158,8 +158,8 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
     latestTag,
     checkedAt,
     message: latestTag
-      ? `OGB self-update completed for ${latestTag}.`
-      : "OGB self-update completed from the latest release.",
+      ? `OGB update completed for ${latestTag}.`
+      : "OGB update completed from the latest release.",
   };
   const report: AutoUpdateReport = {
     status: "updated",
@@ -170,8 +170,8 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
     finishedAt: checkedAt,
     restartRequired: true,
     message: latestTag
-      ? `OGB self-update completed for ${latestTag}. Running the full bridge pass and then restart OpenCode.`
-      : "OGB self-update completed. Running the full bridge pass and then restart OpenCode.",
+      ? `OGB update completed for ${latestTag}. Running the full bridge check and then restart OpenCode.`
+      : "OGB update completed. Running the full bridge check and then restart OpenCode.",
     check,
   };
   writeUpdateReport(options.projectRoot, report);
@@ -187,7 +187,7 @@ function outputTail(value: unknown, maxChars = 4000): string | undefined {
 export function buildPostUpdateRitualCommand(options: SelfUpdateOptions = {}, platform: NodeJS.Platform = process.platform): string[] {
   const paths = resolveProjectPaths(options.projectRoot);
   const ogb = resolveCommand("ogb", { homeDir: paths.homeDir }) ?? "ogb";
-  const args = ["--project", paths.projectRoot, "pass", "--force"];
+  const args = ["--project", paths.projectRoot, "check", "--force"];
   if (platform === "win32") args.push("--windows");
   return [ogb, ...args];
 }
@@ -198,14 +198,14 @@ export function runPostUpdateRitual(options: SelfUpdateOptions = {}): PostUpdate
     return {
       status: "skipped",
       command,
-      message: "Post-update pass skipped because setup was disabled.",
+      message: "Post-update check skipped because setup was disabled.",
     };
   }
   if (options.dryRun) {
     return {
       status: "preview",
       command,
-      message: "Would run the full post-update bridge pass.",
+      message: "Would run the full post-update bridge check.",
     };
   }
 
@@ -228,7 +228,7 @@ export function runPostUpdateRitual(options: SelfUpdateOptions = {}): PostUpdate
       command,
       exitCode: result.status,
       signal: result.signal,
-      message: `Post-update pass could not run: ${result.error.message}`,
+      message: `Post-update check could not run: ${result.error.message}`,
       stdoutTail,
       stderrTail,
     };
@@ -241,10 +241,10 @@ export function runPostUpdateRitual(options: SelfUpdateOptions = {}): PostUpdate
     exitCode: result.status,
     signal: result.signal,
     message: status === "pass"
-      ? "Post-update pass completed cleanly."
+      ? "Post-update check completed cleanly."
       : status === "warn"
-        ? "Post-update pass completed with warnings."
-        : `Post-update pass failed with exit code ${result.status ?? "unknown"}.`,
+        ? "Post-update check completed with warnings."
+        : `Post-update check failed with exit code ${result.status ?? "unknown"}.`,
     stdoutTail,
     stderrTail,
   };
@@ -369,7 +369,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       status: "error",
       command,
       postUpdate,
-      message: `OGB bootstrap completed, but the post-update pass did not finish cleanly: ${postUpdate.message}`,
+      message: `OGB bootstrap completed, but the post-update check did not finish cleanly: ${postUpdate.message}`,
     };
   }
   return {
@@ -377,10 +377,10 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     command,
     postUpdate,
     message: postUpdate?.status === "warn"
-      ? "OGB bootstrap completed. Full bridge pass ran with warnings; see ogb pass/dashboard for details."
+      ? "OGB bootstrap completed. Full bridge check ran with warnings; see ogb check/dashboard for details."
       : postUpdate?.status === "skipped"
-        ? "OGB bootstrap completed. Post-update pass was skipped because setup was disabled."
-        : "OGB bootstrap completed. Full bridge pass was refreshed.",
+        ? "OGB bootstrap completed. Post-update check was skipped because setup was disabled."
+        : "OGB bootstrap completed. Full bridge check was refreshed.",
   };
 }
 
@@ -475,7 +475,7 @@ export async function runAutoUpdate(options: AutoUpdateOptions = {}): Promise<Au
     message: options.dryRun
       ? `Would update OGB from ${check.currentVersion} to ${check.latestTag ?? check.latestVersion}.`
       : updated
-        ? `OGB updated to ${check.latestTag ?? check.latestVersion}. Running the full bridge pass and then restart OpenCode.`
+        ? `OGB updated to ${check.latestTag ?? check.latestVersion}. Running the full bridge check and then restart OpenCode.`
         : `OGB auto-update failed: ${selfUpdate.message}`,
     check,
     selfUpdate,
@@ -488,7 +488,7 @@ export async function runAutoUpdate(options: AutoUpdateOptions = {}): Promise<Au
     if (postUpdate.status === "fail" || postUpdate.status === "error") {
       report.status = "error";
       report.restartRequired = false;
-      report.message = `OGB updated, but the post-update pass did not finish cleanly: ${postUpdate.message}`;
+      report.message = `OGB updated, but the post-update check did not finish cleanly: ${postUpdate.message}`;
     }
     if (options.write !== false) writeUpdateReport(options.projectRoot, report);
   }
@@ -500,11 +500,11 @@ export function printSelfUpdateReport(report: SelfUpdateReport, json = false): v
     console.log(JSON.stringify(report, null, 2));
     return;
   }
-  console.log(`OGB self-update: ${report.status}`);
+  console.log(`OGB update: ${report.status}`);
   console.log(report.message);
   console.log(formatCommand(report.command));
   if (report.postUpdate) {
-    console.log(`Post-update pass: ${report.postUpdate.status}`);
+    console.log(`Post-update check: ${report.postUpdate.status}`);
     console.log(report.postUpdate.message);
     console.log(formatCommand(report.postUpdate.command));
   }
@@ -529,7 +529,7 @@ export function printAutoUpdateReport(report: AutoUpdateReport, json = false): v
   console.log(report.message);
   if (report.selfUpdate) console.log(formatCommand(report.selfUpdate.command));
   if (report.postUpdate) {
-    console.log(`Post-update pass: ${report.postUpdate.status}`);
+    console.log(`Post-update check: ${report.postUpdate.status}`);
     console.log(report.postUpdate.message);
     console.log(formatCommand(report.postUpdate.command));
   }

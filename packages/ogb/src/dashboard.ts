@@ -268,7 +268,7 @@ function consumeCompletedRestart(
     currentVersion: OGB_VERSION,
     restartRequired: false,
     restartAcknowledgedAt: new Date().toISOString(),
-    message: `OGB ${OGB_VERSION} esta carregado e o pass pos-update foi regenerado.`,
+    message: `OGB ${OGB_VERSION} esta carregado e o check pos-update foi regenerado.`,
   };
   try {
     fs.mkdirSync(path.dirname(updateStatusPath), { recursive: true });

@@ -28,7 +28,7 @@ export const GLOBAL_AGENTS_MD = [
   "- If creating an OpenCode-only skill in `.opencode/skills/<name>/SKILL.md`, tell the user it does not automatically sync back to Gemini.",
   "",
   "- After changing any canonical memory, rule, or skill source, run or recommend `ogb sync`.",
-  "- After larger changes or new skills, run or recommend `ogb doctor` or `ogb pass` to verify projection and conflicts.",
+  "- After larger changes or new skills, run or recommend `ogb doctor` or `ogb check` to verify projection and conflicts.",
   "",
   "- If `AGENTS.md`, global `GEMINI.md`, project `GEMINI.md`, and skill sources conflict, prefer the most specific canonical non-generated source. For unclear conflicts, stop and ask, or preview with `ogb bidirectional-sync --dry-run`.",
   "",

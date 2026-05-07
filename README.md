@@ -113,21 +113,21 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 Update depois que o `ogb` ja esta instalado:
 
 ```bash
-ogb --project "$PWD" self-update
-ogb --project "$PWD" self-update --dry-run
-ogb --project "$PWD" self-update --release v0.0.61
+ogb --project "$PWD" update
+ogb --project "$PWD" update --dry-run
+ogb --project "$PWD" update --release v0.0.61
 ogb --project "$PWD" check-update
 ogb --project "$PWD" auto-update
 ```
 
-O `self-update` baixa a release escolhida, roda o bootstrap oficial, reaplica
-o perfil OGB/OpenCode e em seguida roda `ogb pass --force` para regenerar sync,
+O `update` baixa a release escolhida, roda o bootstrap oficial, reaplica
+o perfil OGB/OpenCode e em seguida roda `ogb check --force` para regenerar sync,
 doctor, validation, security-check e dashboard. Ele nao copia secrets, sessoes
 ou conteudo unico do Gemini CLI da pessoa; esse conteudo continua sendo lido
 localmente pelo sync.
 O `auto-update` compara a versao local com a ultima GitHub Release, aplica a
 release nova quando existir, grava `.opencode/generated/ogb-update-status.json`
-e tambem roda o mesmo pass completo; por padrao ele nao tenta instalar/atualizar
+e tambem roda o mesmo check completo; por padrao ele nao tenta instalar/atualizar
 o proprio OpenCode enquanto o OpenCode ja esta aberto.
 
 Depois de atualizar uma maquina que deve ficar com o perfil global limpo, rode:
@@ -142,7 +142,7 @@ Dia a dia:
 ```bash
 ogb sync
 ogb doctor
-ogb pass
+ogb check
 ogb dashboard
 opencode
 opencode --agent YOLO
@@ -179,10 +179,10 @@ ogb cleanup-home --dry-run
 
 O Rulesync entra como auxiliar opcional no `ogb import` e no `ogb sync`: o bridge roda a conversão em staging temporário, promove apenas arquivos seguros/gerenciados e mantém `GEMINI.md` como fonte de verdade.
 
-Use `ogb pass` quando quiser o caminho verde completo: ele roda setup local,
+Use `ogb check` quando quiser o caminho verde completo: ele roda setup local,
 sync, doctor, validação, segurança e dashboard, e grava
 `.opencode/generated/ogb-pass.json`. Se houver hooks Gemini revisados, rode
-`ogb pass --accept-hooks`; isso registra o hash atual, sem executar hook, e o
+`ogb check --accept-hooks`; isso registra o hash atual, sem executar hook, e o
 doctor volta a avisar se o arquivo mudar depois.
 
 O `setup-ux` tambem deixa o OpenCode global com `default_agent: "YOLO"` e
@@ -317,7 +317,7 @@ Setup OpenCode com sync no startup:
 ogb setup-opencode
 ```
 
-Esse comando instala um plugin local em `.opencode/plugins/`, grava a configuração em `.opencode/generated/ogb-startup-sync.json`, valida o comando de startup e roda `doctor`. Quando um update real acontece via `self-update` ou `auto-update`, o OGB roda o ritual completo (`pass`: setup, sync, doctor, validate, security-check e dashboard) antes de devolver o controle. No startup, o plugin checa update sem aplicar automaticamente por padrão, roda `ogb sync`, grava `.opencode/generated/ogb-plugin-status.json` e `.opencode/generated/ogb-update-status.json`, registra telemetria local best-effort, atualiza `.opencode/generated/ogb-dashboard.md` e mostra toast de sucesso/falha quando a TUI permite. O caminho mais confiável ainda é abrir pelo wrapper:
+Esse comando instala um plugin local em `.opencode/plugins/`, grava a configuração em `.opencode/generated/ogb-startup-sync.json`, valida o comando de startup e roda `doctor`. Quando um update real acontece via `ogb update` ou `auto-update`, o OGB roda o ritual completo (`check`: setup, sync, doctor, validate, security-check e dashboard) antes de devolver o controle. No startup, o plugin checa update sem aplicar automaticamente por padrão, roda `ogb sync`, grava `.opencode/generated/ogb-plugin-status.json` e `.opencode/generated/ogb-update-status.json`, registra telemetria local best-effort, atualiza `.opencode/generated/ogb-dashboard.md` e mostra toast de sucesso/falha quando a TUI permite. O caminho mais confiável ainda é abrir pelo wrapper:
 
 ```bash
 ogb launch
@@ -340,10 +340,10 @@ quando o pacote foi montado pelo mantenedor com defaults privados. `disable`
 bloqueia esses defaults para aquela instalacao. O dashboard escreve
 `.opencode/generated/ogb-telemetry-status.json`, sem token.
 
-O envio remoto e action-first: `pass` limpo continua no historico local e no
+O envio remoto e action-first: `check` limpo continua no historico local e no
 `preview`, mas nao entra no email/digest. `failed`,
 `completed_with_warnings`, warnings/errors e updates que exigem restart sao
-enviados. Para depurar o canal remoto com passes limpos, use
+enviados. Para depurar o canal remoto com checks limpos, use
 `ogb telemetry send --since 7d --include-pass`.
 
 Para receber emails como no Medical Notes Workbench, rode

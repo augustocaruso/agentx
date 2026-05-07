@@ -7,7 +7,7 @@ Usage: install-mac.sh [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [-
 
 Installs the ogb CLI, applies the global OpenCode UX profile, and optionally
 runs the full project setup:
-ogb setup-ux -> ogb import/setup-opencode -> ogb pass.
+ogb setup-ux -> ogb import/setup-opencode -> ogb check.
 
 Defaults:
   --project  current working directory
@@ -177,13 +177,13 @@ fi
 
 ensure_opencode_exa_env
 
-run_final_pass() {
-  local pass_args=(--project "$PROJECT_DIR" pass)
+run_final_check() {
+  local check_args=(--project "$PROJECT_DIR" check)
   if [[ "$FORCE" -eq 1 ]]; then
-    pass_args+=(--force)
+    check_args+=(--force)
   fi
-  echo "Running final OGB pass for $PROJECT_DIR..."
-  "$OGB_BIN" "${pass_args[@]}"
+  echo "Running final OGB check for $PROJECT_DIR..."
+  "$OGB_BIN" "${check_args[@]}"
 }
 
 if [[ "$RUN_UX" -eq 1 ]]; then
@@ -211,7 +211,7 @@ if [[ "$RUN_HOME_SYNC" -eq 1 ]]; then
   fi
   echo "Running global ogb import/sync for $PROJECT_DIR..."
   "$OGB_BIN" "${IMPORT_ARGS[@]}"
-  run_final_pass
+  run_final_check
 fi
 
 if [[ "$RUN_SETUP" -eq 1 ]]; then
@@ -225,12 +225,12 @@ if [[ "$RUN_SETUP" -eq 1 ]]; then
   "$OGB_BIN" "${IMPORT_ARGS[@]}"
   echo "Installing OpenCode startup plugin for $PROJECT_DIR..."
   "$OGB_BIN" "${SETUP_ARGS[@]}"
-  run_final_pass
+  run_final_check
 fi
 
 echo "Done."
 if command -v ogb >/dev/null 2>&1; then
-  echo "Try: ogb --project \"$PROJECT_DIR\" pass"
+  echo "Try: ogb --project \"$PROJECT_DIR\" check"
 else
-  echo "Try: $OGB_BIN --project \"$PROJECT_DIR\" pass"
+  echo "Try: $OGB_BIN --project \"$PROJECT_DIR\" check"
 fi

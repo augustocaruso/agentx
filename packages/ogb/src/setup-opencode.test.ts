@@ -335,7 +335,7 @@ test("startup plugin sends OGB command output directly to chat", async () => {
 
     assert.equal(prompts.length, 2);
     assert.match(prompts[1].body.parts[0].text, /OpenCode Gemini Bridge \/bridge/);
-    assert.match(prompts[1].body.parts[0].text, /"pass"/);
+    assert.match(prompts[1].body.parts[0].text, /"check"/);
     assert.doesNotMatch(prompts[1].body.parts[0].text, /"dashboard"/);
     const bridgeArgs = JSON.parse(prompts[1].body.parts[0].text.match(/RUNNER_ARGS=(\[[^\n]+\])/)?.[1] ?? "[]");
     assert.equal(bridgeArgs.filter((arg: string) => arg === "--project").length, 1);

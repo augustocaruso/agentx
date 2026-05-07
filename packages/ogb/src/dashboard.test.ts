@@ -223,7 +223,7 @@ test("runDashboard consumes restart-required update after current-version pass r
   assert.equal(report.update.restartRequired, false);
   assert.equal(saved.status, "current");
   assert.equal(saved.restartRequired, false);
-  assert.match(saved.message, /pass pos-update foi regenerado/);
+  assert.match(saved.message, /check pos-update foi regenerado/);
   assert.match(markdown, /OGB update: CURRENT v/);
   assert.equal(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")), false);
 });
@@ -253,7 +253,7 @@ test("runDashboard consumes latest self-update restart after current-version pas
     checkedAt: "2026-05-06T12:00:00.000Z",
     finishedAt: "2026-05-06T12:01:00.000Z",
     restartRequired: true,
-    message: "OGB self-update completed from the latest release. Running the full bridge pass and then restart OpenCode.",
+    message: "OGB update completed from the latest release. Running the full bridge check and then restart OpenCode.",
   });
 
   const report = runDashboard({ projectRoot, refresh: false, silent: true });

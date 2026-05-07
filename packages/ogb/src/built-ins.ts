@@ -49,13 +49,13 @@ Primeiro rode pwd para confirmar o diretorio atual.
 
 Depois execute exatamente:
 
-ogb pass --project "$PWD"
+ogb check --project "$PWD"
 
 Use a saida desse comando como fonte principal. Se precisar ler o arquivo, leia apenas este caminho exato dentro do diretorio atual:
 
 .opencode/generated/ogb-dashboard.md
 
-Nao use glob, find ou busca recursiva na home do usuario. Se o painel mostrar que o projeto atual e a home e o usuario esperava outro projeto, explique que o OpenCode foi aberto na home e que ele deve abrir o OpenCode no diretorio do projeto ou rodar ogb pass --project /caminho/do/projeto.
+Nao use glob, find ou busca recursiva na home do usuario. Se o painel mostrar que o projeto atual e a home e o usuario esperava outro projeto, explique que o OpenCode foi aberto na home e que ele deve abrir o OpenCode no diretorio do projeto ou rodar ogb check --project /caminho/do/projeto.
 
 Explique em linguagem simples:
 - se o bridge esta PASS, WARN ou FAIL;
@@ -178,7 +178,7 @@ Se o usuario pedir envio manual, execute:
 
 ogb telemetry send --since 7d --project "$PWD"
 
-Esse envio normal manda remotamente apenas problemas acionaveis. Passes limpos continuam no preview/local. Use --include-pass somente se o mantenedor pedir explicitamente um teste/debug do canal remoto.
+Esse envio normal manda remotamente apenas problemas acionaveis. Checks limpos continuam no preview/local. Use --include-pass somente se o mantenedor pedir explicitamente um teste/debug do canal remoto.
 
 Se o usuario quiser desligar, execute:
 
@@ -239,7 +239,7 @@ subtask: false
 
 Execute exatamente:
 
-ogb self-update --project "$PWD"
+ogb update --project "$PWD"
 
 Depois execute:
 
