@@ -50,7 +50,11 @@ export const UX_PROFILE_PRESET = {
       "reserved": 10000
     },
     "permission": {
-      "websearch": "allow",
+      "read": "allow",
+      "edit": "ask",
+      "glob": "allow",
+      "grep": "allow",
+      "list": "allow",
       "bash": {
         "*": "ask",
         "git status*": "allow",
@@ -89,7 +93,16 @@ export const UX_PROFILE_PRESET = {
         "sudo *": "deny",
         "terraform *": "deny",
         "kubectl delete*": "deny"
-      }
+      },
+      "task": "ask",
+      "external_directory": "ask",
+      "todowrite": "allow",
+      "question": "allow",
+      "webfetch": "allow",
+      "websearch": "allow",
+      "lsp": "allow",
+      "skill": "allow",
+      "doom_loop": "ask"
     },
     "agent": {
       "build": {
@@ -231,7 +244,8 @@ export const UX_PROFILE_PRESET = {
     "$schema": "https://opencode.ai/tui.json",
     "plugin": [
       "./tui-plugins/ogb-sidebar.js"
-    ]
+    ],
+    "scroll_speed": 1
   },
   "projectConfig": {
     "openCode": {
@@ -346,15 +360,15 @@ export const UX_PROFILE_PRESET = {
     }
   },
   "files": {
-    "globalAgentsMd": "# OGB\n\nOGB is the OpenCode Gemini Bridge: the CLI that installs, syncs, checks and repairs Gemini CLI resources projected into OpenCode.\n\nPrefer `ogb install`, `ogb update`, `ogb check`, `ogb reset`. Use `ogb help` for discovery.\n\nInvariants: home is global, never a project; do not edit generated files by hand; do not run `ogb reset` unless explicitly asked.\n\n# Memory, Rules, and Skills\n\nScope\n- Use this `AGENTS.md` only for OpenCode-specific behavior, edit policy, and OGB rules.\n- Use canonical Gemini sources for durable memory and reusable rules/skills:\n  - Global: `~/.gemini/GEMINI.md` (Windows: `%USERPROFILE%\\.gemini\\GEMINI.md`).\n  - Project: `./GEMINI.md`.\n  - Skills: canonical Gemini/OGB skill source — never the generated OpenCode copy.\n\nEditing\n- When a canonical source imports more specific files, edit the most specific file, not the index.\n- Treat `.opencode/generated/*` and generated `.opencode/skills/*` as projection output. Never edit unless the user explicitly asks for an OpenCode-only change.\n- For \"remember this\" / durable preferences without scope, default to global Gemini memory.\n- Never store secrets, tokens, credentials, or private keys.\n\nSkills\n- Before creating a skill, check for an existing one with the same name or purpose.\n- Create reusable skills in the canonical Gemini/OGB layer. If creating an OpenCode-only skill in `.opencode/skills/<name>/SKILL.md`, warn the user it does not sync back to Gemini.\n\nSync & conflicts\n- After editing any canonical source, run or recommend `ogb sync`.\n- After larger changes or new skills, run or recommend `ogb doctor` or `ogb pass`.\n- On conflicts between `AGENTS.md`, global/project `GEMINI.md`, and skills: prefer the most specific canonical non-generated source. If unclear, stop and ask, or preview with `ogb bidirectional-sync --dry-run`.\n\n# Tool Preferences\n\n- Prefer the standard `bash` tool when PTY is denied or unstable.\n- `--tui` may not render through captured `bash` output; commands like `gemini-md-export` fall back to plain text automatically.\n\n# MCP Installation\n\nWhen the user asks to install an MCP server and the target is ambiguous, ask whether it is for Gemini CLI, OpenCode, or both before editing config.\n\n| Aspect       | Gemini CLI                          | OpenCode 1.14.x                          |\n| ------------ | ----------------------------------- | ---------------------------------------- |\n| Config file  | `~/.gemini/settings.json`           | `~/.config/opencode/opencode.json`       |\n| Top-level    | `mcpServers`                        | `mcp`                                    |\n| Server type  | (implicit)                          | `type: \"local\"`                          |\n| Command      | `command: \"npx\"` + `args: [...]`    | `command: [\"npx\", \"-y\", \"pkg@latest\"]`   |\n| Env vars     | `env`                               | `environment`                            |\n| Enabled flag | n/a                                 | `enabled: true`                          |\n\nRules\n- Never use the Gemini shape inside OpenCode config — OpenCode silently drops `command`/`args`/`env` and keeps only `enabled`.\n- Verify OpenCode installs with `opencode debug config` (resolved entry must keep `type`, `command`, `environment`) and `opencode mcp list` (server listed and connected).\n- Never store API keys directly in memory/rule files; use placeholders like `<API_KEY>`.\n",
+    "globalAgentsMd": "# OGB\n\nOGB is the OpenCode Gemini Bridge: the CLI that installs, syncs, checks and repairs Gemini CLI resources projected into OpenCode.\n\nPrefer `ogb install`, `ogb update`, `ogb check`, `ogb reset`. Use `ogb help` for discovery.\n\nInvariants: home is global, never a project; do not edit generated files by hand; do not run `ogb reset` unless explicitly asked.\n\n# Memory, Rules, and Skills\n\nScope\n- Use this `AGENTS.md` only for OpenCode-specific behavior, edit policy, and OGB rules.\n- Use canonical Gemini sources for durable memory and reusable rules/skills:\n  - Global: `~/.gemini/GEMINI.md` (Windows: `%USERPROFILE%\\.gemini\\GEMINI.md`).\n  - Project: `./GEMINI.md`.\n  - Skills: canonical Gemini/OGB skill source — never the generated OpenCode copy.\n\nEditing\n- When a canonical source imports more specific files, edit the most specific file, not the index.\n- Treat `.opencode/generated/*` and generated `.opencode/skills/*` as projection output. Never edit unless the user explicitly asks for an OpenCode-only change.\n- For \"remember this\" / durable preferences without scope, default to global Gemini memory.\n- Never store secrets, tokens, credentials, or private keys.\n\nSkills\n- Before creating a skill, check for an existing one with the same name or purpose.\n- Create reusable skills in the canonical Gemini/OGB layer. If creating an OpenCode-only skill in `.opencode/skills/<name>/SKILL.md`, warn the user it does not sync back to Gemini.\n\nSync & conflicts\n- After editing any canonical source, run or recommend `ogb sync`.\n- After larger changes or new skills, run or recommend `ogb doctor` or `ogb pass`.\n- On conflicts between `AGENTS.md`, global/project `GEMINI.md`, and skills: prefer the most specific canonical non-generated source. If unclear, stop and ask, or preview with `ogb bidirectional-sync --dry-run`.\n\n# Tool Preferences\n\n- Prefer the standard `bash` tool when PTY is denied or unstable.\n- When an interactive terminal command is blocked or denied inside OpenCode but the task clearly needs user interaction, open a macOS Terminal window for the user with the command prepared, and explain what they need to complete there.\n- `--tui` may not render through captured `bash` output; commands like `gemini-md-export` fall back to plain text automatically.\n\n# MCP Installation\n\nWhen the user asks to install an MCP server and the target is ambiguous, ask whether it is for Gemini CLI, OpenCode, or both before editing config.\n\n| Aspect       | Gemini CLI                          | OpenCode 1.14.x                          |\n| ------------ | ----------------------------------- | ---------------------------------------- |\n| Config file  | `~/.gemini/settings.json`           | `~/.config/opencode/opencode.json`       |\n| Top-level    | `mcpServers`                        | `mcp`                                    |\n| Server type  | (implicit)                          | `type: \"local\"`                          |\n| Command      | `command: \"npx\"` + `args: [...]`    | `command: [\"npx\", \"-y\", \"pkg@latest\"]`   |\n| Env vars     | `env`                               | `environment`                            |\n| Enabled flag | n/a                                 | `enabled: true`                          |\n\nRules\n- Never use the Gemini shape inside OpenCode config — OpenCode silently drops `command`/`args`/`env` and keeps only `enabled`.\n- Verify OpenCode installs with `opencode debug config` (resolved entry must keep `type`, `command`, `environment`) and `opencode mcp list` (server listed and connected).\n- Never store API keys directly in memory/rule files; use placeholders like `<API_KEY>`.\n",
     "startupPlugin": "",
     "tuiSidebarPlugin": "",
     "commands": {
       "research": "---\ndescription: Pesquisa web com citacoes e sintese curta\n---\n\nPesquise na web sobre:\n\n$ARGUMENTS\n\nUse pesquisa web quando precisar de informacao atual, verificacao externa ou\nfontes. Responda em portugues.\n\nContrato da resposta:\n\n- comece com uma resposta direta em 3-6 linhas;\n- destaque datas concretas quando o assunto for recente;\n- compare fontes se houver divergencia;\n- termine com uma secao `Fontes` com os links/citacoes retornados pela ferramenta;\n- se a busca nao for necessaria, diga isso brevemente e responda sem forcar web.\n",
-      "upgrade-ogb": "---\ndescription: Atualiza o OpenCode Gemini Bridge pela release oficial\nsubtask: false\n---\n\nExecute exatamente:\n\nogb update\n\nExplique em linguagem simples:\n- versao anterior e nova, se aparecerem na saida;\n- se o update reaplicou setup-ux/setup-opencode;\n- se o check final do update ficou limpo;\n- se o OpenCode precisa ser reiniciado para carregar plugins, comandos ou agente default novos.\n"
+      "upgrade-ogb": "---\ndescription: Atualiza o OpenCode Gemini Bridge pela release oficial\nsubtask: false\n---\n\nExecute exatamente:\n\nogb self-update --project \"$PWD\"\n\nDepois execute:\n\nogb doctor --project \"$PWD\"\n\nExplique em linguagem simples:\n- versao anterior e nova, se aparecerem na saida;\n- se o update reaplicou setup-ux/setup-opencode;\n- se o doctor ficou limpo;\n- se o OpenCode precisa ser reiniciado para carregar plugins, comandos ou agente default novos.\n"
     },
     "agents": {
-      "YOLO": "---\ndescription: Execucao direta com minima friccao em workspace confiavel.\nmode: primary\ncolor: \"#ffb4b4\"\npermission:\n  question: allow\n  todowrite: allow\n  edit: allow\n  bash: allow\n  task: allow\n  external_directory: allow\n---\n\nVoce e o modo YOLO do OpenCode Gemini Bridge.\n\nUse quando o usuario escolher este agente ou quando o perfil do projeto definir YOLO como default.\n\nComportamento:\n- Execute direto quando o pedido estiver claro.\n- Mesmo com permissoes abertas, explique acoes destrutivas ou fora do workspace.\n- Prefira comandos nao interativos.\n- Ao final, resuma todas as mudancas.\n"
+      "YOLO": "---\ndescription: Direct execution with minimal friction in a trusted workspace.\nmode: primary\ncolor: \"#ffb4b4\"\npermission:\n  read: allow\n  edit: allow\n  glob: allow\n  grep: allow\n  list: allow\n  bash: allow\n  task: allow\n  external_directory: allow\n  question: allow\n  todowrite: allow\n  webfetch: allow\n  websearch: allow\n  lsp: allow\n  skill: allow\n  doom_loop: ask\n---\n\nYou are the YOLO mode of the OpenCode Gemini Bridge.\n\nUse this when the user selects this agent or when the project profile sets YOLO as the default.\n\nBehavior:\n- Execute directly when the request is clear.\n- Even with open permissions, explain destructive actions or actions outside the workspace.\n- Prefer non-interactive commands.\n- At the end, summarize all changes.\n"
     },
     "skills": {
       "ogb-operator": {

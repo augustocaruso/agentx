@@ -1,8 +1,208 @@
 {
   "schema": "opencode-gemini-bridge.ux-profile-authoring.manifest.v1",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "presetSchema": "opencode-gemini-bridge.ux-profile.v1",
   "selected": [
+    {
+      "id": "agent:YOLO",
+      "category": "agents",
+      "kind": "file",
+      "source": ".config/opencode/agents/YOLO.md",
+      "target": "files.agents.YOLO",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "command:research",
+      "category": "commands",
+      "kind": "file",
+      "source": ".config/opencode/commands/research.md",
+      "target": "files.commands.research",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "command:upgrade-ogb",
+      "category": "commands",
+      "kind": "file",
+      "source": ".config/opencode/commands/upgrade-ogb.md",
+      "target": "files.commands.upgrade-ogb",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "file:AGENTS.md",
+      "category": "AGENTS.md",
+      "kind": "file",
+      "source": ".config/opencode/AGENTS.md",
+      "target": "files.globalAgentsMd",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "file:dcp.jsonc",
+      "category": "dcp.jsonc",
+      "kind": "file",
+      "source": ".config/opencode/dcp.jsonc",
+      "target": "dcpConfig",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "file:plugins/fallback.json",
+      "category": "fallback plugin",
+      "kind": "file",
+      "source": ".config/opencode/plugins/fallback.json",
+      "target": "fallbackConfig",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:$schema",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#$schema",
+      "target": "opencode:$schema",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:agent.agent",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#agent.agent",
+      "target": "opencode:agent.agent",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:agent.build",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#agent.build",
+      "target": "opencode:agent.build",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:agent.compaction",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#agent.compaction",
+      "target": "opencode:agent.compaction",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:autoupdate",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#autoupdate",
+      "target": "opencode:autoupdate",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:compaction",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#compaction",
+      "target": "opencode:compaction",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:default_agent",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#default_agent",
+      "target": "opencode:default_agent",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:permission",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#permission",
+      "target": "opencode:permission",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:plugin",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#plugin",
+      "target": "opencode:plugin",
+      "status": "unchanged",
+      "warnings": [
+        "local plugin spec excluded from preset: file:///Users/augustocaruso/.config/opencode/plugins/ogb-startup-sync.js"
+      ]
+    },
+    {
+      "id": "opencode:share",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#share",
+      "target": "opencode:share",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:small_model",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#small_model",
+      "target": "opencode:small_model",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:tool_output",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#tool_output",
+      "target": "opencode:tool_output",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "opencode:watcher.ignore",
+      "category": "opencode.json",
+      "kind": "config-field",
+      "source": ".config/opencode/opencode.json#watcher.ignore",
+      "target": "opencode:watcher.ignore",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "package:tui-runtime",
+      "category": "TUI runtime",
+      "kind": "package-deps",
+      "source": ".config/opencode/package.json#dependencies",
+      "target": "tuiRuntimeDependencies",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "skill:ogb-operator:SKILL.md",
+      "category": "skills",
+      "kind": "file",
+      "source": ".config/opencode/skills/ogb-operator/SKILL.md",
+      "target": "files.skills.ogb-operator.SKILL.md",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "tui:$schema",
+      "category": "tui.json",
+      "kind": "config-field",
+      "source": ".config/opencode/tui.json#$schema",
+      "target": "tui:$schema",
+      "status": "unchanged",
+      "warnings": []
+    },
     {
       "id": "tui:mouse",
       "category": "tui.json",
@@ -11,8 +211,1012 @@
       "target": "tui:mouse",
       "status": "unchanged",
       "warnings": []
+    },
+    {
+      "id": "tui:plugin",
+      "category": "tui.json",
+      "kind": "config-field",
+      "source": ".config/opencode/tui.json#plugin",
+      "target": "tui:plugin",
+      "status": "unchanged",
+      "warnings": []
+    },
+    {
+      "id": "tui:scroll_speed",
+      "category": "tui.json",
+      "kind": "config-field",
+      "source": ".config/opencode/tui.json#scroll_speed",
+      "target": "tui:scroll_speed",
+      "status": "unchanged",
+      "warnings": []
     }
   ],
-  "excluded": [],
-  "warnings": []
+  "excluded": [
+    {
+      "scope": "bridge",
+      "relPath": ".DS_Store",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "bridge",
+      "relPath": "backups",
+      "reason": "backup"
+    },
+    {
+      "scope": "bridge",
+      "relPath": "generated",
+      "reason": "generated_artifact"
+    },
+    {
+      "scope": "bridge",
+      "relPath": "local-role.json",
+      "reason": "local_maintainer_flag"
+    },
+    {
+      "scope": "bridge",
+      "relPath": "mcp-env.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "bridge",
+      "relPath": "telemetry",
+      "reason": "telemetry_or_quota"
+    },
+    {
+      "scope": "bridge",
+      "relPath": "telemetry-email-worker",
+      "reason": "telemetry_or_quota"
+    },
+    {
+      "scope": "bridge",
+      "relPath": "telemetry-receiver.json",
+      "reason": "telemetry_or_quota"
+    },
+    {
+      "scope": "opencode",
+      "relPath": ".DS_Store",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": ".gitignore",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": ".ogb-backups/oh-my-openagent-20260504-155403/opencode.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": ".ogb-backups/oh-my-openagent-20260504-155403/tui.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "agents/gemini-vault-repair.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "agents/med-catalog-curator.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "agents/med-chat-triager.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "agents/med-flashcard-maker.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "agents/med-knowledge-architect.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "agents/med-publish-guard.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/.DS_Store",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/exporter/capture-artifacts.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/exporter/diagnose-page.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/exporter/repair-vault.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/exporter/telemetry.md",
+      "reason": "telemetry_or_quota"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/flashcards.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/create.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/enrich.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/fix-wiki.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/link.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/process-chats.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/setup.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/status.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/mednotes/telemetry.md",
+      "reason": "telemetry_or_quota"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "commands/sync.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "kdco-notify.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "node_modules",
+      "reason": "runtime_dependency_tree"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "opencode.json.bak-20260505-202800",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "opencode.json#instructions",
+      "reason": "unknown_or_sensitive_config_field"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "opencode.json#mcp",
+      "reason": "unknown_or_sensitive_config_field"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "package-lock.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/macos-notifications.js",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/ogb-startup-sync.js",
+      "reason": "provided_by_ogb_runtime",
+      "detail": "local startup sync plugin differs; repository source remains authoritative"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/config",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/description",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/HEAD",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/applypatch-msg.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/commit-msg.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/fsmonitor-watchman.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/post-update.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/pre-applypatch.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/pre-commit.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/pre-merge-commit.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/pre-push.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/pre-rebase.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/pre-receive.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/prepare-commit-msg.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/push-to-checkout.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/hooks/update.sample",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/index",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/info/exclude",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/logs",
+      "reason": "log"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.git/packed-refs",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.github/workflows/release.yml",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.gitignore",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.opencode/opencode-bar.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.opencode/opencode.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/.opencode/tui.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/bun.lock",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/dist/index.d.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/dist/index.js",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/dist/index.js.map",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/img/img_1.png",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/node_modules",
+      "reason": "runtime_dependency_tree"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/package-lock.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/package.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/README_EN.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/README.md",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/src/components/BarFooter.tsx",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/src/config.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/src/index.tsx",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/src/logger.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/src/metrics.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/src/types.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/tests/integration.test.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/tests/metrics.test.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/tsconfig.json",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "plugins/opencodeBar.disabled-20260504/tsup.config.ts",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/.DS_Store",
+      "reason": "outside_snapshot_allowlist"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/create-medical-flashcards/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/create-medical-note/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/enrich-medical-note/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/fix-medical-wiki/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gemini-chat-inventory/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gemini-mcp-diagnostics/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gemini-tabs-and-browser/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gemini-vault-repair/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gemini-vault-sync/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-admin-reports/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-calendar-agenda/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-calendar-insert/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-calendar/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-chat-send/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-chat/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-classroom/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-docs-write/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-docs/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-drive-upload/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-drive/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-events-renew/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-events-subscribe/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-events/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-forms/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail-forward/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail-read/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail-reply-all/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail-reply/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail-send/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail-triage/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail-watch/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-gmail/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-keep/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-meet/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-modelarmor-create-template/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-modelarmor-sanitize-prompt/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-modelarmor-sanitize-response/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-modelarmor/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-people/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-script-push/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-script/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-shared/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-sheets-append/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-sheets-read/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-sheets/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-slides/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-tasks/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-workflow-email-to-task/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-workflow-file-announce/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-workflow-meeting-prep/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-workflow-standup-report/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-workflow-weekly-digest/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/gws-workflow/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/link-medical-wiki/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-content-creator/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-customer-support/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-event-coordinator/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-exec-assistant/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-hr-coordinator/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-it-admin/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-project-manager/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-researcher/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-sales-ops/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/persona-team-lead/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/process-medical-chats/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-backup-sheet-as-csv/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-batch-invite-to-event/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-block-focus-time/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-bulk-download-folder/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-collect-form-responses/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-compare-sheet-tabs/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-copy-sheet-for-new-month/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-classroom-course/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-doc-from-template/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-events-from-sheet/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-expense-tracker/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-feedback-form/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-gmail-filter/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-meet-space/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-presentation/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-shared-drive/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-task-list/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-create-vacation-responder/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-draft-email-from-doc/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-email-drive-link/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-find-free-time/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-find-large-files/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-forward-labeled-emails/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-generate-report-from-sheet/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-label-and-archive-emails/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-log-deal-update/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-organize-drive-folder/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-plan-weekly-schedule/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-post-mortem-setup/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-reschedule-meeting/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-review-meet-participants/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-review-overdue-tasks/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-save-email-attachments/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-save-email-to-doc/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-schedule-recurring-event/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-send-team-announcement/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-share-doc-and-notify/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-share-event-materials/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-share-folder-with-team/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-sync-contacts-to-sheet/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "skills/recipe-watch-drive-changes/SKILL.md",
+      "reason": "managed_by_ogb_sync"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "tui-plugins/ogb-sidebar.js",
+      "reason": "provided_by_ogb_runtime",
+      "detail": "local TUI sidebar plugin differs; repository source remains authoritative"
+    },
+    {
+      "scope": "opencode",
+      "relPath": "tui.json#scroll_acceleration",
+      "reason": "unknown_config_field"
+    }
+  ],
+  "warnings": [
+    ".config/opencode-gemini-bridge/local-role.json excluded: local_maintainer_flag",
+    ".config/opencode-gemini-bridge/telemetry excluded: telemetry_or_quota",
+    ".config/opencode-gemini-bridge/telemetry-email-worker excluded: telemetry_or_quota",
+    ".config/opencode-gemini-bridge/telemetry-receiver.json excluded: telemetry_or_quota",
+    ".config/opencode/commands/exporter/telemetry.md excluded: telemetry_or_quota",
+    ".config/opencode/commands/mednotes/telemetry.md excluded: telemetry_or_quota",
+    "opencode:plugin: local plugin spec excluded from preset: file:///Users/augustocaruso/.config/opencode/plugins/ogb-startup-sync.js"
+  ]
 }

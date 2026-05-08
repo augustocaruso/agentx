@@ -83,7 +83,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(globalConfig.permission.bash["git push*"], "deny");
 
   const yolo = fs.readFileSync(path.join(configDir, "agents", "YOLO.md"), "utf8");
-  assert.match(yolo, /description: Execucao direta com minima friccao/);
+  assert.match(yolo, /description: Direct execution with minimal friction/);
   assert.match(yolo, /edit: allow/);
   assert.match(yolo, /task: allow/);
   assert.match(yolo, /external_directory: allow/);
@@ -106,9 +106,9 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fs.existsSync(path.join(configDir, "commands", "research.md")), true);
   assert.equal(fs.existsSync(path.join(configDir, "commands", "dev-server.md")), false);
   assert.equal(fs.existsSync(path.join(configDir, "commands", "upgrade-ogb.md")), true);
-  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^ogb update$/m);
-  assert.doesNotMatch(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /ogb update --project/);
-  assert.doesNotMatch(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /ogb check --project/);
+  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^ogb self-update --project "\$PWD"$/m);
+  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^ogb doctor --project "\$PWD"$/m);
+  assert.doesNotMatch(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^ogb update$/m);
   assert.equal(fs.existsSync(path.join(configDir, "dcp.jsonc")), true);
   const packageJson = readJson(path.join(configDir, "package.json"));
   assert.equal(packageJson.type, "module");
