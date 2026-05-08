@@ -46,6 +46,7 @@ test("user-facing ritual verbs expose versioned progress NDJSON", () => {
 test("check exposes an extension-update escape hatch", () => {
   for (const name of ["check", "pass"]) {
     assert.ok(command(name).options.some((option) => option.long === "--no-extension-update"), `expected ogb ${name} to support --no-extension-update`);
+    assert.ok(command(name).options.some((option) => option.long === "--no-patches"), `expected ogb ${name} to support --no-patches`);
   }
 });
 
@@ -83,7 +84,7 @@ test("check --progress-json emits only versioned NDJSON on stdout", () => {
   assert.equal(events[0].type, "ritual.started");
   assert.equal(events.at(-1).type, "ritual.finished");
   assert.ok(events.every((event) => event.schemaVersion === RITUAL_PROGRESS_SCHEMA_VERSION));
-  assert.deepEqual(events.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId), ["doctor"]);
+  assert.deepEqual(events.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId), ["patches-pre-doctor", "doctor", "patches-post-check"]);
   assert.equal(events.at(-1).exitCode, 0);
 });
 
@@ -97,20 +98,59 @@ test("check --accept-hooks --progress-json uses canonical hook-review step id", 
   assert.equal(stepIds.includes("hooks"), false);
 });
 
+test("check --no-patches removes patch phases from progress", () => {
+  const result = runCli(["check", "--dry-run", "--no-setup", "--no-sync", "--no-validation", "--no-security", "--no-dashboard", "--no-patches", "--progress-json"]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const events = parseNdjson(result.stdout);
+  assert.deepEqual(events[0].steps.map((step: any) => step.stepId), ["doctor"]);
+  assert.deepEqual(
+    events.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId),
+    ["doctor"],
+  );
+});
+
 test("check --progress-json includes extension-update before sync unless skipped", () => {
   const withUpdate = runCli(["check", "--dry-run", "--no-setup", "--no-validation", "--no-security", "--no-dashboard", "--progress-json"]);
   assert.ok(withUpdate.status === 0 || withUpdate.status === 1, withUpdate.stderr);
   const withUpdateEvents = parseNdjson(withUpdate.stdout);
-  assert.deepEqual(withUpdateEvents[0].steps.map((step: any) => step.stepId), ["extension-update", "sync", "doctor"]);
+  assert.deepEqual(withUpdateEvents[0].steps.map((step: any) => step.stepId), [
+    "patches-pre-extension-update",
+    "extension-update",
+    "patches-post-extension-update",
+    "patches-pre-sync",
+    "sync",
+    "patches-post-sync",
+    "patches-pre-doctor",
+    "doctor",
+    "patches-post-check",
+  ]);
   assert.deepEqual(
     withUpdateEvents.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId),
-    ["extension-update", "sync", "doctor"],
+    [
+      "patches-pre-extension-update",
+      "extension-update",
+      "patches-post-extension-update",
+      "patches-pre-sync",
+      "sync",
+      "patches-post-sync",
+      "patches-pre-doctor",
+      "doctor",
+      "patches-post-check",
+    ],
   );
 
   const skipped = runCli(["check", "--dry-run", "--no-setup", "--no-extension-update", "--no-validation", "--no-security", "--no-dashboard", "--progress-json"]);
   assert.ok(skipped.status === 0 || skipped.status === 1, skipped.stderr);
   const skippedEvents = parseNdjson(skipped.stdout);
-  assert.deepEqual(skippedEvents[0].steps.map((step: any) => step.stepId), ["sync", "doctor"]);
+  assert.deepEqual(skippedEvents[0].steps.map((step: any) => step.stepId), [
+    "patches-pre-sync",
+    "sync",
+    "patches-post-sync",
+    "patches-pre-doctor",
+    "doctor",
+    "patches-post-check",
+  ]);
 });
 
 test("--progress-json rejects plain and final-json output modes", () => {

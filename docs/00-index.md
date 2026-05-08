@@ -23,6 +23,7 @@
 - `19-daily-use.md` — fluxo simples para usar, atualizar e diagnosticar o bridge no dia a dia.
 - `20-windows-installer-lessons.md` — licoes e checklist para instalador, update e startup sync no Windows.
 - `21-installer-api-refactor-roadmap.md` — roadmap para simplificar instalacao/update/check/reset no Mac e Windows.
+- `22-patch-api.md` — contrato para patches versionados, seguros e integrados ao check/update.
 
 ## Execução
 

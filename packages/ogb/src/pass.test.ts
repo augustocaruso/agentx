@@ -6,6 +6,7 @@ import test from "node:test";
 import { runDoctor } from "./doctor.js";
 import { buildInstallerPlan } from "./installer-planner.js";
 import { formatPassReport, runPass, type PassReport } from "./pass.js";
+import type { OgbPatch } from "./patches.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
 
 function tempRoot(): string {
@@ -66,8 +67,22 @@ test("runPass emits real progress events in ritual order", () => {
   });
 
   const runningOrder = events.filter((event) => event.status === "running").map((event) => event.stepId);
-  assert.deepEqual(runningOrder, ["setup", "extension-update", "sync", "doctor", "validate", "security", "dashboard"]);
-  assert.equal(events.at(-1)?.stepId, "dashboard");
+  assert.deepEqual(runningOrder, [
+    "setup",
+    "patches-pre-extension-update",
+    "extension-update",
+    "patches-post-extension-update",
+    "patches-pre-sync",
+    "sync",
+    "patches-post-sync",
+    "patches-pre-doctor",
+    "doctor",
+    "validate",
+    "security",
+    "dashboard",
+    "patches-post-check",
+  ]);
+  assert.equal(events.at(-1)?.stepId, "patches-post-check");
   assert.notEqual(events.at(-1)?.status, "running");
   process.exitCode = oldExitCode;
 });
@@ -90,7 +105,47 @@ test("runPass removes progress steps disabled by check flags", () => {
     onProgress: (event) => events.push(event),
   });
 
-  assert.deepEqual([...new Set(events.map((event) => event.stepId))], ["doctor"]);
+  assert.deepEqual([...new Set(events.map((event) => event.stepId))], ["patches-pre-doctor", "doctor", "patches-post-check"]);
+  process.exitCode = oldExitCode;
+});
+
+test("runPass turns patch warnings into check blockers without stopping doctor", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+  const events: RitualProgressEvent[] = [];
+  const patchRegistry: readonly OgbPatch[] = [{
+    id: "warn-after-check",
+    title: "Warn after check",
+    description: "Test warning patch",
+    introducedIn: "0.0.0-test",
+    phase: "post-check",
+    applies: () => true,
+    run: () => ({
+      status: "warning",
+      message: "needs manual review",
+      nextAction: "Review the test patch warning.",
+    }),
+  }];
+
+  const report = runPass({
+    projectRoot,
+    homeDir: projectRoot,
+    skipSetup: true,
+    skipSync: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+    patchRegistry,
+    silent: true,
+    setExitCode: false,
+    onProgress: (event) => events.push(event),
+  });
+
+  assert.equal(report.outcome, "warn");
+  assert.equal(report.automated.includes("patches:post-check"), true);
+  assert.equal(report.blockers.some((item) => item.source === "patch" && item.severity === "warn"), true);
+  assert.equal(report.steps.some((step) => step.name === "patches:post-check" && step.status === "warn"), true);
+  assert.equal(events.some((event) => event.stepId === "patches-post-check" && event.status === "warn"), true);
   process.exitCode = oldExitCode;
 });
 

@@ -31,6 +31,18 @@ test("state store contract writes and reads stamped reports by kind", () => {
   assert.equal(read.data?.ogbVersion, OGB_VERSION);
 });
 
+test("state store writes patch state in the generated bridge directory", () => {
+  const projectRoot = tempRoot();
+  const paths = resolveProjectPaths(projectRoot);
+  const written = writeStateRecord("patches", { schema: "opencode-gemini-bridge.patches.v1", applied: {} }, { projectRoot });
+  const read = readStateRecord("patches", { projectRoot });
+
+  assert.equal(written.path, path.join(paths.generatedDir, "ogb-patches.json"));
+  assert.equal(read.exists, true);
+  assert.equal(read.legacy, false);
+  assert.equal(read.data?.schema, "opencode-gemini-bridge.patches.v1");
+});
+
 test("state store contract consumes legacy update status without throwing", () => {
   const projectRoot = tempRoot();
   const paths = resolveProjectPaths(projectRoot);

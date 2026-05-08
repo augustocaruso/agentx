@@ -49,6 +49,7 @@ test("plain help catalog and command details include descriptions and examples",
   assert.match(check, /Examples/);
   assert.match(check, /Actions/);
   assert.match(check, /ogb check --no-extension-update/);
+  assert.match(check, /ogb check --no-patches/);
 });
 
 test("interactive help exposes runnable commands and blocks commands that need required arguments", () => {
@@ -62,6 +63,7 @@ test("interactive help exposes concrete actions for selected commands", () => {
   const checkActions = helpActionsForCommand(findHelpCommand("check")!);
   assert.ok(checkActions.some((action) => action.args?.join(" ") === "check"));
   assert.ok(checkActions.some((action) => action.args?.join(" ") === "check --no-extension-update"));
+  assert.ok(checkActions.some((action) => action.args?.join(" ") === "check --no-patches"));
   assert.ok(checkActions.every((action) => action.runnable !== false));
 
   const telemetryActions = helpActionsForCommand(findHelpCommand("telemetry")!);

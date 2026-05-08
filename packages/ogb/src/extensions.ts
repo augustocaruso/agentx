@@ -1,6 +1,9 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { runBeforeGeminiExtensionUpdatePatches, type GeminiExtensionPatchTarget, type OgbPatch, type PatchRunReport } from "./patches.js";
 import { spawnCommandSync } from "./process.js";
+import type { RitualProgressSink } from "./ritual-progress.js";
 
 const DEFAULT_EXTENSION_UPDATE_TIMEOUT_MS = 120_000;
 const AUTO_CONSENT_INPUT = `${"y\n".repeat(25)}`;
@@ -23,6 +26,10 @@ export interface ExtensionUpdateOptions {
   autoConsent?: boolean;
   timeoutMs?: number;
   cwd?: string;
+  projectRoot?: string;
+  homeDir?: string;
+  patchRegistry?: readonly OgbPatch[];
+  onPatchProgress?: RitualProgressSink;
 }
 
 export interface ExtensionSourceInspection {
@@ -40,12 +47,19 @@ export interface ExtensionCommandReport {
   status: "applied" | "preview" | "blocked" | "error";
   command: string[];
   inspection?: ExtensionSourceInspection;
+  beforeExtensions?: InstalledGeminiExtension[];
+  afterExtensions?: InstalledGeminiExtension[];
+  patches?: PatchRunReport[];
   exitCode?: number | null;
   signal?: NodeJS.Signals | null;
   stdoutTail?: string;
   stderrTail?: string;
   error?: string;
   timedOut?: boolean;
+}
+
+export interface InstalledGeminiExtension extends GeminiExtensionPatchTarget {
+  scope: "project" | "global";
 }
 
 function isRemoteSource(source: string): boolean {
@@ -66,6 +80,26 @@ function dirExists(dirPath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function readJson(filePath: string): Record<string, unknown> | undefined {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function uniquePaths(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of paths) {
+    const resolved = path.resolve(item);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    out.push(item);
+  }
+  return out;
 }
 
 function findManifestRoot(root: string): string | undefined {
@@ -154,6 +188,85 @@ export function buildUpdateExtensionsArgs(options: ExtensionUpdateOptions = {}):
   return args;
 }
 
+export function listInstalledGeminiExtensions(options: Pick<ExtensionUpdateOptions, "projectRoot" | "homeDir"> = {}): InstalledGeminiExtension[] {
+  const homeDir = path.resolve(options.homeDir ?? os.homedir());
+  const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
+  const roots = uniquePaths([
+    path.join(projectRoot, ".gemini", "extensions"),
+    path.join(homeDir, ".gemini", "extensions"),
+  ]);
+  const extensions: InstalledGeminiExtension[] = [];
+  const seen = new Set<string>();
+
+  for (const root of roots) {
+    if (!dirExists(root)) continue;
+    const scope: InstalledGeminiExtension["scope"] = root.startsWith(path.join(homeDir, ".gemini")) ? "global" : "project";
+    for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!entry.isDirectory()) continue;
+      const extensionPath = path.join(root, entry.name);
+      const key = path.resolve(extensionPath);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const manifestPath = path.join(extensionPath, "gemini-extension.json");
+      const manifest = fileExists(manifestPath) ? readJson(manifestPath) : undefined;
+      const manifestName = typeof manifest?.name === "string" ? manifest.name : undefined;
+      const currentVersion = typeof manifest?.version === "string" ? manifest.version : undefined;
+      const currentRef = typeof manifest?.ref === "string"
+        ? manifest.ref
+        : typeof manifest?.revision === "string"
+          ? manifest.revision
+          : undefined;
+      const source = typeof manifest?.repository === "string"
+        ? manifest.repository
+        : typeof manifest?.source === "string"
+          ? manifest.source
+          : undefined;
+      extensions.push({
+        name: manifestName ?? entry.name,
+        extensionPath,
+        manifestPath: fileExists(manifestPath) ? manifestPath : undefined,
+        currentVersion,
+        currentRef,
+        source,
+        scope,
+      });
+    }
+  }
+
+  return extensions.sort((a, b) => a.name.localeCompare(b.name) || a.extensionPath.localeCompare(b.extensionPath));
+}
+
+function targetExtensionsForUpdate(options: ExtensionUpdateOptions): InstalledGeminiExtension[] {
+  const installed = listInstalledGeminiExtensions(options);
+  if (options.name) return installed.filter((extension) => extension.name === options.name || path.basename(extension.extensionPath) === options.name);
+  if (options.all === false) return [];
+  return installed;
+}
+
+function runBeforeUpdatePatches(options: ExtensionUpdateOptions): {
+  beforeExtensions: InstalledGeminiExtension[];
+  patches: PatchRunReport[];
+  blocked?: string;
+} {
+  const beforeExtensions = targetExtensionsForUpdate(options);
+  const patches: PatchRunReport[] = [];
+  for (const extension of beforeExtensions) {
+    const report = runBeforeGeminiExtensionUpdatePatches({
+      projectRoot: options.projectRoot,
+      homeDir: options.homeDir,
+      dryRun: options.dryRun,
+      registry: options.patchRegistry,
+      extension,
+      onProgress: options.onPatchProgress,
+    });
+    patches.push(report);
+  }
+  const blocked = patches
+    .flatMap((report) => report.errors)
+    .find((error) => error.trim().length > 0);
+  return { beforeExtensions, patches, blocked };
+}
+
 function runGemini(geminiBin: string, args: string[], cwd = process.cwd()): boolean {
   const result = spawnCommandSync(geminiBin, args, {
     cwd,
@@ -221,12 +334,35 @@ export function installGeminiExtension(options: ExtensionInstallOptions): Extens
 export function updateGeminiExtensions(options: ExtensionUpdateOptions = {}): ExtensionCommandReport {
   const geminiBin = options.geminiBin ?? process.env.GEMINI_BIN ?? "gemini";
   const command = [geminiBin, ...buildUpdateExtensionsArgs(options)];
+  const preUpdate = runBeforeUpdatePatches(options);
 
-  if (options.dryRun) return { status: "preview", command };
-  if (options.autoConsent) return runGeminiCaptured(geminiBin, command.slice(1), options);
+  if (preUpdate.blocked) {
+    return {
+      status: "blocked",
+      command,
+      beforeExtensions: preUpdate.beforeExtensions,
+      patches: preUpdate.patches,
+      error: `Gemini extension update blocked before overwrite: ${preUpdate.blocked}`,
+    };
+  }
+
+  if (options.dryRun) return { status: "preview", command, beforeExtensions: preUpdate.beforeExtensions, patches: preUpdate.patches };
+  if (options.autoConsent) {
+    const report = runGeminiCaptured(geminiBin, command.slice(1), options);
+    return {
+      ...report,
+      beforeExtensions: preUpdate.beforeExtensions,
+      afterExtensions: listInstalledGeminiExtensions(options),
+      patches: preUpdate.patches,
+    };
+  }
+  const applied = runGemini(geminiBin, command.slice(1));
   return {
-    status: runGemini(geminiBin, command.slice(1)) ? "applied" : "error",
+    status: applied ? "applied" : "error",
     command,
+    beforeExtensions: preUpdate.beforeExtensions,
+    afterExtensions: listInstalledGeminiExtensions(options),
+    patches: preUpdate.patches,
   };
 }
 

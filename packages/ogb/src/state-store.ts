@@ -3,7 +3,16 @@ import path from "node:path";
 import { resolveProjectPaths } from "./paths.js";
 import { OGB_VERSION } from "./types.js";
 
-export type StateReportKind = "install" | "update" | "check" | "startup" | "doctor" | "validation" | "security" | "dashboard";
+export type StateReportKind =
+  | "install"
+  | "update"
+  | "check"
+  | "startup"
+  | "doctor"
+  | "validation"
+  | "security"
+  | "dashboard"
+  | "patches";
 
 export interface StateStoreOptions {
   projectRoot?: string;
@@ -28,11 +37,13 @@ const REPORT_FILES: Record<StateReportKind, keyof ReturnType<typeof resolveProje
   validation: "validationPath",
   security: "securityPath",
   dashboard: "dashboardPath",
+  patches: "generatedDir",
 };
 
 export function stateRecordPath(kind: StateReportKind, options: StateStoreOptions = {}): string {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   if (kind === "install") return path.join(paths.generatedDir, "ogb-install.json");
+  if (kind === "patches") return path.join(paths.generatedDir, "ogb-patches.json");
   const key = REPORT_FILES[kind];
   return String(paths[key as keyof typeof paths]);
 }

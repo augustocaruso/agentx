@@ -6,6 +6,7 @@ import { updateGeminiExtensions, type ExtensionCommandReport } from "./extension
 import { sha256File } from "./file-hash.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { buildInventory } from "./inventory.js";
+import { runPatchesForPhase, summarizePatchReport, type OgbPatch, type PatchPhase, type PatchRunReport } from "./patches.js";
 import { resolveProjectPaths } from "./paths.js";
 import { runSecurityCheck, type SecurityReport } from "./security.js";
 import { setupOpenCode, type SetupOpenCodeReport } from "./setup-opencode.js";
@@ -28,18 +29,20 @@ export interface PassOptions {
   skipSetup?: boolean;
   skipSync?: boolean;
   skipExtensionUpdate?: boolean;
+  skipPatches?: boolean;
   skipValidation?: boolean;
   skipSecurity?: boolean;
   skipDashboard?: boolean;
   silent?: boolean;
   setExitCode?: boolean;
   rulesyncMode?: RulesyncMode;
+  patchRegistry?: readonly OgbPatch[];
   onProgress?: RitualProgressSink;
 }
 
 export interface PassBlocker {
   severity: "warn" | "fail";
-  source: "doctor" | "validation" | "security" | "setup" | "extension-update" | "sync" | "dashboard";
+  source: "doctor" | "validation" | "security" | "setup" | "extension-update" | "sync" | "dashboard" | "patch";
   message: string;
   action: string;
 }
@@ -63,6 +66,19 @@ export interface PassSyncSummary {
   rulesyncPromoted: number;
 }
 
+export interface PassPatchSummary {
+  statePath: string;
+  phases: Array<{
+    phase: PatchPhase;
+    outcome: PatchRunReport["outcome"];
+    registered: number;
+    applicable: number;
+    applied: number;
+    warnings: number;
+    errors: number;
+  }>;
+}
+
 export interface PassReport {
   version: string;
   projectRoot: string;
@@ -83,6 +99,7 @@ export interface PassReport {
   security?: {
     outcome: SecurityReport["outcome"];
   };
+  patches?: PassPatchSummary;
   dashboard?: {
     outcome: DashboardReport["outcome"];
   };
@@ -140,6 +157,7 @@ function firstDashboardIssue(report: DashboardReport | undefined, severity: "fai
 
 function extensionUpdateMessage(report: ExtensionCommandReport): string {
   if (report.status === "preview") return "Would run Gemini extension update.";
+  if (report.status === "blocked") return report.error ?? "Gemini extension update was blocked before overwriting local extension changes.";
   if (report.status === "applied") return report.stdoutTail ?? "Gemini extensions are up to date.";
   const detail = report.stderrTail ?? report.stdoutTail ?? report.error ?? `exit code ${String(report.exitCode ?? "unknown")}`;
   return report.timedOut ? `Gemini extension update timed out: ${detail}` : `Gemini extension update failed: ${detail}`;
@@ -160,6 +178,10 @@ function securityAction(): string {
 
 function dashboardAction(): string {
   return "Rode `ogb dashboard --plain` e abra o arquivo Markdown do dashboard para ver o estado persistido completo.";
+}
+
+function patchAction(result: { nextAction?: string; id: string }): string {
+  return result.nextAction ?? `Rode \`ogb check --plain\` para ver detalhes do patch ${result.id}; se o patch mexe em arquivo gerenciado, rode novamente com \`--force\` so depois de revisar.`;
 }
 
 function blocker(source: PassBlocker["source"], severity: PassBlocker["severity"], message: string, action: string): PassBlocker {
@@ -236,6 +258,7 @@ function friendlyBlockerMessage(item: PassBlocker): string {
   if (item.source === "validation" && item.severity === "warn") return "Validation encontrou avisos.";
   if (item.source === "security" && item.severity === "warn") return "Security-check encontrou avisos.";
   if (item.source === "dashboard" && item.severity === "warn") return "Dashboard herdou avisos dos checks anteriores.";
+  if (item.source === "patch" && item.severity === "warn") return "Um patch OGB precisa de revisao.";
   return item.message;
 }
 
@@ -303,6 +326,28 @@ function buildSyncSummary(sync: SyncReport | undefined): PassSyncSummary | undef
   };
 }
 
+function buildPatchSummary(reports: readonly PatchRunReport[]): PassPatchSummary | undefined {
+  if (reports.length === 0) return undefined;
+  return {
+    statePath: reports[0]?.statePath ?? "",
+    phases: reports.map((report) => ({
+      phase: report.phase,
+      outcome: report.outcome,
+      registered: report.registered,
+      applicable: report.applicable,
+      applied: report.results.filter((result) => result.status === "applied").length,
+      warnings: report.warnings.length,
+      errors: report.errors.length,
+    })),
+  };
+}
+
+function patchReportStepStatus(report: PatchRunReport): PassStep["status"] {
+  if (report.errors.length > 0) return "fail";
+  if (report.warnings.length > 0) return "warn";
+  return "pass";
+}
+
 export function runPass(options: PassOptions = {}): PassReport {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   const plan = buildInstallerPlan({
@@ -319,6 +364,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   let setup: SetupOpenCodeReport | undefined;
   let extensionUpdate: ExtensionCommandReport | undefined;
   let sync: SyncReport | undefined;
+  const patchReports: PatchRunReport[] = [];
   let validation: ValidationReport | undefined;
   let security: SecurityReport | undefined;
   let dashboard: DashboardReport | undefined;
@@ -348,27 +394,71 @@ export function runPass(options: PassOptions = {}): PassReport {
     for (const warning of setup.warnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
   }
 
+  function runPatchPhase(phase: PatchPhase): PatchRunReport | undefined {
+    if (options.skipPatches) return undefined;
+    const report = runPatchesForPhase({
+      phase,
+      projectRoot: paths.projectRoot,
+      homeDir: paths.homeDir,
+      dryRun: options.dryRun,
+      force: options.force,
+      registry: options.patchRegistry,
+      onProgress: options.onProgress,
+    });
+    patchReports.push(report);
+    if (report.results.length > 0) automated.push(`patches:${phase}`);
+    recordPatchBlockers(report);
+    return report;
+  }
+
+  function recordPatchBlockers(report: PatchRunReport): void {
+    for (const result of report.results) {
+      if (result.status === "failed") {
+        blockers.push(blocker(
+          "patch",
+          result.required ? "fail" : "warn",
+          `Patch ${result.id} falhou: ${result.message}`,
+          patchAction(result),
+        ));
+      } else if (result.status === "warning") {
+        blockers.push(blocker("patch", "warn", `Patch ${result.id}: ${result.message}`, patchAction(result)));
+      }
+    }
+  }
+
   if (!options.skipSync && !options.skipExtensionUpdate) {
+    runPatchPhase("pre-extension-update");
     emitCheckProgress(options.onProgress, "extensionUpdate", "running");
     extensionUpdate = updateGeminiExtensions({
       all: true,
       dryRun: options.dryRun,
       autoConsent: true,
+      projectRoot: paths.projectRoot,
+      homeDir: paths.homeDir,
+      patchRegistry: options.patchRegistry,
+      onPatchProgress: options.onProgress,
     });
+    if (extensionUpdate.patches?.length) {
+      patchReports.push(...extensionUpdate.patches);
+      for (const report of extensionUpdate.patches) recordPatchBlockers(report);
+      if (extensionUpdate.patches.some((report) => report.results.length > 0)) automated.push("patches:before-gemini-extension-update");
+    }
     const message = extensionUpdateMessage(extensionUpdate);
     emitCheckProgress(
       options.onProgress,
       "extensionUpdate",
-      extensionUpdate.status === "error" ? "warn" : progressStatusFromOutcome(extensionUpdate.status),
+      extensionUpdate.status === "error" || extensionUpdate.status === "blocked" ? "warn" : progressStatusFromOutcome(extensionUpdate.status),
       message,
     );
     automated.push("update-extensions");
-    if (extensionUpdate.status === "error") {
+    if (extensionUpdate.status === "error" || extensionUpdate.status === "blocked") {
       blockers.push(blocker("extension-update", "warn", message, extensionUpdateAction()));
     }
+    runPatchPhase("post-extension-update");
   }
 
   if (!options.skipSync) {
+    runPatchPhase("pre-sync");
     emitCheckProgress(options.onProgress, "sync", "running");
     try {
       sync = syncToOpenCode({
@@ -393,8 +483,10 @@ export function runPass(options: PassOptions = {}): PassReport {
     );
     automated.push("sync");
     for (const warning of sync.warnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
+    runPatchPhase("post-sync");
   }
 
+  runPatchPhase("pre-doctor");
   emitCheckProgress(options.onProgress, "doctor", "running");
   let doctor: DoctorReport;
   try {
@@ -493,6 +585,8 @@ export function runPass(options: PassOptions = {}): PassReport {
     automated.push("dashboard");
   }
 
+  runPatchPhase("post-check");
+
   for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Corrija o erro indicado pelo doctor e rode `ogb check` novamente."));
   for (const warning of doctor.warnings) blockers.push(blocker("doctor", "warn", warning, actionForWarning(warning)));
   if (validation?.outcome === "fail") blockers.push(blocker("validation", "fail", `Validation falhou: ${firstValidationIssue(validation, "fail") ?? "um check obrigatorio falhou."}`, validationAction(options)));
@@ -509,6 +603,18 @@ export function runPass(options: PassOptions = {}): PassReport {
       : "pass";
 
   const steps: PassStep[] = [];
+  const appendPatchStep = (phase: PatchPhase) => {
+    const reports = patchReports.filter((item) => item.phase === phase || (phase === "pre-extension-update" && item.phase === "before-gemini-extension-update"));
+    if (reports.length === 0 || reports.every((report) => report.results.length === 0)) return;
+    const errors = reports.reduce((count, report) => count + report.errors.length, 0);
+    const warnings = reports.reduce((count, report) => count + report.warnings.length, 0);
+    const resultCount = reports.reduce((count, report) => count + report.results.length, 0);
+    steps.push({
+      name: `patches:${phase}`,
+      status: errors > 0 ? "fail" : warnings > 0 ? "warn" : "pass",
+      detail: reports.length === 1 ? summarizePatchReport(reports[0]) : `${resultCount} patch result(s) across ${reports.length} report(s)`,
+    });
+  };
   if (setup) {
     steps.push({
       name: "setup-opencode",
@@ -516,6 +622,7 @@ export function runPass(options: PassOptions = {}): PassReport {
       detail: setup.warnings.length > 0 ? `${setup.warnings.length} warning(s)` : undefined,
     });
   }
+  appendPatchStep("pre-extension-update");
   if (extensionUpdate) {
     steps.push({
       name: "update-extensions",
@@ -523,6 +630,8 @@ export function runPass(options: PassOptions = {}): PassReport {
       detail: extensionUpdate.status === "preview" ? "preview" : extensionUpdate.status === "error" ? "warning" : undefined,
     });
   }
+  appendPatchStep("post-extension-update");
+  appendPatchStep("pre-sync");
   if (sync) {
     steps.push({
       name: "sync",
@@ -530,6 +639,8 @@ export function runPass(options: PassOptions = {}): PassReport {
       detail: sync.warnings.length > 0 ? `${sync.warnings.length} warning(s)` : undefined,
     });
   }
+  appendPatchStep("post-sync");
+  appendPatchStep("pre-doctor");
   if (acceptedHooks.length > 0) {
     steps.push({ name: "hook review", status: "pass", detail: `${acceptedHooks.length} accepted` });
   }
@@ -545,6 +656,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   if (validation) steps.push({ name: "validate", status: validation.outcome, detail: validation.outcome === "pass" ? undefined : validation.outcome });
   if (security) steps.push({ name: "security-check", status: security.outcome, detail: security.outcome === "pass" ? undefined : security.outcome });
   if (dashboard) steps.push({ name: "dashboard", status: dashboard.outcome, detail: dashboard.outcome === "pass" ? undefined : dashboard.outcome });
+  appendPatchStep("post-check");
 
   const report: PassReport = {
     version: OGB_VERSION,
@@ -562,6 +674,7 @@ export function runPass(options: PassOptions = {}): PassReport {
     },
     validation: validation ? { outcome: validation.outcome } : undefined,
     security: security ? { outcome: security.outcome } : undefined,
+    patches: buildPatchSummary(patchReports),
     dashboard: dashboard ? { outcome: dashboard.outcome } : undefined,
     files: {
       pass: paths.passPath,

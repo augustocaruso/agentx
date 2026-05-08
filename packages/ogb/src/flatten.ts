@@ -35,40 +35,82 @@ export function resolveImportPath(raw: string, baseDir: string, homeDir = os.hom
   return path.resolve(baseDir, p);
 }
 
-export function parseGeminiImportLine(line: string): string[] {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith("@")) return [];
+interface GeminiImportToken {
+  raw: string;
+  start: number;
+  end: number;
+}
 
-  const imports: string[] = [];
+function isWhitespace(char: string | undefined): boolean {
+  return char === " " || char === "\t" || char === "\n" || char === "\r";
+}
+
+function importPathCanStart(raw: string): boolean {
+  return raw.startsWith(".") || raw.startsWith("/") || raw.startsWith("~") || isWindowsAbsolute(raw) || /^[A-Za-z]/.test(raw);
+}
+
+function importPathLooksMarkdown(raw: string): boolean {
+  return raw.toLowerCase().endsWith(".md");
+}
+
+function inlineCodeRegions(line: string): Array<[number, number]> {
+  const regions: Array<[number, number]> = [];
+  const regex = /(`+)([\s\S]*?)\1/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(line)) !== null) {
+    regions.push([match.index, match.index + match[0].length]);
+  }
+  return regions;
+}
+
+function isInsideRegion(index: number, regions: Array<[number, number]>): boolean {
+  return regions.some(([start, end]) => index >= start && index < end);
+}
+
+function parseGeminiImportTokens(line: string): GeminiImportToken[] {
+  const imports: GeminiImportToken[] = [];
+  const codeRegions = inlineCodeRegions(line);
   let index = 0;
 
-  while (index < trimmed.length) {
-    while (/\s/.test(trimmed[index] ?? "")) index += 1;
-    if (index >= trimmed.length) break;
-    if (trimmed[index] !== "@") return [];
-    index += 1;
+  while (index < line.length) {
+    const start = line.indexOf("@", index);
+    if (start === -1) break;
+    if (isInsideRegion(start, codeRegions) || (start > 0 && !isWhitespace(line[start - 1]))) {
+      index = start + 1;
+      continue;
+    }
 
-    const quote = trimmed[index];
+    let cursor = start + 1;
+    const quote = line[cursor];
     let raw = "";
 
     if (quote === "\"" || quote === "'") {
-      index += 1;
-      const start = index;
-      while (index < trimmed.length && trimmed[index] !== quote) index += 1;
-      if (index >= trimmed.length) return [];
-      raw = trimmed.slice(start, index);
-      index += 1;
+      cursor += 1;
+      const rawStart = cursor;
+      while (cursor < line.length && line[cursor] !== quote) cursor += 1;
+      if (cursor >= line.length) {
+        index = start + 1;
+        continue;
+      }
+      raw = line.slice(rawStart, cursor);
+      cursor += 1;
     } else {
-      const start = index;
-      while (index < trimmed.length && !/\s/.test(trimmed[index])) index += 1;
-      raw = trimmed.slice(start, index);
+      const rawStart = cursor;
+      while (cursor < line.length && !isWhitespace(line[cursor])) cursor += 1;
+      raw = line.slice(rawStart, cursor);
     }
 
-    if (!raw.toLowerCase().endsWith(".md")) return [];
-    imports.push(raw);
+    if (raw.length > 0 && importPathCanStart(raw) && importPathLooksMarkdown(raw)) {
+      imports.push({ raw, start, end: cursor });
+    }
+    index = Math.max(cursor, start + 1);
   }
 
   return imports;
+}
+
+export function parseGeminiImportLine(line: string): string[] {
+  return parseGeminiImportTokens(line).map((token) => token.raw);
 }
 
 function isFenceToggle(line: string): boolean {
@@ -120,22 +162,26 @@ export function flattenGeminiMd(options: FlattenOptions): FlattenResult {
         continue;
       }
 
-      const rawImports = inFence ? [] : parseGeminiImportLine(line);
+      const rawImports = inFence ? [] : parseGeminiImportTokens(line);
       if (rawImports.length === 0) {
         out.push(line);
         continue;
       }
 
-      for (const raw of rawImports) {
-        const target = resolveImportPath(raw, base, homeDir);
+      let expandedLine = "";
+      let lastIndex = 0;
+      for (const token of rawImports) {
+        expandedLine += line.slice(lastIndex, token.start);
+        lastIndex = token.end;
+        const target = resolveImportPath(token.raw, base, homeDir);
         const exists = fs.existsSync(target);
-        const circular = stack.includes(path.resolve(target));
+        const circular = stack.includes(path.resolve(target)) || path.resolve(target) === full;
         const tooDeep = depth + 1 > maxDepth;
         const status = !exists || circular || tooDeep ? "warning" : "ok";
         imports.push({
           source: full,
           target,
-          raw,
+          raw: token.raw,
           depth: depth + 1,
           status,
           message: !exists
@@ -146,8 +192,10 @@ export function flattenGeminiMd(options: FlattenOptions): FlattenResult {
                 ? "Max depth reached"
                 : undefined,
         });
-        out.push(expand(target, depth + 1, [...stack, full]));
+        expandedLine += expand(target, depth + 1, [...stack, full]);
       }
+      expandedLine += line.slice(lastIndex);
+      if (expandedLine.length > 0) out.push(expandedLine);
     }
 
     out.push("", `<!-- OGB END: ${full} -->`, "");

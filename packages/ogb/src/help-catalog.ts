@@ -48,8 +48,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: "Run the complete bridge health ritual.",
     description: "Runs setup, Gemini extension update, sync, doctor, validation, security-check, and dashboard in one user-facing flow.",
-    usage: "ogb check [--force] [--no-extension-update] [--plain] [--json] [--progress-json]",
-    examples: ["ogb check", "ogb check --force", "ogb check --no-extension-update", "ogb check --plain", "ogb check --progress-json"],
+    usage: "ogb check [--force] [--no-extension-update] [--no-patches] [--plain] [--json] [--progress-json]",
+    examples: ["ogb check", "ogb check --force", "ogb check --no-extension-update", "ogb check --no-patches", "ogb check --plain", "ogb check --progress-json"],
   },
   {
     name: "reset",
@@ -476,6 +476,7 @@ function inferredActionDescription(command: HelpCommand, args: string[] | undefi
   if (args.includes("--write-only")) return "Writes generated reports without printing the human summary.";
   if (args.includes("--no-sync") || args.includes("--skip-sync")) return "Skips the sync/projection part of the flow.";
   if (args.includes("--no-extension-update")) return "Skips the automatic Gemini extension update before sync.";
+  if (args.includes("--no-patches")) return "Skips versioned OGB repair patches during the check.";
   if (args.includes("--accept-hooks")) return "Records current Gemini hooks as reviewed by hash during the check.";
   if (args.includes("--auto-consent") || args.includes("--yes")) return "Runs unattended by answering supported confirmation prompts automatically.";
   if (args.includes("--reset-global")) return "Rebuilds the global OpenCode profile from OGB defaults.";

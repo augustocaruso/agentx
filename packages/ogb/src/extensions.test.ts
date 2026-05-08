@@ -8,8 +8,10 @@ import {
   buildUpdateExtensionsArgs,
   inspectExtensionSource,
   installGeminiExtension,
+  listInstalledGeminiExtensions,
   updateGeminiExtensions,
 } from "./extensions.js";
+import type { OgbPatch } from "./patches.js";
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-ext-"));
@@ -75,6 +77,25 @@ test("buildUpdateExtensionsArgs updates all by default or one named extension", 
   assert.deepEqual(buildUpdateExtensionsArgs({ name: "study-pack" }), ["extensions", "update", "study-pack"]);
 });
 
+test("listInstalledGeminiExtensions reports extension path and current version", () => {
+  const homeDir = tempDir();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  fs.mkdirSync(extensionPath, { recursive: true });
+  fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({
+    name: "medical-notes-workbench",
+    version: "0.3.10",
+    ref: "main",
+  }), "utf8");
+
+  const extensions = listInstalledGeminiExtensions({ projectRoot: homeDir, homeDir });
+
+  assert.equal(extensions.length, 1);
+  assert.equal(extensions[0]?.name, "medical-notes-workbench");
+  assert.equal(extensions[0]?.extensionPath, extensionPath);
+  assert.equal(extensions[0]?.currentVersion, "0.3.10");
+  assert.equal(extensions[0]?.currentRef, "main");
+});
+
 test("updateGeminiExtensions auto-consent captures output and feeds yes input", () => {
   const root = tempDir();
   const fakeGemini = writeExecutable(root, `
@@ -91,6 +112,79 @@ if (!input.includes("y")) process.exit(7);
   assert.deepEqual(report.command, [fakeGemini, "extensions", "update", "--all"]);
   assert.match(report.stdoutTail ?? "", /extensions update --all/);
   assert.match(report.stderrTail ?? "", /stderr ok/);
+});
+
+test("updateGeminiExtensions runs per-extension pre-update patches before invoking Gemini", () => {
+  const homeDir = tempDir();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "demo-ext");
+  const marker = path.join(homeDir, "patch-ran-before-update.txt");
+  const fakeGemini = writeExecutable(homeDir, `
+const fs = require("node:fs");
+if (!fs.existsSync(${JSON.stringify(marker)})) process.exit(13);
+console.log("updated after patch");
+`);
+  fs.mkdirSync(extensionPath, { recursive: true });
+  fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "demo-ext", version: "1.0.0" }), "utf8");
+  const patchRegistry: readonly OgbPatch[] = [{
+    id: "demo-pre-update",
+    title: "Demo pre-update",
+    description: "Records that the extension patch ran first.",
+    introducedIn: "0.0.0-test",
+    phase: "before-gemini-extension-update",
+    required: true,
+    applies: (context) => context.extension?.name === "demo-ext",
+    run: (context) => {
+      fs.writeFileSync(marker, `${context.extension?.extensionPath}\n${context.extension?.currentVersion}`, "utf8");
+      return { status: "applied", message: "marker written", writes: [marker] };
+    },
+  }];
+
+  const report = updateGeminiExtensions({
+    geminiBin: fakeGemini,
+    autoConsent: true,
+    projectRoot: homeDir,
+    homeDir,
+    patchRegistry,
+  });
+
+  assert.equal(report.status, "applied");
+  assert.match(fs.readFileSync(marker, "utf8"), /demo-ext/);
+  assert.equal(report.beforeExtensions?.[0]?.currentVersion, "1.0.0");
+  assert.equal(report.patches?.[0]?.results[0]?.extension?.extensionPath, extensionPath);
+});
+
+test("updateGeminiExtensions blocks update when required pre-update patch fails", () => {
+  const homeDir = tempDir();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "demo-ext");
+  const marker = path.join(homeDir, "gemini-ran.txt");
+  const fakeGemini = writeExecutable(homeDir, `
+const fs = require("node:fs");
+fs.writeFileSync(${JSON.stringify(marker)}, "ran");
+`);
+  fs.mkdirSync(extensionPath, { recursive: true });
+  fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "demo-ext", version: "1.0.0" }), "utf8");
+  const patchRegistry: readonly OgbPatch[] = [{
+    id: "demo-pre-update-failure",
+    title: "Demo pre-update failure",
+    description: "Blocks the update.",
+    introducedIn: "0.0.0-test",
+    phase: "before-gemini-extension-update",
+    required: true,
+    applies: (context) => context.extension?.name === "demo-ext",
+    run: () => ({ status: "failed", message: "snapshot failed" }),
+  }];
+
+  const report = updateGeminiExtensions({
+    geminiBin: fakeGemini,
+    autoConsent: true,
+    projectRoot: homeDir,
+    homeDir,
+    patchRegistry,
+  });
+
+  assert.equal(report.status, "blocked");
+  assert.match(report.error ?? "", /snapshot failed/);
+  assert.equal(fs.existsSync(marker), false);
 });
 
 test("updateGeminiExtensions reports captured failure details", () => {

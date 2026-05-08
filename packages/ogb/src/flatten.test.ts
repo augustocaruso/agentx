@@ -13,15 +13,19 @@ test("parseGeminiImportLine accepts plain, multiple, and quoted markdown imports
   assert.deepEqual(parseGeminiImportLine("@./a.md"), ["./a.md"]);
   assert.deepEqual(parseGeminiImportLine("@./a.md @../b.md"), ["./a.md", "../b.md"]);
   assert.deepEqual(parseGeminiImportLine("@\"dir with spaces/file.md\""), ["dir with spaces/file.md"]);
-  assert.deepEqual(parseGeminiImportLine("prefix @./a.md"), []);
+  assert.deepEqual(parseGeminiImportLine("prefix @./a.md"), ["./a.md"]);
+  assert.deepEqual(parseGeminiImportLine("- @./a.md # comment"), ["./a.md"]);
+  assert.deepEqual(parseGeminiImportLine("`@./ignored.md` @./a.md"), ["./a.md"]);
+  assert.deepEqual(parseGeminiImportLine("prefix@./a.md"), []);
   assert.deepEqual(parseGeminiImportLine("@./a.txt"), []);
 });
 
 test("flattenGeminiMd expands nested imports and ignores imports inside code fences", () => {
   const root = tempProject();
-  fs.writeFileSync(path.join(root, "GEMINI.md"), ["# Root", "@./a.md", "done"].join("\n"));
+  fs.writeFileSync(path.join(root, "GEMINI.md"), ["# Root", "@./a.md", "- @./inline.md # comment", "`@./ignored-inline.md`", "done"].join("\n"));
   fs.writeFileSync(path.join(root, "a.md"), ["A", "@./b.md", "```", "@./ignored.md", "```"].join("\n"));
   fs.writeFileSync(path.join(root, "b.md"), "B\n");
+  fs.writeFileSync(path.join(root, "inline.md"), "Inline\n");
 
   const result = flattenGeminiMd({
     input: path.join(root, "GEMINI.md"),
@@ -31,8 +35,11 @@ test("flattenGeminiMd expands nested imports and ignores imports inside code fen
   assert.match(result.content, /# Root/);
   assert.match(result.content, /\nA\n/);
   assert.match(result.content, /\nB\n/);
+  assert.match(result.content, /\nInline\n/);
+  assert.match(result.content, /# comment/);
   assert.match(result.content, /@\.\/ignored\.md/);
-  assert.equal(result.imports.filter((item) => item.status === "ok").length, 2);
+  assert.match(result.content, /@\.\/ignored-inline\.md/);
+  assert.equal(result.imports.filter((item) => item.status === "ok").length, 3);
   assert.equal(result.warnings.length, 0);
 });
 

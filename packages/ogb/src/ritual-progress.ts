@@ -77,6 +77,7 @@ export interface CheckProgressOptions {
   setup?: boolean;
   sync?: boolean;
   extensionUpdate?: boolean;
+  patches?: boolean;
   acceptHooks?: boolean;
   validation?: boolean;
   security?: boolean;
@@ -150,6 +151,36 @@ export const CHECK_PROGRESS_STEPS = {
     stepId: "dashboard",
     label: "Refresh the dashboard summary.",
     detail: "Writes the final status, warnings, next actions, and report paths.",
+  },
+  patchPreExtensionUpdate: {
+    stepId: "patches-pre-extension-update",
+    label: "Apply OGB patches before Gemini extension updates.",
+    detail: "Runs authorized, versioned fixes that must happen before Gemini CLI changes.",
+  },
+  patchPostExtensionUpdate: {
+    stepId: "patches-post-extension-update",
+    label: "Apply OGB patches after Gemini extension updates.",
+    detail: "Runs authorized, versioned fixes that depend on updated Gemini extensions.",
+  },
+  patchPreSync: {
+    stepId: "patches-pre-sync",
+    label: "Apply OGB patches before sync.",
+    detail: "Prepares managed files and state before projecting Gemini resources.",
+  },
+  patchPostSync: {
+    stepId: "patches-post-sync",
+    label: "Apply OGB patches after sync.",
+    detail: "Repairs or hardens managed files produced by the sync.",
+  },
+  patchPreDoctor: {
+    stepId: "patches-pre-doctor",
+    label: "Apply OGB patches before doctor.",
+    detail: "Normalizes diagnostics state before inventory checks run.",
+  },
+  patchPostCheck: {
+    stepId: "patches-post-check",
+    label: "Apply OGB patches after check.",
+    detail: "Records final repair state after validation, security, and dashboard.",
   },
 } as const satisfies Record<string, RitualProgressDefinition>;
 
@@ -258,10 +289,18 @@ export const UPDATE_PROGRESS_STEPS = {
 } as const satisfies Record<string, RitualProgressDefinition>;
 
 export function checkProgressSteps(options: CheckProgressOptions = {}): RitualProgressDefinition[] {
+  const patches = options.patches !== false;
+  const syncEnabled = options.sync !== false;
+  const extensionUpdateEnabled = syncEnabled && options.extensionUpdate !== false;
   return [
     ...(options.setup === false ? [] : [CHECK_PROGRESS_STEPS.setup]),
-    ...(options.sync === false || options.extensionUpdate === false ? [] : [CHECK_PROGRESS_STEPS.extensionUpdate]),
-    ...(options.sync === false ? [] : [CHECK_PROGRESS_STEPS.sync]),
+    ...(patches && extensionUpdateEnabled ? [CHECK_PROGRESS_STEPS.patchPreExtensionUpdate] : []),
+    ...(extensionUpdateEnabled ? [CHECK_PROGRESS_STEPS.extensionUpdate] : []),
+    ...(patches && extensionUpdateEnabled ? [CHECK_PROGRESS_STEPS.patchPostExtensionUpdate] : []),
+    ...(patches && syncEnabled ? [CHECK_PROGRESS_STEPS.patchPreSync] : []),
+    ...(syncEnabled ? [CHECK_PROGRESS_STEPS.sync] : []),
+    ...(patches && syncEnabled ? [CHECK_PROGRESS_STEPS.patchPostSync] : []),
+    ...(patches ? [CHECK_PROGRESS_STEPS.patchPreDoctor] : []),
     CHECK_PROGRESS_STEPS.doctor,
     ...(options.acceptHooks ? [CHECK_PROGRESS_STEPS.hookReview] : []),
     ...(options.validation === false ? [] : [{
@@ -270,6 +309,7 @@ export function checkProgressSteps(options: CheckProgressOptions = {}): RitualPr
     }]),
     ...(options.security === false ? [] : [CHECK_PROGRESS_STEPS.security]),
     ...(options.dashboard === false ? [] : [CHECK_PROGRESS_STEPS.dashboard]),
+    ...(patches ? [CHECK_PROGRESS_STEPS.patchPostCheck] : []),
   ];
 }
 
