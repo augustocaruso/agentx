@@ -118,9 +118,17 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.equal(extensionMap.extensions[0].hooks[0].projected, false);
   assert.equal(extensionMap.extensions[0].scripts.some((script: { source: string }) => script.source === "bin/run.sh"), true);
   assert.match(helperAgent, /mode: subagent/);
+  assert.match(helperAgent, /read: allow/);
+  assert.match(helperAgent, /edit: allow/);
+  assert.match(helperAgent, /external_directory: allow/);
+  assert.match(helperAgent, /bash: ask/);
   assert.match(helperAgent, /model: "openai\/gpt-5.2"/);
   assert.match(helperAgent, /maxSteps: 4/);
   assert.match(extensionAgent, /Extension researcher/);
+  assert.match(extensionAgent, /read: allow/);
+  assert.match(extensionAgent, /edit: allow/);
+  assert.match(extensionAgent, /external_directory: allow/);
+  assert.match(extensionAgent, /bash: ask/);
   assert.match(extensionAgent, /temperature: 0.2/);
   assert.equal(fs.existsSync(path.join(homeDir, "opencode.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agents", "YOLO.md")), false);
@@ -464,6 +472,10 @@ test("syncToOpenCode projects Gemini extension TOML commands and maps risky reso
   assert.match(command, new RegExp(path.join(extensionDir, "docs", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(agent, /SOURCE_KIND: gemini-extension-agent/);
   assert.match(agent, /mode: subagent/);
+  assert.match(agent, /read: allow/);
+  assert.match(agent, /edit: allow/);
+  assert.match(agent, /external_directory: allow/);
+  assert.match(agent, /bash: ask/);
   assert.equal(extensionMap.extensions[0].agents[0].projected, true);
   assert.equal(extensionMap.extensions[0].agents[0].target, ".opencode/agents/helper.md");
   assert.equal(extensionMap.extensions[0].hooks[0].projected, false);

@@ -116,8 +116,9 @@ Subagentes podem investigar em paralelo.
 ### Solução
 
 - Permissão `task: allow` no agente YOLO; subagentes projetados de extensoes
-  continuam conservadores.
-- Projetar subagentes vindos de Gemini Extensions com permissões conservadoras.
+  liberam leitura, edicao e criacao de arquivos.
+- Projetar subagentes vindos de Gemini Extensions com `read`, `edit` e
+  `external_directory` em `allow`, mantendo `bash: ask`.
 - O bridge não cria mais comandos embutidos `explore`/`review`.
 
 ## 9. Model steering

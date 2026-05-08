@@ -43,9 +43,10 @@ Configuracao ativa hoje, sem instalar nada novo:
   desabilitado no perfil padrao ate o plugin externo voltar a carregar limpo.
 
 Observacao importante: a config atual nao define permissao global explicita para
-`edit`/`bash`. Os subagentes medicos projetados usam `ask`, mas o agente
-primario deve ser revisado separadamente se a experiencia desejada for sempre
-perguntar antes de editar ou rodar shell.
+`edit`/`bash`. Os subagentes medicos projetados liberam leitura, edicao e
+diretorio externo por padrao, mas mantem `bash: ask`; o agente primario deve ser
+revisado separadamente se a experiencia desejada for sempre perguntar antes de
+editar ou rodar shell.
 
 ## Perfil distribuivel do OGB
 

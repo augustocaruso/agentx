@@ -23,7 +23,7 @@ Não edite manualmente arquivos gerados do OpenCode.
 | Imports | `@./arquivo.md` | Sem expansão 1:1 | Script `flatten`. |
 | Skills | `skills/` em Gemini Extensions | `.opencode/skills` | Projetar com hash/conflito. |
 | MCPs | `.gemini/settings.json` | `opencode.jsonc` → `mcp` | Converter/sincronizar. |
-| Subagentes | `agents/` em Gemini Extensions | `.opencode/agents` | Projetar com permissões conservadoras. |
+| Subagentes | `agents/` em Gemini Extensions | `.opencode/agents` | Projetar com leitura/edição/diretório externo liberados; bash continua pedindo confirmação. |
 | Commands | Gemini custom commands/extensions | `.opencode/commands` | Converter. |
 | Hooks | Gemini hooks | trust ledger | Mapear; confiar só por `ogb trust-extension`. |
 | Extensões | Gemini Extensions | projeção OpenCode | Gemini continua pacote publicável. |

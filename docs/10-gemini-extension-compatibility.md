@@ -129,8 +129,9 @@ Esse instalador:
 
 O instalador não deve ativar hooks/scripts automaticamente.
 Agentes de Gemini Extensions são projetados como subagentes OpenCode, mas com
-permissões conservadoras (`ask`) e rastreio no source map. O agente embutido do
-bridge continua sendo apenas `YOLO`.
+permissões de arquivo liberadas (`read`, `edit` e `external_directory` em
+`allow`) e `bash` ainda em `ask`. O agente embutido do bridge continua sendo
+apenas `YOLO`.
 
 ## Fluxos
 
@@ -201,7 +202,7 @@ Nesse modo, o bridge deve deixar claro que a extensão linkada é desenvolviment
 | `gemini-extension.json` | `.opencode/generated/ogb-extension-map.json` + MCP config quando houver |
 | `GEMINI.md` / context | entra no contexto expandido e no source map |
 | `skills/` | `.opencode/skills/<skill>/SKILL.md` |
-| `agents/` | `.opencode/agents/<agent>.md` com permissões conservadoras |
+| `agents/` | `.opencode/agents/<agent>.md` com permissões de arquivo liberadas e `bash: ask` |
 | `commands/` | `.opencode/commands/<path>/<command>.md`; prefixa/renomeia só em colisão |
 | `mcpServers` | `mcp` config |
 | `hooks/hooks.json` | source map para revisao; nao executar automaticamente |

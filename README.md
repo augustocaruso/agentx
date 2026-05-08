@@ -130,7 +130,7 @@ Update depois que o `ogb` ja esta instalado:
 ```bash
 ogb --project "$PWD" update
 ogb --project "$PWD" update --dry-run
-ogb --project "$PWD" update --release v0.1.6
+ogb --project "$PWD" update --release v0.1.7
 ogb --project "$PWD" check-update
 ogb --project "$PWD" auto-update
 ```
@@ -260,8 +260,10 @@ ogb update-extensions --auto-consent
 ```
 
 Comandos, skills, MCPs, `GEMINI.md` e subagentes das extensoes sao projetados
-para OpenCode. Hooks e scripts continuam bloqueados por padrao: eles entram no
-mapa de risco e so ganham um registro de confianca se voce rodar:
+para OpenCode. Subagentes projetados podem ler, editar e criar arquivos por
+padrao; comandos de terminal continuam em `bash: ask`. Hooks e scripts
+continuam bloqueados por padrao: eles entram no mapa de risco e so ganham um
+registro de confianca se voce rodar:
 
 ```bash
 ogb trust-report medical-notes-workbench
