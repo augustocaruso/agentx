@@ -206,6 +206,28 @@ function externalQuotaPanel(root) {
   return readUiPrefs(root).quotaPanel === "external";
 }
 
+function textFileIncludes(filePath, needle) {
+  try {
+    return fs.readFileSync(filePath, "utf8").includes(needle);
+  } catch {
+    return false;
+  }
+}
+
+function externalQuotaPromptInstalled(root) {
+  const files = [
+    path.join(root, ".opencode", "tui.jsonc"),
+    path.join(root, ".opencode", "tui.json"),
+    path.join(os.homedir(), ".config", "opencode", "tui.json"),
+    path.join(os.homedir(), ".config", "opencode", "tui.jsonc"),
+  ];
+  return files.some((filePath) => textFileIncludes(filePath, "@slkiser/opencode-quota"));
+}
+
+function suppressOgbPromptQuota(root) {
+  return externalQuotaPanel(root) || externalQuotaPromptInstalled(root);
+}
+
 function shortLimitLabel(label) {
   const value = String(label || "Usage");
   if (value.toLowerCase() === "quota") return "Quota";
@@ -966,7 +988,7 @@ function PromptRight(props) {
   const [quota, setQuota] = createSignal(quotaForUi(props.api, props.sessionId, props.root, initialUsage, initialModel));
   const [elapsed, setElapsed] = createSignal(elapsedForSession(props.api, props.sessionId));
   const theme = () => props.api.theme.current;
-  const suppressQuota = () => externalQuotaPanel(props.root);
+  const suppressQuota = () => suppressOgbPromptQuota(props.root);
   const hasQuota = () => Boolean(!suppressQuota() && quota().available && quota().promptLabel);
   const hasReset = () => Boolean(hasQuota() && quota().resetIn);
   let modelRefreshVersion = 0;

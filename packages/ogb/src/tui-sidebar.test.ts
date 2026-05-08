@@ -91,6 +91,10 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.ok(spacerOffset < inventoryOffset);
   assert.match(plugin, /ogb-ui\.json/);
   assert.match(plugin, /externalQuotaPanel/);
+  assert.match(plugin, /function externalQuotaPromptInstalled\(root\)/);
+  assert.match(plugin, /@slkiser\/opencode-quota/);
+  assert.match(plugin, /function suppressOgbPromptQuota\(root\)/);
+  assert.match(plugin, /const suppressQuota = \(\) => suppressOgbPromptQuota\(props\.root\);/);
   assert.doesNotMatch(plugin, /ogb-telemetry-status\.json/);
   assert.doesNotMatch(plugin, /telemetry ready/);
   assert.match(plugin, /GEMINI\.md · /);
