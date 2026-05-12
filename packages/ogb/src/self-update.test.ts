@@ -134,6 +134,34 @@ test("runSelfUpdate reports bootstrap stderr tail and specific progress failure"
   assert.match(installFailure?.message ?? "", /npm is not recognized/);
 });
 
+test("runSelfUpdate persists detailed update diagnostics when bootstrap fails", () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-update-error-"));
+  const report = runSelfUpdate({
+    projectRoot,
+    stdio: "pipe",
+    runCommand: (spec) => ({
+      ok: false,
+      command: spec.command,
+      args: spec.args ?? [],
+      status: 1,
+      signal: null,
+      stdout: "Downloading OGB from release pack...",
+      stderr: "npm is not recognized as a command",
+    }),
+  });
+  const saved = JSON.parse(fs.readFileSync(resolveProjectPaths(projectRoot).updateStatusPath, "utf8"));
+
+  assert.equal(report.status, "error");
+  assert.equal(saved.status, "error");
+  assert.equal(saved.restartRequired, false);
+  assert.equal(saved.selfUpdate.status, "error");
+  assert.equal(saved.selfUpdate.stderrTail, "npm is not recognized as a command");
+  assert.match(saved.message, /Bootstrap exited with code 1/);
+  assert.match(saved.selfUpdate.stdoutTail, /Downloading OGB/);
+  assert.equal(saved.ogbVersion, OGB_VERSION);
+  assert.equal(typeof saved.finishedAt, "string");
+});
+
 test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-update-success-"));
   const paths = resolveProjectPaths(projectRoot);

@@ -32,6 +32,31 @@ async function waitForFile(filePath: string): Promise<void> {
   }
 }
 
+function telemetryServerScript(): string {
+  return `
+const fs = require("node:fs");
+const http = require("node:http");
+const requestLog = process.argv[1];
+const portFile = process.argv[2];
+const server = http.createServer((request, response) => {
+  let body = "";
+  request.setEncoding("utf8");
+  request.on("data", (chunk) => { body += chunk; });
+  request.on("end", () => {
+    let requests = [];
+    try { requests = JSON.parse(fs.readFileSync(requestLog, "utf8")); } catch {}
+    requests.push({ path: request.url || "", auth: String(request.headers.authorization || ""), body });
+    fs.writeFileSync(requestLog, JSON.stringify(requests), "utf8");
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ ok: true, accepted_records: 1 }));
+  });
+});
+server.listen(0, "127.0.0.1", () => {
+  fs.writeFileSync(portFile, String(server.address().port), "utf8");
+});
+`;
+}
+
 function hasGit(): boolean {
   const result = spawnSync("git", ["--version"], { encoding: "utf8" });
   return !result.error && result.status === 0;
@@ -359,28 +384,7 @@ test("medical notes pre-update snapshot sends trusted debug telemetry when confi
   const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
   const requestLog = path.join(homeDir, "telemetry-requests.json");
   const portFile = path.join(homeDir, "telemetry-port.txt");
-  const serverScript = `
-const fs = require("node:fs");
-const http = require("node:http");
-const requestLog = process.argv[1];
-const portFile = process.argv[2];
-const server = http.createServer((request, response) => {
-  let body = "";
-  request.setEncoding("utf8");
-  request.on("data", (chunk) => { body += chunk; });
-  request.on("end", () => {
-    let requests = [];
-    try { requests = JSON.parse(fs.readFileSync(requestLog, "utf8")); } catch {}
-    requests.push({ path: request.url || "", auth: String(request.headers.authorization || ""), body });
-    fs.writeFileSync(requestLog, JSON.stringify(requests), "utf8");
-    response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ ok: true, accepted_records: 1 }));
-  });
-});
-server.listen(0, "127.0.0.1", () => {
-  fs.writeFileSync(portFile, String(server.address().port), "utf8");
-});
-`;
+  const serverScript = telemetryServerScript();
   const server = spawn(process.execPath, ["-e", serverScript, requestLog, portFile], { stdio: ["ignore", "ignore", "pipe"] });
   try {
     await waitForFile(portFile);
@@ -434,6 +438,240 @@ server.listen(0, "127.0.0.1", () => {
     assert.equal(envelope.install_id, "friend-install");
     assert.match(JSON.stringify(envelope.records[0].extension_diffs), /patched before update/);
     assert.match(JSON.stringify(JSON.parse(workflowRequest?.body ?? "{}")), /patched before update/);
+  } finally {
+    server.kill();
+  }
+});
+
+test("medical notes pre-update snapshot resends existing unsent snapshots on next update", { skip: !hasGit() }, async () => {
+  const homeDir = tempRoot();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  const snapshotDir = path.join(homeDir, ".gemini", "medical-notes-workbench", "feedback", "pre-update-snapshots", "old-snapshot");
+  const requestLog = path.join(homeDir, "telemetry-requests.json");
+  const portFile = path.join(homeDir, "telemetry-port.txt");
+  const serverScript = telemetryServerScript();
+  const server = spawn(process.execPath, ["-e", serverScript, requestLog, portFile], { stdio: ["ignore", "ignore", "pipe"] });
+  try {
+    await waitForFile(portFile);
+    const port = fs.readFileSync(portFile, "utf8").trim();
+    const endpoint = `http://127.0.0.1:${port}/v1/telemetry/workflow-runs`;
+    fs.mkdirSync(path.join(extensionPath, "scripts"), { recursive: true });
+    fs.mkdirSync(snapshotDir, { recursive: true });
+    fs.mkdirSync(path.join(homeDir, ".gemini", "medical-notes-workbench"), { recursive: true });
+    fs.writeFileSync(
+      path.join(homeDir, ".gemini", "medical-notes-workbench", "config.toml"),
+      `[telemetry]\nendpoint_url = "${endpoint}"\nauth_token = "test-token"\npayload_level = "trusted_extension_debug"\ninstall_id = "friend-install"\n`,
+      "utf8",
+    );
+    fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench", version: "0.3.10" }), "utf8");
+    fs.writeFileSync(path.join(extensionPath, "scripts", "baseline.py"), "print('clean install')\n", "utf8");
+    git(extensionPath, ["init"]);
+    git(extensionPath, ["config", "user.email", "test@example.com"]);
+    git(extensionPath, ["config", "user.name", "Test"]);
+    git(extensionPath, ["add", "."]);
+    git(extensionPath, ["commit", "-m", "baseline"]);
+
+    fs.writeFileSync(
+      path.join(snapshotDir, "tracked.diff"),
+      "diff --git a/scripts/baseline.py b/scripts/baseline.py\n--- a/scripts/baseline.py\n+++ b/scripts/baseline.py\n@@ -1 +1 @@\n-print('old')\n+print('rescued old diff')\n",
+      "utf8",
+    );
+    fs.writeFileSync(path.join(snapshotDir, "staged.diff"), "", "utf8");
+    fs.writeFileSync(path.join(snapshotDir, "untracked.diff"), "", "utf8");
+    fs.writeFileSync(
+      path.join(snapshotDir, "snapshot.json"),
+      JSON.stringify({
+        schema: "medical-notes-workbench.pre-update-extension-snapshot.v1",
+        snapshot_id: "old-snapshot",
+        recorded_at: "2026-05-08T11:30:00.000Z",
+        extension_name: "medical-notes-workbench",
+        extension_path: extensionPath,
+        snapshot_path: snapshotDir,
+        current_version: "0.3.10",
+        git_head: "oldhead",
+        changed_path_count: 1,
+        untracked_path_count: 0,
+        changed_paths: ["scripts/baseline.py"],
+        generated_scripts: [],
+      }, null, 2),
+      "utf8",
+    );
+
+    const report = runBeforeGeminiExtensionUpdatePatches({
+      projectRoot: homeDir,
+      homeDir,
+      registry: OGB_PATCHES,
+      now: new Date("2026-05-08T12:45:00.000Z"),
+      extension: {
+        name: "medical-notes-workbench",
+        extensionPath,
+        manifestPath: path.join(extensionPath, "gemini-extension.json"),
+        currentVersion: "0.3.10",
+      },
+    });
+    const sendResult = JSON.parse(fs.readFileSync(path.join(snapshotDir, "send-result.json"), "utf8"));
+    const envelope = JSON.parse(fs.readFileSync(path.join(snapshotDir, "telemetry-envelope.json"), "utf8"));
+    const requests = JSON.parse(fs.readFileSync(requestLog, "utf8")) as Array<{ path: string; auth: string; body: string }>;
+    const workflowRequest = requests.find((item) => item.path === "/v1/telemetry/workflow-runs");
+
+    assert.equal(report.outcome, "pass");
+    assert.equal(report.results[0]?.status, "applied");
+    assert.match(report.results[0]?.message ?? "", /Sent 1 existing Medical Notes pre-update snapshot/);
+    assert.equal(sendResult.sent, true);
+    assert.equal(envelope.payload_level, "trusted_extension_debug");
+    assert.equal(envelope.install_id, "friend-install");
+    assert.match(JSON.stringify(envelope.records[0].extension_diffs), /rescued old diff/);
+    assert.match(JSON.stringify(JSON.parse(workflowRequest?.body ?? "{}")), /rescued old diff/);
+    assert.deepEqual(fs.readdirSync(path.dirname(snapshotDir)), ["old-snapshot"]);
+  } finally {
+    server.kill();
+  }
+});
+
+test("medical notes pre-update snapshot falls back to OGB telemetry config", { skip: !hasGit() }, async () => {
+  const homeDir = tempRoot();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  const requestLog = path.join(homeDir, "telemetry-requests.json");
+  const portFile = path.join(homeDir, "telemetry-port.txt");
+  const serverScript = telemetryServerScript();
+  const server = spawn(process.execPath, ["-e", serverScript, requestLog, portFile], { stdio: ["ignore", "ignore", "pipe"] });
+  try {
+    await waitForFile(portFile);
+    const port = fs.readFileSync(portFile, "utf8").trim();
+    const endpoint = `http://127.0.0.1:${port}/v1/telemetry/workflow-runs`;
+    fs.mkdirSync(path.join(extensionPath, "scripts"), { recursive: true });
+    fs.mkdirSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "telemetry"), { recursive: true });
+    fs.writeFileSync(
+      path.join(homeDir, ".config", "opencode-gemini-bridge", "telemetry", "config.json"),
+      JSON.stringify({
+        schema: "opencode-gemini-bridge.telemetry-config.v1",
+        enabled: true,
+        endpointUrl: endpoint,
+        authToken: "ogb-token",
+        payloadLevel: "diagnostic_redacted",
+        installId: "ogb-install",
+        maxEnvelopeBytes: 262144,
+        source: "user",
+      }, null, 2),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench", version: "0.3.10" }), "utf8");
+    fs.writeFileSync(path.join(extensionPath, "scripts", "baseline.py"), "print('old')\n", "utf8");
+    git(extensionPath, ["init"]);
+    git(extensionPath, ["config", "user.email", "test@example.com"]);
+    git(extensionPath, ["config", "user.name", "Test"]);
+    git(extensionPath, ["add", "."]);
+    git(extensionPath, ["commit", "-m", "baseline"]);
+    fs.writeFileSync(path.join(extensionPath, "scripts", "baseline.py"), "print('sent through ogb telemetry')\n", "utf8");
+
+    const report = runBeforeGeminiExtensionUpdatePatches({
+      projectRoot: homeDir,
+      homeDir,
+      registry: OGB_PATCHES,
+      now: new Date("2026-05-08T12:50:00.000Z"),
+      extension: {
+        name: "medical-notes-workbench",
+        extensionPath,
+        manifestPath: path.join(extensionPath, "gemini-extension.json"),
+        currentVersion: "0.3.10",
+      },
+    });
+    const snapshotJsonPath = report.results[0]?.writes?.find((item) => item.endsWith("snapshot.json"));
+    assert.ok(snapshotJsonPath);
+    const snapshotDir = path.dirname(snapshotJsonPath);
+    const sendResult = JSON.parse(fs.readFileSync(path.join(snapshotDir, "send-result.json"), "utf8"));
+    const envelope = JSON.parse(fs.readFileSync(path.join(snapshotDir, "telemetry-envelope.json"), "utf8"));
+    const requests = JSON.parse(fs.readFileSync(requestLog, "utf8")) as Array<{ path: string; auth: string; body: string }>;
+    const workflowRequest = requests.find((item) => item.path === "/v1/telemetry/workflow-runs");
+
+    assert.equal(report.outcome, "pass");
+    assert.equal(report.results[0]?.status, "applied");
+    assert.equal(sendResult.sent, true);
+    assert.equal(sendResult.envelope_kind, "ogb");
+    assert.equal(sendResult.telemetry_source, "user");
+    assert.equal(envelope.schema, "opencode-gemini-bridge.workflow-telemetry-envelope.v1");
+    assert.equal(envelope.installId, "ogb-install");
+    assert.equal(workflowRequest?.auth, "Bearer ogb-token");
+    assert.match(JSON.stringify(envelope.records[0].extension_diffs), /sent through ogb telemetry/);
+    assert.match(JSON.stringify(JSON.parse(workflowRequest?.body ?? "{}")), /sent through ogb telemetry/);
+  } finally {
+    server.kill();
+  }
+});
+
+test("medical notes pre-update snapshot sends in the same update after fresh defaults install", { skip: !hasGit() }, async () => {
+  const homeDir = tempRoot();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  const requestLog = path.join(homeDir, "telemetry-requests.json");
+  const portFile = path.join(homeDir, "telemetry-port.txt");
+  const serverScript = telemetryServerScript();
+  const server = spawn(process.execPath, ["-e", serverScript, requestLog, portFile], { stdio: ["ignore", "ignore", "pipe"] });
+  try {
+    await waitForFile(portFile);
+    const port = fs.readFileSync(portFile, "utf8").trim();
+    const endpoint = `http://127.0.0.1:${port}/v1/telemetry/workflow-runs`;
+    fs.mkdirSync(path.join(extensionPath, "scripts"), { recursive: true });
+    fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench", version: "0.3.10" }), "utf8");
+    fs.writeFileSync(path.join(extensionPath, "scripts", "baseline.py"), "print('old')\n", "utf8");
+    git(extensionPath, ["init"]);
+    git(extensionPath, ["config", "user.email", "test@example.com"]);
+    git(extensionPath, ["config", "user.name", "Test"]);
+    git(extensionPath, ["add", "."]);
+    git(extensionPath, ["commit", "-m", "baseline"]);
+    fs.writeFileSync(path.join(extensionPath, "scripts", "baseline.py"), "print('same update rescue')\n", "utf8");
+
+    const preReport = runBeforeGeminiExtensionUpdatePatches({
+      projectRoot: homeDir,
+      homeDir,
+      registry: OGB_PATCHES,
+      now: new Date("2026-05-08T13:00:00.000Z"),
+      extension: {
+        name: "medical-notes-workbench",
+        extensionPath,
+        manifestPath: path.join(extensionPath, "gemini-extension.json"),
+        currentVersion: "0.3.10",
+      },
+    });
+    const snapshotJsonPath = preReport.results[0]?.writes?.find((item) => item.endsWith("snapshot.json"));
+    assert.ok(snapshotJsonPath);
+    const snapshotDir = path.dirname(snapshotJsonPath);
+    const preSendResult = JSON.parse(fs.readFileSync(path.join(snapshotDir, "send-result.json"), "utf8"));
+    assert.equal(preReport.results[0]?.status, "applied");
+    assert.equal(preSendResult.sent, false);
+    assert.equal(preSendResult.reason, "telemetry_endpoint_or_token_missing");
+
+    fs.writeFileSync(
+      path.join(extensionPath, "telemetry.defaults.json"),
+      JSON.stringify({
+        telemetry: {
+          endpoint_url: endpoint,
+          auth_token: "test-token",
+          install_id: "friend-install",
+          payload_level: "trusted_extension_debug",
+        },
+      }, null, 2),
+      "utf8",
+    );
+
+    const postReport = runPatchesForPhase({
+      phase: "post-extension-update",
+      projectRoot: homeDir,
+      homeDir,
+      registry: OGB_PATCHES,
+      now: new Date("2026-05-08T13:00:30.000Z"),
+    });
+    const postSendResult = JSON.parse(fs.readFileSync(path.join(snapshotDir, "send-result.json"), "utf8"));
+    const requests = JSON.parse(fs.readFileSync(requestLog, "utf8")) as Array<{ path: string; auth: string; body: string }>;
+    const workflowRequest = requests.find((item) => item.path === "/v1/telemetry/workflow-runs");
+
+    assert.equal(postReport.outcome, "pass");
+    assert.equal(postReport.results[0]?.id, "medical-notes-workbench-resend-pre-update-snapshots");
+    assert.equal(postReport.results[0]?.status, "applied");
+    assert.match(postReport.results[0]?.message ?? "", /Sent 1 existing Medical Notes pre-update snapshot/);
+    assert.equal(postSendResult.sent, true);
+    assert.ok(workflowRequest);
+    assert.equal(workflowRequest?.auth, "Bearer test-token");
+    assert.match(JSON.stringify(JSON.parse(workflowRequest?.body ?? "{}")), /same update rescue/);
   } finally {
     server.kill();
   }

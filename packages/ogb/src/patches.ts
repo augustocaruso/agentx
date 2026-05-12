@@ -14,6 +14,7 @@ import {
   type RitualProgressStatus,
 } from "./ritual-progress.js";
 import { readStateRecord, stateRecordPath, writeStateRecord } from "./state-store.js";
+import { readTelemetryConfig } from "./telemetry.js";
 import { OGB_VERSION } from "./types.js";
 
 export const PATCH_STATE_SCHEMA = "opencode-gemini-bridge.patches.v1";
@@ -819,6 +820,7 @@ const MEDNOTES_INTEGRITY_MANIFEST = "extension-integrity-manifest.json";
 const MEDNOTES_CAPTURE_SCRIPT_REL = "scripts/mednotes/capture_extension_diff.py";
 const MEDNOTES_MAX_GIT_HISTORY_COMMITS = 600;
 const MEDNOTES_TELEMETRY_ENVELOPE_SCHEMA = "medical-notes-workbench.workflow-telemetry-envelope.v1";
+const OGB_TELEMETRY_ENVELOPE_SCHEMA = "opencode-gemini-bridge.workflow-telemetry-envelope.v1";
 const MEDNOTES_RUN_RECORD_SCHEMA = "medical-notes-workbench.workflow-run-record.v1";
 const MEDNOTES_PRE_UPDATE_SNAPSHOT_SCHEMA = "medical-notes-workbench.pre-update-extension-snapshot.v1";
 const MEDNOTES_TRUSTED_DEBUG_PAYLOAD_LEVEL = "trusted_extension_debug";
@@ -839,6 +841,8 @@ interface MedNotesTelemetrySettings {
   endpointUrl: string;
   authToken: string;
   installId: string;
+  envelopeKind: "medical-notes" | "ogb";
+  source: string;
 }
 
 function git(context: PatchContext, args: string[], timeoutMs = 60_000): NativeCommandResult {
@@ -1230,13 +1234,42 @@ function readMedNotesDistributionDefaults(context: PatchContext, extensionPath: 
   return {};
 }
 
+function ogbTelemetrySettings(context: PatchContext): MedNotesTelemetrySettings | undefined {
+  try {
+    const configPath = context.adapter.env.OGB_TELEMETRY_CONFIG
+      ? context.adapter.resolvePath(context.adapter.env.OGB_TELEMETRY_CONFIG)
+      : undefined;
+    const config = readTelemetryConfig({ homeDir: context.homeDir, configPath });
+    if (!config.enabled || !config.endpointUrl || !config.authToken || !config.installId) return undefined;
+    if (context.adapter.env.OGB_TELEMETRY_DISABLED === "1") return undefined;
+    return {
+      endpointUrl: config.endpointUrl,
+      authToken: config.authToken,
+      installId: config.installId,
+      envelopeKind: "ogb",
+      source: config.source,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function medNotesTelemetrySettings(context: PatchContext, extensionPath: string): MedNotesTelemetrySettings {
   const config = readTomlTelemetrySection(medNotesTelemetryConfigPath(context));
   const defaults = readMedNotesDistributionDefaults(context, extensionPath);
+  const endpointUrl = stringField(config.endpoint_url) || stringField(defaults.endpoint_url) || stringField(defaults.endpointUrl);
+  const authToken = stringField(config.auth_token) || stringField(defaults.auth_token) || stringField(defaults.authToken);
+  const installId = stringField(config.install_id) || stringField(defaults.install_id) || stringField(defaults.installId);
+  if (!endpointUrl || !authToken) {
+    const ogb = ogbTelemetrySettings(context);
+    if (ogb) return ogb;
+  }
   return {
-    endpointUrl: stringField(config.endpoint_url) || stringField(defaults.endpoint_url) || stringField(defaults.endpointUrl),
-    authToken: stringField(config.auth_token) || stringField(defaults.auth_token) || stringField(defaults.authToken),
-    installId: stringField(config.install_id) || stringField(defaults.install_id) || stringField(defaults.installId) || `ogb-pre-update-${crypto.randomUUID()}`,
+    endpointUrl,
+    authToken,
+    installId: installId || `ogb-pre-update-${crypto.randomUUID()}`,
+    envelopeKind: "medical-notes",
+    source: endpointUrl && authToken ? "medical-notes" : "missing",
   };
 }
 
@@ -1406,6 +1439,57 @@ function buildMedNotesTelemetryEnvelope(
   });
 }
 
+function buildOgbMedicalNotesSnapshotEnvelope(
+  context: PatchContext,
+  snapshot: Record<string, unknown>,
+  snapshotDir: string,
+  settings: MedNotesTelemetrySettings,
+): Record<string, unknown> {
+  const record = medNotesPreUpdateRecord(snapshot, snapshotDir);
+  const environment = record.environment_context && typeof record.environment_context === "object" && !Array.isArray(record.environment_context)
+    ? record.environment_context as Record<string, unknown>
+    : {};
+  return fitMedNotesEnvelope({
+    schema: OGB_TELEMETRY_ENVELOPE_SCHEMA,
+    envelopeId: crypto.randomUUID(),
+    generatedAt: context.now.toISOString(),
+    installId: settings.installId,
+    payloadLevel: MEDNOTES_TRUSTED_DEBUG_PAYLOAD_LEVEL,
+    client: {
+      app: "opencode-gemini-bridge",
+      appVersion: OGB_VERSION,
+      platform: context.platform,
+      capture: "medical-notes-workbench-pre-update-snapshot",
+    },
+    records: [{
+      runId: stringField(record.run_id) || `medical-notes-pre-update-${crypto.randomUUID()}`,
+      recordedAt: stringField(record.recorded_at) || context.now.toISOString(),
+      workflow: "medical-notes-workbench/pre-update-snapshot",
+      source: "ogb_update_patch",
+      command: "ogb update",
+      status: "completed_with_warnings",
+      outcome: "warn",
+      phase: "before-gemini-extension-update",
+      durationMs: 0,
+      exitCode: 0,
+      payload_summary: record.payload_summary,
+      diagnostic_context: record.diagnostic_context,
+      environment_context: {
+        ...environment,
+        appVersion: stringField(snapshot.current_version) || "unknown",
+        telemetryFallback: "ogb",
+      },
+      diagnostic_snippets: [
+        `Medical Notes Workbench extension drift snapshot ${stringField(snapshot.snapshot_id) || path.basename(snapshotDir)}`,
+        `Snapshot path: ${stringField(snapshot.snapshot_path) || snapshotDir}`,
+      ],
+      extension_diffs: record.extension_diffs,
+      generated_scripts: record.generated_scripts,
+    }],
+    limits: { maxEnvelopeBytes: MEDNOTES_MAX_TELEMETRY_ENVELOPE_BYTES },
+  });
+}
+
 function sendMedNotesTelemetryEnvelope(
   context: PatchContext,
   envelopePath: string,
@@ -1439,6 +1523,7 @@ function digestUrl(value) {
       "Authorization": "Bearer " + token,
       "Content-Type": "application/json",
       "X-MedNotes-Telemetry-Schema": "medical-notes-workbench.workflow-telemetry-envelope.v1",
+      "X-OGB-Telemetry-Schema": "opencode-gemini-bridge.workflow-telemetry-envelope.v1",
     },
     body,
   });
@@ -1503,18 +1588,124 @@ function writeMedNotesTelemetryArtifacts(
   const settings = medNotesTelemetrySettings(context, stringField(snapshot.extension_path) || context.extension?.extensionPath || "");
   const envelopePath = path.join(snapshotDir, "telemetry-envelope.json");
   const sendResultPath = path.join(snapshotDir, "send-result.json");
-  const envelope = buildMedNotesTelemetryEnvelope(context, snapshot, snapshotDir, settings);
+  const envelope = settings.envelopeKind === "ogb"
+    ? buildOgbMedicalNotesSnapshotEnvelope(context, snapshot, snapshotDir, settings)
+    : buildMedNotesTelemetryEnvelope(context, snapshot, snapshotDir, settings);
   fs.writeFileSync(envelopePath, `${JSON.stringify(envelope, null, 2)}\n`, "utf8");
   const rawSendResult = sendMedNotesTelemetryEnvelope(context, envelopePath, settings);
   const sendResult = {
     ...rawSendResult,
     endpoint_url: settings.endpointUrl ? redactMedNotesUrl(settings.endpointUrl) : "",
+    telemetry_source: settings.source,
+    envelope_kind: settings.envelopeKind,
   };
   fs.writeFileSync(sendResultPath, `${JSON.stringify(sendResult, null, 2)}\n`, "utf8");
   const message = rawSendResult.sent === true
     ? "telemetry email send requested"
     : `telemetry email not sent: ${String(rawSendResult.reason || rawSendResult.status || "unknown")}`;
   return { writes: [envelopePath, sendResultPath], sendResult, message };
+}
+
+function medNotesPreUpdateSnapshotRoot(context: PatchContext): string {
+  return context.adapter.join(
+    context.homeDir,
+    ".gemini",
+    "medical-notes-workbench",
+    "feedback",
+    "pre-update-snapshots",
+  );
+}
+
+function uniqueWrites(writes: string[]): string[] {
+  return writes.filter((item, index, all) => all.indexOf(item) === index);
+}
+
+function existingMedNotesSnapshotDirs(context: PatchContext): string[] {
+  const root = medNotesPreUpdateSnapshotRoot(context);
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(root, entry.name))
+    .filter((snapshotDir) => fs.existsSync(path.join(snapshotDir, "snapshot.json")))
+    .sort((a, b) => {
+      const aTime = fs.statSync(path.join(a, "snapshot.json")).mtimeMs;
+      const bTime = fs.statSync(path.join(b, "snapshot.json")).mtimeMs;
+      return bTime - aTime;
+    });
+}
+
+function medNotesSnapshotAlreadySent(snapshotDir: string): boolean {
+  const sendResult = readJsonFile(path.join(snapshotDir, "send-result.json"));
+  return sendResult?.sent === true;
+}
+
+function resendExistingMedNotesSnapshots(context: PatchContext, extensionPath: string): PatchResult | undefined {
+  const snapshotDirs = existingMedNotesSnapshotDirs(context);
+  if (snapshotDirs.length === 0) return undefined;
+
+  let sent = 0;
+  let failed = 0;
+  let alreadySent = 0;
+  let skippedEmpty = 0;
+  const writes: string[] = [];
+  const messages: string[] = [];
+
+  for (const snapshotDir of snapshotDirs) {
+    if (medNotesSnapshotAlreadySent(snapshotDir)) {
+      alreadySent += 1;
+      continue;
+    }
+    if (!snapshotDirUseful(snapshotDir)) {
+      skippedEmpty += 1;
+      continue;
+    }
+    const rawSnapshot = readJsonFile(path.join(snapshotDir, "snapshot.json"));
+    if (!rawSnapshot) {
+      skippedEmpty += 1;
+      continue;
+    }
+    const snapshot = {
+      ...rawSnapshot,
+      snapshot_id: stringField(rawSnapshot.snapshot_id) || path.basename(snapshotDir),
+      snapshot_path: stringField(rawSnapshot.snapshot_path) || snapshotDir,
+      extension_path: stringField(rawSnapshot.extension_path) || extensionPath,
+    };
+
+    try {
+      const telemetry = writeMedNotesTelemetryArtifacts(context, snapshotDir, snapshot);
+      writes.push(...telemetry.writes);
+      messages.push(`${path.basename(snapshotDir)}: ${telemetry.message}`);
+      if (telemetry.sendResult.sent === true) sent += 1;
+      else failed += 1;
+    } catch (error) {
+      failed += 1;
+      messages.push(`${path.basename(snapshotDir)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (sent > 0) {
+    const suffix = failed > 0 ? ` ${failed} snapshot(s) could not be sent yet.` : "";
+    return {
+      status: "applied",
+      message: `Sent ${sent} existing Medical Notes pre-update snapshot(s).${suffix}`,
+      writes: uniqueWrites(writes),
+    };
+  }
+  if (failed > 0) {
+    return {
+      status: "warning",
+      message: `Existing Medical Notes pre-update snapshot(s) found, but telemetry email was not sent. ${messages.slice(0, 3).join(" ")}`,
+      writes: uniqueWrites(writes),
+      nextAction: "Verifique endpoint/token da telemetria ou rode ogb update novamente depois que a telemetria estiver configurada.",
+    };
+  }
+  if (alreadySent > 0 || skippedEmpty > 0) {
+    return {
+      status: "skipped",
+      message: `No unsent Medical Notes pre-update snapshots. Already sent: ${alreadySent}; empty/irrelevant: ${skippedEmpty}.`,
+    };
+  }
+  return undefined;
 }
 
 function runMedicalNotesCaptureScript(context: PatchContext, scriptPath: string, snapshotDir: string): PatchResult | undefined {
@@ -1526,14 +1717,14 @@ function runMedicalNotesCaptureScript(context: PatchContext, scriptPath: string,
       command: candidate.command,
       args: [
         ...candidate.argsPrefix,
-	        scriptPath,
-	        "--extension-path",
-	        extension.extensionPath,
-	        "--output-dir",
-	        snapshotDir,
-	        "--send",
-	        "--no-existing-snapshots",
-	      ],
+        scriptPath,
+        "--extension-path",
+        extension.extensionPath,
+        "--output-dir",
+        snapshotDir,
+        "--send",
+        "--no-existing-snapshots",
+      ],
       cwd: extension.extensionPath,
       stdio: "pipe",
       timeoutMs: 120_000,
@@ -1569,8 +1760,9 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
   const extension = context.extension;
   if (!extension) return { status: "skipped", message: "No Gemini extension context was provided." };
   const extensionPath = extension.extensionPath;
+  const existingSnapshotResend = context.dryRun ? undefined : resendExistingMedNotesSnapshots(context, extensionPath);
   const insideWorkTree = git(context, ["-C", extensionPath, "rev-parse", "--is-inside-work-tree"]);
-  if (commandFailed(insideWorkTree)) return { status: "skipped", message: `${extension.name} is not a git worktree.` };
+  if (commandFailed(insideWorkTree)) return existingSnapshotResend ?? { status: "skipped", message: `${extension.name} is not a git worktree.` };
 
   const status = git(context, ["-C", extensionPath, "status", "--porcelain=v1", "-uall"]);
   if (commandFailed(status)) {
@@ -1585,7 +1777,9 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
   const changedPaths = uniqueStrings([...drift.changed, ...manifestDrift.changed, ...manifestDrift.missing]);
   if (changedPaths.length === 0 && drift.untracked.length === 0) {
     const ignored = drift.ignored.length ? ` Ignored non-extension drift: ${drift.ignored.slice(0, 5).join(", ")}.` : "";
-    return { status: "skipped", message: `${extension.name} has no allowlisted local drift.${ignored}` };
+    if (existingSnapshotResend && existingSnapshotResend.status !== "skipped") return existingSnapshotResend;
+    const existing = existingSnapshotResend?.message ? ` ${existingSnapshotResend.message}` : "";
+    return { status: "skipped", message: `${extension.name} has no allowlisted local drift.${ignored}${existing}` };
   }
 
   const head = git(context, ["-C", extensionPath, "rev-parse", "HEAD"]);
@@ -1602,12 +1796,12 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
   const snapshotDir = uniqueSnapshotDir(snapshotBase);
   const snapshotJsonPath = path.join(snapshotDir, "snapshot.json");
   const trackedDiffPath = path.join(snapshotDir, "tracked.diff");
-	  const stagedDiffPath = path.join(snapshotDir, "staged.diff");
-	  const untrackedDiffPath = path.join(snapshotDir, "untracked.diff");
-	  const extensionFullDiffPath = path.join(snapshotDir, "extension-full.diff");
-	  const telemetryEnvelopePath = path.join(snapshotDir, "telemetry-envelope.json");
-	  const sendResultPath = path.join(snapshotDir, "send-result.json");
-	  const writes = [snapshotJsonPath, trackedDiffPath, stagedDiffPath, untrackedDiffPath, extensionFullDiffPath, telemetryEnvelopePath, sendResultPath];
+  const stagedDiffPath = path.join(snapshotDir, "staged.diff");
+  const untrackedDiffPath = path.join(snapshotDir, "untracked.diff");
+  const extensionFullDiffPath = path.join(snapshotDir, "extension-full.diff");
+  const telemetryEnvelopePath = path.join(snapshotDir, "telemetry-envelope.json");
+  const sendResultPath = path.join(snapshotDir, "send-result.json");
+  const writes = [snapshotJsonPath, trackedDiffPath, stagedDiffPath, untrackedDiffPath, extensionFullDiffPath, telemetryEnvelopePath, sendResultPath];
 
   if (context.dryRun) {
     return {
@@ -1624,7 +1818,15 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
     const captureScript = medicalNotesCaptureScriptPath(extensionPath);
     if (captureScript) {
       const scriptResult = runMedicalNotesCaptureScript(context, captureScript, snapshotDir);
-      if (scriptResult?.status === "applied") return scriptResult;
+      if (scriptResult?.status === "applied") {
+        return {
+          ...scriptResult,
+          message: existingSnapshotResend && existingSnapshotResend.status !== "skipped"
+            ? `${scriptResult.message}; ${existingSnapshotResend.message}`
+            : scriptResult.message,
+          writes: uniqueWrites([...(scriptResult.writes ?? []), ...(existingSnapshotResend?.writes ?? [])]),
+        };
+      }
     }
 
     const pathspecs = medNotesPathspecs();
@@ -1674,15 +1876,17 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
       diff_unavailable: manifestDrift.unavailable,
       snapshot_useful: snapshotUseful,
       generated_scripts: generatedScripts,
-	    };
-	    fs.writeFileSync(snapshotJsonPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
-	    const telemetry = writeMedNotesTelemetryArtifacts(context, snapshotDir, snapshot);
+    };
+    fs.writeFileSync(snapshotJsonPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+    const telemetry = writeMedNotesTelemetryArtifacts(context, snapshotDir, snapshot);
 
-	    return {
-	      status: "applied",
-	      message: `Snapshot saved for ${extension.name}: ${snapshotDir}; ${telemetry.message}`,
-	      writes: [...writes, ...telemetry.writes].filter((item, index, all) => all.indexOf(item) === index),
-	    };
+    return {
+      status: "applied",
+      message: existingSnapshotResend && existingSnapshotResend.status !== "skipped"
+        ? `Snapshot saved for ${extension.name}: ${snapshotDir}; ${telemetry.message}; ${existingSnapshotResend.message}`
+        : `Snapshot saved for ${extension.name}: ${snapshotDir}; ${telemetry.message}`,
+      writes: uniqueWrites([...writes, ...telemetry.writes, ...(existingSnapshotResend?.writes ?? [])]),
+    };
   } catch (error) {
     return {
       status: "failed",
@@ -1691,6 +1895,16 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
       nextAction: "Corrija a permissao/caminho do snapshot ou rode o update com confirmacao manual depois de salvar o drift.",
     };
   }
+}
+
+function defaultMedNotesExtensionPath(context: PatchContext): string {
+  return context.adapter.join(context.homeDir, ".gemini", "extensions", "medical-notes-workbench");
+}
+
+function resendMedicalNotesSnapshotsAfterExtensionUpdate(context: PatchContext): PatchResult {
+  const extensionPath = context.extension?.extensionPath || defaultMedNotesExtensionPath(context);
+  const result = context.dryRun ? undefined : resendExistingMedNotesSnapshots(context, extensionPath);
+  return result ?? { status: "skipped", message: "No unsent Medical Notes pre-update snapshots to resend after extension update." };
 }
 
 export const OGB_PATCHES: readonly OgbPatch[] = [
@@ -1713,6 +1927,25 @@ export const OGB_PATCHES: readonly OgbPatch[] = [
         && fs.existsSync(context.extension.extensionPath);
     },
     run: createMedicalNotesPreUpdateSnapshot,
+  },
+  {
+    id: "medical-notes-workbench-resend-pre-update-snapshots",
+    title: "Resend Medical Notes Workbench pre-update snapshots",
+    description: "Retries telemetry delivery for Medical Notes Workbench snapshots after Gemini extension updates install fresh telemetry defaults.",
+    category: "guardrail",
+    reason: "Let a single OGB update capture drift before replacement and email the saved snapshot after the updated extension is installed.",
+    introducedIn: OGB_VERSION,
+    removalCondition: "Remove only when pre-update telemetry credentials are guaranteed before every Gemini extension update.",
+    phase: "post-extension-update",
+    platforms: ["all"],
+    runOnce: false,
+    destructive: false,
+    needsBackup: false,
+    required: false,
+    applies(context) {
+      return existingMedNotesSnapshotDirs(context).some((snapshotDir) => !medNotesSnapshotAlreadySent(snapshotDir) && snapshotDirUseful(snapshotDir));
+    },
+    run: resendMedicalNotesSnapshotsAfterExtensionUpdate,
   },
   {
     id: "cleanup-legacy-home-startup-lock",

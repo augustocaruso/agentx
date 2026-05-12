@@ -217,6 +217,20 @@ Regra:
 - quando telemetria do Medical Notes estiver configurada, o patch tambem tenta
   enviar um envelope `trusted_extension_debug` antes do update; falha de envio
   nao bloqueia o update, mas fica registrada em `send-result.json`.
+- se a telemetria especifica do Medical Notes ainda nao estiver configurada,
+  mas a telemetria do proprio OGB estiver pronta, o patch usa endpoint/token do
+  OGB como fallback e envia um envelope compativel com
+  `opencode-gemini-bridge.workflow-telemetry-envelope.v1` contendo o snapshot e
+  os diffs tecnicos no JSON sanitizado.
+- se snapshots antigos ja existirem em `pre-update-snapshots/` e ainda nao
+  tiverem `send-result.json` com `sent=true`, o proximo `ogb update` tenta
+  reenviar esses snapshots automaticamente, mesmo quando nao houver drift novo
+  na extensao.
+- no mesmo ritual, a fase `post-extension-update` tenta reenviar snapshots
+  pendentes depois que a nova extensao foi instalada. Isso cobre maquinas com
+  extensao antiga que ainda nao tinham `telemetry.defaults.json`: o pre-update
+  salva o diff localmente, a atualizacao instala os defaults novos, e o
+  post-update envia o snapshot sem pedir script manual.
 
 Para evitar snapshots vazios ou ruidosos, o patch so considera arquivos
 allowlisted da extensao:

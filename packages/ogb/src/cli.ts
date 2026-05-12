@@ -30,7 +30,7 @@ import { rulesyncDefaultFeatures, type RulesyncMode } from "./rulesync.js";
 import { printSetupReport, setupOpenCode } from "./setup-opencode.js";
 import { printSetupUxReport, setupUx } from "./setup-ux.js";
 import { runSecurityCheck } from "./security.js";
-import { checkOgbUpdate, printAutoUpdateReport, printSelfUpdateReport, printUpdateCheckReport, runAutoUpdate, runSelfUpdate } from "./self-update.js";
+import { checkOgbUpdate, printAutoUpdateReport, printSelfUpdateReport, printUpdateCheckReport, runAutoUpdate, runSelfUpdate, type SelfUpdateReport } from "./self-update.js";
 import { printStartupSyncReport, runStartupSync } from "./startup-sync.js";
 import { syncToOpenCode } from "./sync.js";
 import { formatTelemetryEmailSetupResult, setupTelemetryEmailReceiver, TelemetrySetupError } from "./telemetry-email-setup.js";
@@ -318,6 +318,48 @@ function payloadStatus(payload: unknown, exitCode: number, error?: unknown): str
   return "completed";
 }
 
+const WORKFLOW_TELEMETRY_SNIPPET_KEYS = new Set([
+  "error",
+  "message",
+  "reason",
+  "stderr",
+  "stderrtail",
+  "stdouttail",
+]);
+
+function collectWorkflowTelemetrySnippets(value: unknown, snippets: string[], depth = 0): void {
+  if (!value || snippets.length >= 5 || depth > 6) return;
+  if (typeof value === "string") return;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 20)) collectWorkflowTelemetrySnippets(item, snippets, depth + 1);
+    return;
+  }
+  if (typeof value !== "object") return;
+
+  const record = value as Record<string, unknown>;
+  const status = String(record.status ?? record.outcome ?? record.state ?? "").toLowerCase();
+  const failedOrWarned = ["error", "fail", "failed", "blocked", "warn", "warning"].includes(status);
+  for (const [key, item] of Object.entries(record)) {
+    const lower = key.toLowerCase();
+    if (typeof item === "string") {
+      const isDiagnosticTail = lower.endsWith("tail") || WORKFLOW_TELEMETRY_SNIPPET_KEYS.has(lower);
+      const isFailedMessage = lower === "message" && failedOrWarned;
+      if ((isDiagnosticTail || isFailedMessage) && item.trim()) snippets.push(item);
+      if (snippets.length >= 5) return;
+    } else {
+      collectWorkflowTelemetrySnippets(item, snippets, depth + 1);
+      if (snippets.length >= 5) return;
+    }
+  }
+}
+
+function workflowTelemetrySnippets(payload: unknown, error?: unknown): string[] {
+  const snippets: string[] = [];
+  if (error) snippets.push(error instanceof Error ? error.message : String(error));
+  collectWorkflowTelemetrySnippets(payload, snippets);
+  return [...new Set(snippets.map((item) => item.trim()).filter(Boolean))].slice(0, 5);
+}
+
 async function withWorkflowTelemetry<T>(workflow: string, action: () => T | Promise<T>): Promise<T> {
   const startedAt = Date.now();
   const { project } = commonProjectOptions();
@@ -347,6 +389,7 @@ async function withWorkflowTelemetry<T>(workflow: string, action: () => T | Prom
       homeDir: paths.homeDir,
       payload,
       rawPayload: payload,
+      snippets: workflowTelemetrySnippets(payload, thrown),
     }, { homeDir: paths.homeDir });
     process.exitCode = previousExitCode;
   }
@@ -470,24 +513,36 @@ async function runUpdateCli(opts: UpdateCliOptions, legacyWarning?: string): Pro
     await runRitualProcessUi("update", projectSubtitle(project), steps);
     return;
   }
-  const run = (onProgress?: RitualProgressSink) => runSelfUpdate({
-    repo: opts.repo,
-    version: opts.release,
-    projectRoot: project,
-    prefix: opts.prefix,
-    rulesync: opts.rulesync,
-    setup: opts.setup,
-    ux: opts.ux,
-    installOpenCode: opts.installOpencode,
-    force: opts.force,
-    dryRun: opts.dryRun,
-    stdio: useUi || opts.progressJson ? "pipe" : "inherit",
-    onProgress,
+  await withWorkflowTelemetry("update", async () => {
+    const run = (onProgress?: RitualProgressSink) => runSelfUpdate({
+      repo: opts.repo,
+      version: opts.release,
+      projectRoot: project,
+      prefix: opts.prefix,
+      rulesync: opts.rulesync,
+      setup: opts.setup,
+      ux: opts.ux,
+      installOpenCode: opts.installOpencode,
+      force: opts.force,
+      dryRun: opts.dryRun,
+      stdio: useUi || opts.progressJson ? "pipe" : "inherit",
+      onProgress,
+    });
+    let report: SelfUpdateReport | { error: string };
+    try {
+      report = opts.progressJson ? await runRitualProgressJson<SelfUpdateReport>({ kind: "update", steps, run }) : run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.exitCode = 2;
+      if (opts.json) console.log(JSON.stringify({ status: "error", message }, null, 2));
+      else if (!opts.progressJson) console.error(message);
+      return { status: "error", message, error: message };
+    }
+    if ("error" in report) return report;
+    if (!opts.progressJson) printSelfUpdateReport(report, opts.json);
+    if (report.status === "error") process.exitCode = 2;
+    return report;
   });
-  const report = opts.progressJson ? await runRitualProgressJson({ kind: "update", steps, run }) : run();
-  if ("error" in report) return;
-  if (!opts.progressJson) printSelfUpdateReport(report, opts.json);
-  if (report.status === "error") process.exitCode = 2;
 }
 
 async function readStdinText(): Promise<string> {

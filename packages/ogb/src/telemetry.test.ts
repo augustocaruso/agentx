@@ -551,3 +551,43 @@ test("CLI telemetry enable, status, preview, send, disable, and critical command
     assert.match(send.stdout, /disabled or not ready/);
   });
 });
+
+test("CLI update failures create actionable telemetry with redacted diagnostics", () => {
+  withEnv({ OGB_TELEMETRY_DEFAULTS_DISABLED: "1" }, () => {
+    const projectRoot = tempHome();
+    const telemetryRoot = tempHome();
+    const configPath = path.join(telemetryRoot, "config.json");
+    const cli = path.join(process.cwd(), "src", "cli.ts");
+    const tsx = path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+    enableTelemetry({
+      configPath,
+      endpointUrl: "http://127.0.0.1:9/v1/telemetry/workflow-runs",
+      authToken: "cli-secret",
+    });
+
+    const result = spawnSync(process.execPath, [tsx, cli, "--project", projectRoot, "update", "--repo", "bad;repo", "--plain"], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: projectRoot,
+        USERPROFILE: projectRoot,
+        OGB_TELEMETRY_CONFIG: configPath,
+        OGB_PLAIN: "1",
+      },
+    });
+
+    assert.notEqual(result.status, 0);
+    const runFiles = fs.readdirSync(path.join(telemetryRoot, "runs")).filter((entry) => entry.endsWith(".json"));
+    assert.equal(runFiles.length, 1);
+    const record = JSON.parse(fs.readFileSync(path.join(telemetryRoot, "runs", runFiles[0]), "utf8"));
+    const serialized = JSON.stringify(record);
+
+    assert.equal(record.workflow, "update");
+    assert.equal(record.outcome, "fail");
+    assert.equal(record.diagnosticContext.rootCauseCode, "workflow_failed");
+    assert.match(serialized, /Invalid GitHub repo/);
+    assert.match(record.diagnosticSnippets.join("\n"), /Invalid GitHub repo/);
+    assert.doesNotMatch(serialized, /cli-secret/);
+  });
+});

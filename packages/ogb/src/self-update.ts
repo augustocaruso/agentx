@@ -182,6 +182,46 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
   return report;
 }
 
+function writeSelfUpdateErrorStatus(options: SelfUpdateOptions, report: SelfUpdateReport, now = new Date()): AutoUpdateReport {
+  const checkedAt = now.toISOString();
+  const selectedVersion = normalizeVersion(options.version);
+  const latestTag = selectedVersion === "latest" ? undefined : selectedVersion;
+  const check: UpdateCheckReport = {
+    status: "unknown",
+    currentVersion: OGB_VERSION,
+    latestVersion: normalizeTagVersion(latestTag),
+    latestTag,
+    checkedAt,
+    message: report.message,
+  };
+  const updateReport: AutoUpdateReport = {
+    status: "error",
+    currentVersion: OGB_VERSION,
+    latestVersion: check.latestVersion,
+    latestTag,
+    checkedAt,
+    finishedAt: checkedAt,
+    restartRequired: false,
+    message: report.message,
+    check,
+    plan: report.plan,
+    selfUpdate: report,
+    postUpdate: report.postUpdate,
+  };
+  writeUpdateReport(options.projectRoot, updateReport);
+  return updateReport;
+}
+
+function persistSelfUpdateError(options: SelfUpdateOptions, report: SelfUpdateReport): SelfUpdateReport {
+  if (options.writeStatus === false) return report;
+  try {
+    writeSelfUpdateErrorStatus(options, report);
+  } catch {
+    // Updating dashboard status must never hide the original update failure.
+  }
+  return report;
+}
+
 function outputTail(value: unknown, maxChars = 4000): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) return undefined;
@@ -438,14 +478,14 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       status: "fail",
       message: result.error,
     });
-    return {
+    return persistSelfUpdateError(options, {
       status: "error",
       command,
       plan,
       message: `Could not start the OGB bootstrap command: ${result.error}`,
       stdoutTail: outputTail(result.stdout),
       stderrTail: outputTail(result.stderr),
-    };
+    });
   }
   if (result.status !== 0) {
     const message = `Bootstrap exited with code ${result.status ?? "unknown"}.`;
@@ -465,7 +505,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       status: "fail",
       message: stderrTail ?? stdoutTail ?? message,
     });
-    return { status: "error", command, plan, message, stdoutTail, stderrTail };
+    return persistSelfUpdateError(options, { status: "error", command, plan, message, stdoutTail, stderrTail });
   }
   emitRitualProgress(options.onProgress, {
     stepId: "download",
@@ -522,13 +562,13 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
   }
   const postUpdateFailed = postUpdate?.status === "fail" || postUpdate?.status === "error";
   if (postUpdateFailed) {
-    return {
+    return persistSelfUpdateError(options, {
       status: "error",
       command,
       plan,
       postUpdate,
       message: `OGB bootstrap completed, but the post-update check did not finish cleanly: ${postUpdate.message}`,
-    };
+    });
   }
   return {
     status: "applied",
