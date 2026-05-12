@@ -51,6 +51,46 @@ test("platform adapter contract returns POSIX shell config target", () => {
   assert.equal(adapter.persistEnv("OPENCODE_ENABLE_EXA", "1").path, path.join(homeDir, ".config", "zsh", ".zshrc"));
 });
 
+test("platform adapter persists Linux env to profile and bash rc without macOS zsh config", () => {
+  const homeDir = path.join("/tmp", "ogb-linux-home");
+  const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/bin/bash" } });
+
+  assert.equal(adapter.platform, "linux");
+  assert.equal(adapter.persistEnv("OPENCODE_ENABLE_EXA", "1").path, path.join(homeDir, ".profile"));
+  assert.deepEqual(adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").map((candidate) => candidate.path), [
+    path.join(homeDir, ".profile"),
+    path.join(homeDir, ".bashrc"),
+  ]);
+  assert.equal(adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").some((candidate) =>
+    candidate.path?.includes(path.join(".config", "zsh", ".zshrc"))
+  ), false);
+});
+
+test("platform adapter includes zsh rc as an additional Linux env target when zsh is the shell", () => {
+  const homeDir = path.join("/tmp", "ogb-linux-zsh-home");
+  const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/usr/bin/zsh" } });
+
+  assert.deepEqual(adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").map((candidate) => candidate.path), [
+    path.join(homeDir, ".profile"),
+    path.join(homeDir, ".zshrc"),
+  ]);
+});
+
+test("platform adapter includes fish config as an additional Linux env target when fish is the shell", () => {
+  const homeDir = path.join("/tmp", "ogb-linux-fish-home");
+  const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/usr/bin/fish" } });
+  const candidates = adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1");
+
+  assert.deepEqual(candidates.map((candidate) => candidate.path), [
+    path.join(homeDir, ".profile"),
+    path.join(homeDir, ".config", "fish", "config.fish"),
+  ]);
+  assert.deepEqual(candidates.map((candidate) => candidate.target), [
+    "posix-shell-config",
+    "fish-config",
+  ]);
+});
+
 test("platform adapter contract preserves POSIX fixture paths while simulating Windows", () => {
   const homeDir = path.join("/tmp", "ogb-home");
   const adapter = createPlatformAdapter({ platform: "win32", homeDir, env: {} });

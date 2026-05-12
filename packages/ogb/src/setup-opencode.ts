@@ -143,6 +143,22 @@ function splitCommandArgs(raw) {
   return args;
 }
 
+function runtimeTokenValues() {
+  const home = os.homedir();
+  return {
+    "{OGB_HOME}": home,
+    "{OGB_APPDATA}": process.env.APPDATA || path.join(home, "AppData", "Roaming"),
+  };
+}
+
+function expandRuntimeTokens(value) {
+  let expanded = String(value ?? "");
+  for (const [token, replacement] of Object.entries(runtimeTokenValues())) {
+    expanded = expanded.split(token).join(replacement);
+  }
+  return expanded;
+}
+
 function projectStartupConfigPath(cwd) {
   return path.join(cwd, PROJECT_GENERATED_DIR, STARTUP_CONFIG_FILE);
 }
@@ -215,12 +231,12 @@ function commandPlan(cwd) {
     };
   }
 
-  const command = config.command || "ogb";
-  const baseArgs = Array.isArray(config.baseArgs) ? config.baseArgs.map(String) : [];
+  const command = expandRuntimeTokens(config.command || "ogb");
+  const baseArgs = Array.isArray(config.baseArgs) ? config.baseArgs.map((arg) => expandRuntimeTokens(arg)) : [];
   const syncArgs = process.env.OGB_STARTUP_SYNC_ARGS
     ? splitArgs(process.env.OGB_STARTUP_SYNC_ARGS)
     : Array.isArray(config.syncArgs)
-      ? config.syncArgs.map(String)
+      ? config.syncArgs.map((arg) => expandRuntimeTokens(arg))
       : DEFAULT_ARGS;
 
   return {

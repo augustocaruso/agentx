@@ -34,6 +34,25 @@ test("buildSelfUpdateCommand uses GitHub bootstrap on POSIX platforms", () => {
   assert.match(command[2], /--force/);
 });
 
+test("buildSelfUpdateCommand uses the Linux bootstrap on Linux", () => {
+  const command = buildSelfUpdateCommand({
+    projectRoot: "/tmp/ogb project",
+    prefix: "/tmp/ogb-prefix",
+    rulesync: "off",
+    setup: false,
+    ux: false,
+    installOpenCode: false,
+    force: true,
+  }, "linux");
+
+  assert.equal(command[0], "bash");
+  assert.equal(command[1], "-lc");
+  assert.match(command[2], /bootstrap-linux\.sh/);
+  assert.doesNotMatch(command[2], /bootstrap-mac\.sh/);
+  assert.match(command[2], /--project/);
+  assert.match(command[2], /ogb project/);
+});
+
 test("buildSelfUpdateCommand uses PowerShell bootstrap on Windows", () => {
   const command = buildSelfUpdateCommand({
     repo: "acme/bridge",

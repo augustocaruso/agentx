@@ -35,7 +35,7 @@ Material histórico de handoff e MVP antigo fica em [`docs/archive/`](docs/archi
 - **Projeção gerada:** arquivos OpenCode gerados não devem ser editados manualmente.
 - **Sincronização confiável:** toda conversão deve ser reproduzível, validável e reversível.
 - **Não programação primeiro:** o foco primário é estudo e automação; programação é um caso secundário.
-- **Mac estável, Windows suportado com validação extra:** o instalador PowerShell replica o mesmo perfil, mas deve ser testado em um PC/VM Windows antes de mandar para muita gente.
+- **macOS e Linux estáveis, Windows suportado com validação extra:** os instaladores POSIX usam o mesmo núcleo no macOS/Linux; o instalador PowerShell replica o perfil, mas deve ser testado em um PC/VM Windows antes de mandar para muita gente.
 
 ## Workflow recomendado agora
 
@@ -43,6 +43,12 @@ Instalação local a partir deste checkout:
 
 ```bash
 scripts/install-mac.sh --project "$PWD"
+```
+
+No Linux:
+
+```bash
+scripts/install-linux.sh --project "$PWD"
 ```
 
 No Windows, em PowerShell:
@@ -66,7 +72,9 @@ localmente pelo `ogb sync`.
 
 Para o websearch nativo do OpenCode funcionar com Exa, o instalador tambem
 garante `OPENCODE_ENABLE_EXA=1`: no Mac ele cria ou atualiza
-`~/.config/zsh/.zshrc`; no Windows ele grava a variável de ambiente de usuário.
+`~/.config/zsh/.zshrc`; no Linux ele grava em `~/.profile` e tambem em
+`~/.bashrc`, `~/.zshrc` ou `~/.config/fish/config.fish` quando esse for o shell
+de login; no Windows ele grava a variável de ambiente de usuário.
 
 Quando `--project` aponta para o home (`~`), o instalador não cria setup de
 projeto. Ele ainda roda o sync global para gerar
@@ -100,6 +108,12 @@ Distribuição por GitHub Release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/augustocaruso/opencode-gemini-bridge/main/scripts/bootstrap-mac.sh | bash -s -- --project "$PWD"
+```
+
+No Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/augustocaruso/opencode-gemini-bridge/main/scripts/bootstrap-linux.sh | bash -s -- --project "$PWD"
 ```
 
 No Windows, pelo PowerShell:

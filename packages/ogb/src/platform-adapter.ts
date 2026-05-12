@@ -14,7 +14,7 @@ export interface PlatformAdapterInput {
 export interface PersistedEnvPlan {
   name: string;
   value: string;
-  target: "windows-user-env" | "zsh-config";
+  target: "windows-user-env" | "zsh-config" | "posix-shell-config" | "fish-config";
   path?: string;
   command?: string[];
 }
@@ -47,8 +47,9 @@ export interface PlatformAdapter {
 }
 
 function normalizePlatform(platform: NodeJS.Platform | undefined): SupportedInstallerPlatform {
-  if (platform === "win32") return "win32";
-  if (platform === "darwin") return "darwin";
+  const effectivePlatform = platform ?? process.platform;
+  if (effectivePlatform === "win32") return "win32";
+  if (effectivePlatform === "darwin") return "darwin";
   return "linux";
 }
 
@@ -137,6 +138,39 @@ export function createPlatformAdapter(input: PlatformAdapterInput): PlatformAdap
     };
   }
 
+  function shellBasename(): string {
+    return (env.SHELL ?? "").split(/[\\/]/).filter(Boolean).pop() ?? "";
+  }
+
+  function uniquePlans(
+    entries: Array<{ path: string; target: PersistedEnvPlan["target"] }>,
+    name: string,
+    value: string,
+  ): PersistedEnvPlan[] {
+    const seen = new Set<string>();
+    return entries.flatMap((entry) => {
+      if (seen.has(entry.path)) return [];
+      seen.add(entry.path);
+      return [{
+        name,
+        value,
+        target: entry.target,
+        path: entry.path,
+      }];
+    });
+  }
+
+  function persistLinuxEnvCandidates(name: string, value: string): PersistedEnvPlan[] {
+    const entries: Array<{ path: string; target: PersistedEnvPlan["target"] }> = [
+      { path: pathApi.join(homeDir, ".profile"), target: "posix-shell-config" },
+    ];
+    const shell = shellBasename();
+    if (shell === "bash") entries.push({ path: pathApi.join(homeDir, ".bashrc"), target: "posix-shell-config" });
+    if (shell === "zsh") entries.push({ path: pathApi.join(homeDir, ".zshrc"), target: "posix-shell-config" });
+    if (shell === "fish") entries.push({ path: pathApi.join(homeDir, ".config", "fish", "config.fish"), target: "fish-config" });
+    return uniquePlans(entries, name, value);
+  }
+
   return {
     platform,
     homeDir,
@@ -173,10 +207,12 @@ export function createPlatformAdapter(input: PlatformAdapterInput): PlatformAdap
       if (platform === "win32") {
         return persistWindowsEnv(name, value, powershellCommands[0] ?? "powershell.exe");
       }
+      if (platform === "linux") return persistLinuxEnvCandidates(name, value)[0];
       return persistPosixEnv(name, value);
     },
     persistEnvCandidates(name, value) {
       if (platform === "win32") return powershellCommands.map((command) => persistWindowsEnv(name, value, command));
+      if (platform === "linux") return persistLinuxEnvCandidates(name, value);
       return [persistPosixEnv(name, value)];
     },
   };

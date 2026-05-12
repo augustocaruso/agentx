@@ -404,7 +404,7 @@ Modelo mental:
 ```text
 GitHub Release pack
   -> bootstrap oficial
-  -> instalador macOS/Windows
+  -> instalador macOS/Linux/Windows
   -> ogb setup-ux/import/setup-opencode/check
 ```
 
@@ -571,7 +571,7 @@ Deve:
 
 - instalar OpenCode quando `opencode` não estiver disponível;
 - gravar `~/.config/opencode/opencode.json` no macOS/Linux ou `%APPDATA%\opencode\opencode.json` no Windows;
-- garantir `OPENCODE_ENABLE_EXA=1` para o websearch nativo do OpenCode: no Mac via `~/.config/zsh/.zshrc`, no Windows como variável de ambiente de usuário;
+- garantir `OPENCODE_ENABLE_EXA=1` para o websearch nativo do OpenCode: no Mac via `~/.config/zsh/.zshrc`, no Linux via `~/.profile` e tambem `~/.bashrc`/`~/.zshrc`/`~/.config/fish/config.fish` quando aplicavel, no Windows como variável de ambiente de usuário;
 - instalar os plugins globais recomendados: auths, update notifier, auto-fallback, DCP, PTY e websearch citado;
 - gravar comando global `/research` e remover o comando aposentado `/dev-server`;
 - gravar comando global `/upgrade-ogb`;

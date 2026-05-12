@@ -137,9 +137,10 @@ Depois do `setup-ux`, o config global do OpenCode ja fica com
 local diferente.
 
 O instalador tambem garante `OPENCODE_ENABLE_EXA=1` para o websearch nativo do
-OpenCode: no Mac em `~/.config/zsh/.zshrc`; no Windows como variável de
-ambiente de usuário. Abra um terminal novo depois da instalação para herdar essa
-variável.
+OpenCode: no Mac em `~/.config/zsh/.zshrc`; no Linux em `~/.profile` e tambem
+em `~/.bashrc`, `~/.zshrc` ou `~/.config/fish/config.fish` quando esse for o
+shell de login; no Windows como variável de ambiente de usuário. Abra um
+terminal novo depois da instalação para herdar essa variável.
 
 Para resetar o perfil global depois de instalar ou atualizar o OGB, rode no
 home:

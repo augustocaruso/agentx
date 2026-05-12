@@ -9,6 +9,11 @@ function tempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
+function writeJson(filePath: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
 function writeAnthropicAuthConstants(homeDir: string, packageDir = "opencode-anthropic-auth@latest"): void {
   const constants = path.join(homeDir, ".cache", "opencode", "packages", "@ex-machina", packageDir, "node_modules", "@ex-machina", "opencode-anthropic-auth", "dist", "constants.js");
   fs.mkdirSync(path.dirname(constants), { recursive: true });
@@ -175,6 +180,74 @@ test("refreshLimits uses native Anthropic OAuth fallback when OpenUsage is unava
       ["Weekly", 21],
     ]);
     assert.ok(report.warnings.some((warning) => warning.includes("native Anthropic OAuth fallback")));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("refreshLimits keeps last Claude usage when Anthropic refresh is rate limited", async () => {
+  const projectRoot = tempDir("ogb-limits-project-");
+  const homeDir = tempDir("ogb-limits-home-");
+  const cacheFile = path.join(projectRoot, ".opencode", "generated", "ogb-limits.json");
+  const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
+  fs.mkdirSync(path.dirname(authFile), { recursive: true });
+  fs.writeFileSync(authFile, JSON.stringify({
+    anthropic: {
+      type: "oauth",
+      access: "anthropic_test_token",
+      refresh: "refresh_test",
+      expires: Date.now() + 60_000,
+    },
+  }), "utf8");
+  writeJson(cacheFile, {
+    version: "0.0.0-test",
+    projectRoot,
+    generatedAt: "2026-05-04T12:00:00.000Z",
+    status: "ok",
+    providers: [{
+      providerId: "anthropic",
+      displayName: "Claude",
+      fetchedAt: "2026-05-04T12:00:00.000Z",
+      lines: [
+        { label: "Session", type: "progress", used: 88, limit: 100, resetsAt: "2026-05-04T16:00:00.000Z" },
+        { label: "Weekly", type: "progress", used: 99, limit: 100, resetsAt: "2026-05-07T16:00:00.000Z" },
+      ],
+    }],
+    sources: {
+      openusage: { status: "ok", providerCount: 1 },
+      anthropicClaude: { status: "ok", providerCount: 1 },
+      geminiCodeAssist: { status: "skipped" },
+    },
+    warnings: [],
+    files: { limits: cacheFile },
+  });
+
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input) === "http://127.0.0.1:6736/v1/usage") {
+      throw new Error("offline");
+    }
+    assert.equal(String(input), "https://api.anthropic.com/api/oauth/usage");
+    return new Response("rate limited", { status: 429, statusText: "Too Many Requests" });
+  }) as typeof fetch;
+
+  try {
+    const report = await refreshLimits({
+      projectRoot,
+      homeDir,
+      force: true,
+      includeGeminiFallback: false,
+      includeOpenAIFallback: false,
+    });
+    const claude = report.providers.find((provider) => provider.providerId === "anthropic");
+
+    assert.equal(report.status, "partial");
+    assert.equal(report.sources.anthropicClaude?.status, "error");
+    assert.equal(report.sources.anthropicClaude?.message, "Anthropic usage HTTP 429");
+    assert.equal(claude?.displayName, "Claude");
+    assert.equal(claude?.stale, true);
+    assert.equal(claude?.lines?.find((line) => line.label === "Weekly")?.used, 99);
+    assert.ok(report.warnings.some((warning) => warning.includes("keeping last successful usage value")));
   } finally {
     globalThis.fetch = previousFetch;
   }

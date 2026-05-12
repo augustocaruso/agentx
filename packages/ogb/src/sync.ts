@@ -30,7 +30,7 @@ import { ensureProjectConfig } from "./project-config.js";
 import { projectRulesyncProjection, type RulesyncMode, type RulesyncProjectionResult } from "./rulesync.js";
 import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState } from "./sync-state.js";
 import { ensureTuiSidebar } from "./tui-sidebar.js";
-import { OGB_VERSION } from "./types.js";
+import { OGB_VERSION, type GeminiMcpServer } from "./types.js";
 import { sha256File, sha256Text } from "./file-hash.js";
 import { flattenGeminiMd } from "./flatten.js";
 import { globalOpenCodeConfigDir } from "./opencode-paths.js";
@@ -58,6 +58,15 @@ export interface SyncReport {
   projectedExtensionCommands: string[];
   removedExtensionCommands: string[];
   projectedSkills: string[];
+  removedSkills: string[];
+  projectedAntigravitySkills: string[];
+  removedAntigravitySkills: string[];
+  projectedAntigravityAgents: string[];
+  removedAntigravityAgents: string[];
+  projectedAntigravityWorkflows: string[];
+  removedAntigravityWorkflows: string[];
+  projectedAntigravityMcps: string[];
+  removedAntigravityMcps: string[];
   projectedTuiFiles: string[];
   projectedExternalPlugins: string[];
   projectedExternalIntegrationFiles: string[];
@@ -223,10 +232,13 @@ function copyDir(src: string, dst: string, extensionDir: string): void {
 }
 
 const GLOBAL_OPENCODE_PREFIX = ".config/opencode";
+const GLOBAL_ANTIGRAVITY_PREFIX = ".gemini/antigravity";
+const ANTIGRAVITY_MCP_CONFIG_REL_PATH = `${GLOBAL_ANTIGRAVITY_PREFIX}/mcp_config.json`;
 const GLOBAL_COMMAND_MARKER = "SOURCE_KIND: gemini-global-command";
 const GLOBAL_EXTENSION_COMMAND_MARKER = "SOURCE_KIND: gemini-global-extension-command";
 const GLOBAL_AGENT_MARKER = "SOURCE_KIND: gemini-global-agent";
 const GLOBAL_EXTENSION_AGENT_MARKER = "SOURCE_KIND: gemini-global-extension-agent";
+const ANTIGRAVITY_AGENT_MARKER = "SOURCE_KIND: gemini-antigravity-agent";
 
 interface GlobalExtensionRoot {
   name: string;
@@ -289,8 +301,29 @@ function globalOpenCodeRelPath(relPath: string): string {
   return `${GLOBAL_OPENCODE_PREFIX}/${toPosix(relPath)}`;
 }
 
+function globalExpandedInstructionRef(globalRoot: string, expandedPath: string): string {
+  const relPath = path.relative(globalRoot, path.resolve(expandedPath));
+  if (!relPath || path.isAbsolute(relPath)) return path.resolve(expandedPath);
+  return toPosix(relPath);
+}
+
+function isManagedGlobalInstructionRef(value: string): boolean {
+  const normalized = value.replace(/\\/g, "/");
+  return normalized === "../opencode-gemini-bridge/generated/GEMINI.expanded.md"
+    || normalized === "~/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md"
+    || normalized.endsWith("/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md");
+}
+
+function globalAntigravityRelPath(relPath: string): string {
+  return `${GLOBAL_ANTIGRAVITY_PREFIX}/${toPosix(relPath)}`;
+}
+
 function globalTargetPath(globalRoot: string, relPath: string): string {
   return path.join(globalRoot, ...toPosix(relPath).split("/"));
+}
+
+function targetPathFromReportPath(root: string, reportPath: string): string {
+  return path.join(root, ...toPosix(reportPath).split("/"));
 }
 
 function globalConfigPath(globalRoot: string): string {
@@ -307,6 +340,15 @@ function readJson(filePath: string): any {
   } catch {
     return undefined;
   }
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function relativeTo(root: string, filePath: string): string {
@@ -810,6 +852,194 @@ function writeManagedGlobalText(options: {
   return { promoted: reportPath };
 }
 
+function antigravityMcpReportPath(name: string): string {
+  return `${ANTIGRAVITY_MCP_CONFIG_REL_PATH}#mcpServers/${name}`;
+}
+
+function escapeMcpStateName(name: string): string {
+  return name.replaceAll("~", "~0").replaceAll("/", "~1");
+}
+
+function unescapeMcpStateName(name: string): string {
+  return name.replaceAll("~1", "/").replaceAll("~0", "~");
+}
+
+function antigravityMcpStatePath(name: string): string {
+  return `${ANTIGRAVITY_MCP_CONFIG_REL_PATH}#mcpServers/${escapeMcpStateName(name)}`;
+}
+
+function antigravityMcpNameFromStatePath(statePath: string): string | undefined {
+  const prefix = `${ANTIGRAVITY_MCP_CONFIG_REL_PATH}#mcpServers/`;
+  return statePath.startsWith(prefix) ? unescapeMcpStateName(statePath.slice(prefix.length)) : undefined;
+}
+
+function antigravityMcpHash(config: unknown): string {
+  return sha256Text(stableJson(config));
+}
+
+function projectAntigravityMcpServer(server: GeminiMcpServer): { name: string; config: Record<string, unknown>; warnings: string[] } | undefined {
+  const warnings = [...(server.environmentWarnings ?? [])];
+  if (server.type === "stdio" && server.command) {
+    const config: Record<string, unknown> = {
+      command: server.command,
+    };
+    if (server.args && server.args.length > 0) config.args = server.args;
+    if (server.environment && Object.keys(server.environment).length > 0) config.env = server.environment;
+    if (server.cwd) config.cwd = server.cwd;
+    if (typeof server.timeout === "number" && Number.isFinite(server.timeout) && server.timeout > 0) config.timeout = server.timeout;
+    return { name: server.name, config, warnings };
+  }
+  if (server.type === "http" && server.url) {
+    const config: Record<string, unknown> = {
+      serverUrl: server.url,
+    };
+    if (typeof server.timeout === "number" && Number.isFinite(server.timeout) && server.timeout > 0) config.timeout = server.timeout;
+    return { name: server.name, config, warnings };
+  }
+  return undefined;
+}
+
+function readAntigravityMcpConfig(filePath: string): { config: Record<string, unknown>; warning?: string } {
+  if (!fileExists(filePath)) return { config: {} };
+  const text = fs.readFileSync(filePath, "utf8");
+  if (text.trim().length === 0) return { config: {} };
+  const parsed = parseJsonc(text);
+  if (!isRecord(parsed)) {
+    return {
+      config: {},
+      warning: `Antigravity MCP conflict: ${ANTIGRAVITY_MCP_CONFIG_REL_PATH} is not a valid object; leaving it unchanged`,
+    };
+  }
+  return { config: parsed };
+}
+
+function projectGlobalAntigravityMcps(options: {
+  homeDir: string;
+  state: ReturnType<typeof emptySyncState>;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): { promoted: string[]; removed: string[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const promoted: string[] = [];
+  const removed: string[] = [];
+  const inventory = buildInventory({ projectRoot: options.homeDir, homeDir: options.homeDir });
+  const desired = new Map<string, { config: Record<string, unknown>; source: string }>();
+  for (const server of inventory.mcps) {
+    const projected = projectAntigravityMcpServer(server);
+    if (!projected) continue;
+    desired.set(projected.name, { config: projected.config, source: server.source });
+    warnings.push(...projected.warnings);
+  }
+  if (options.dryRun) {
+    return {
+      promoted: [...desired.keys()].sort().map(antigravityMcpReportPath),
+      removed,
+      warnings: [...new Set(warnings)],
+    };
+  }
+
+  const targetPath = targetPathFromReportPath(options.homeDir, ANTIGRAVITY_MCP_CONFIG_REL_PATH);
+  const read = readAntigravityMcpConfig(targetPath);
+  if (read.warning) return { promoted, removed, warnings: [...new Set([...warnings, read.warning])] };
+  const currentConfig = read.config;
+  const rawServers = currentConfig.mcpServers;
+  if (rawServers !== undefined && !isRecord(rawServers)) {
+    warnings.push(`Antigravity MCP conflict: ${ANTIGRAVITY_MCP_CONFIG_REL_PATH}.mcpServers is not an object; leaving it unchanged`);
+    return { promoted, removed, warnings: [...new Set(warnings)] };
+  }
+  const nextServers: Record<string, unknown> = { ...(isRecord(rawServers) ? rawServers : {}) };
+  let changed = false;
+
+  for (const [name, item] of [...desired.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const statePath = antigravityMcpStatePath(name);
+    const reportPath = antigravityMcpReportPath(name);
+    const desiredHash = antigravityMcpHash(item.config);
+    const current = nextServers[name];
+    const previousHash = managedHashFor(options.state, statePath, "ogb");
+
+    if (current !== undefined) {
+      const currentHash = antigravityMcpHash(current);
+      if (currentHash === desiredHash) {
+        upsertManagedFile(options.state, {
+          path: statePath,
+          sha256: desiredHash,
+          source: "ogb",
+          kind: "mcp",
+          projection: "antigravity",
+          origin: item.source,
+        });
+        promoted.push(reportPath);
+        continue;
+      }
+      if (!options.force && !previousHash) {
+        warnings.push(`Antigravity MCP conflict: ${reportPath} exists and is not managed by ogb; use --force to overwrite`);
+        continue;
+      }
+      if (!options.force && previousHash && currentHash !== previousHash) {
+        warnings.push(`Antigravity MCP conflict: ${reportPath} was edited manually; use --force to overwrite`);
+        continue;
+      }
+    }
+
+    nextServers[name] = item.config;
+    changed = true;
+    upsertManagedFile(options.state, {
+      path: statePath,
+      sha256: desiredHash,
+      source: "ogb",
+      kind: "mcp",
+      projection: "antigravity",
+      origin: item.source,
+    });
+    promoted.push(reportPath);
+  }
+
+  const desiredStatePaths = new Set([...desired.keys()].map(antigravityMcpStatePath));
+  for (const file of [...options.state.managedFiles]) {
+    const staleName = file.source === "ogb" && file.kind === "mcp" ? antigravityMcpNameFromStatePath(file.path) : undefined;
+    if (!staleName || desiredStatePaths.has(file.path)) continue;
+    const current = nextServers[staleName];
+    if (current === undefined) {
+      options.state.managedFiles = options.state.managedFiles.filter((item) => !(item.path === file.path && item.source === "ogb"));
+      continue;
+    }
+    if (!options.force && antigravityMcpHash(current) !== file.sha256) {
+      warnings.push(`Antigravity MCP conflict: ${antigravityMcpReportPath(staleName)} was edited manually; leaving stale server in place`);
+      continue;
+    }
+    delete nextServers[staleName];
+    changed = true;
+    options.state.managedFiles = options.state.managedFiles.filter((item) => !(item.path === file.path && item.source === "ogb"));
+    removed.push(antigravityMcpReportPath(staleName));
+  }
+
+  if (changed || desired.size > 0) {
+    const sortedServers = Object.fromEntries(Object.entries(nextServers).sort((a, b) => a[0].localeCompare(b[0])));
+    const nextConfig = {
+      ...currentConfig,
+      mcpServers: sortedServers,
+    };
+    const nextText = `${JSON.stringify(nextConfig, null, 2)}\n`;
+    const currentText = fileExists(targetPath) ? fs.readFileSync(targetPath, "utf8") : undefined;
+    if (currentText !== nextText) {
+      if (fileExists(targetPath)) options.backupSession.backupExisting(targetPath);
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, nextText, "utf8");
+      changed = true;
+    }
+    upsertManagedFile(options.state, {
+      path: ANTIGRAVITY_MCP_CONFIG_REL_PATH,
+      sha256: sha256Text(nextText),
+      source: "ogb",
+      kind: "mcp",
+      projection: "antigravity",
+    });
+  }
+
+  return { promoted, removed, warnings: [...new Set(warnings)] };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -825,7 +1055,7 @@ function ensureGlobalOpenCodeConfig(options: {
 }): { promoted?: string; mcpServers: string[]; warning?: string } {
   const configPath = globalConfigPath(options.globalRoot);
   const relPath = globalOpenCodeRelPath(toPosix(path.relative(options.globalRoot, configPath)));
-  const expandedInstruction = options.expandedPath ? path.resolve(options.expandedPath) : undefined;
+  const expandedInstruction = options.expandedPath ? globalExpandedInstructionRef(options.globalRoot, options.expandedPath) : undefined;
   const mcp = options.mcp ?? {};
   const mcpServers = Object.keys(mcp).sort();
 
@@ -858,16 +1088,19 @@ function ensureGlobalOpenCodeConfig(options: {
   const currentInstructions = Array.isArray(rawInstructions)
     ? rawInstructions.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
     : [];
-  const nextInstructions = !expandedInstruction || currentInstructions.includes(expandedInstruction)
-    ? currentInstructions
-    : [...currentInstructions, expandedInstruction];
+  const retainedInstructions = expandedInstruction
+    ? currentInstructions.filter((item) => !isManagedGlobalInstructionRef(item))
+    : currentInstructions;
+  const nextInstructions = !expandedInstruction || retainedInstructions.includes(expandedInstruction)
+    ? retainedInstructions
+    : [...retainedInstructions, expandedInstruction];
   const rawMcp = (parsed as Record<string, unknown>).mcp;
   if (mcpServers.length > 0 && rawMcp !== undefined && !isRecord(rawMcp) && !options.force) {
     return { mcpServers: [], warning: `Global OpenCode config conflict: ${relPath} has a non-object mcp field; leaving it unchanged` };
   }
   const currentMcp = isRecord(rawMcp) ? rawMcp : {};
   const nextMcp = mcpServers.length > 0 ? { ...currentMcp, ...mcp } : currentMcp;
-  const instructionsChanged = expandedInstruction !== undefined && nextInstructions.length !== currentInstructions.length;
+  const instructionsChanged = expandedInstruction !== undefined && JSON.stringify(nextInstructions) !== JSON.stringify(currentInstructions);
   const mcpChanged = mcpServers.length > 0 && JSON.stringify(nextMcp) !== JSON.stringify(currentMcp);
 
   if (!instructionsChanged && !mcpChanged) {
@@ -1236,9 +1469,154 @@ function listGeminiGlobalSkillDirs(homeDir: string): Array<{ skillName: string; 
     .sort((a, b) => a.skillName.localeCompare(b.skillName));
 }
 
+interface ProjectSkillDirsResult {
+  promoted: string[];
+  removed: string[];
+  warnings: string[];
+}
+
+interface ProjectAntigravitySkillsResult extends ProjectSkillDirsResult {
+  promotedAgents: string[];
+  removedAgents: string[];
+}
+
+interface ProjectAntigravityFilesResult {
+  promoted: string[];
+  removed: string[];
+  warnings: string[];
+}
+
+function copyManagedSkillDir(options: {
+  state: ReturnType<typeof emptySyncState>;
+  targetRoot: string;
+  reportDir: string;
+  sourceDir: string;
+  sourceBaseDir: string;
+  label: string;
+  projection: "opencode" | "antigravity";
+  origin: string;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): { promoted?: string; warning?: string } {
+  const reportSkillPath = `${options.reportDir}/SKILL.md`;
+  const targetDir = targetPathFromReportPath(options.targetRoot, options.reportDir);
+  const currentSkillFile = path.join(targetDir, "SKILL.md");
+  if (options.dryRun) return { promoted: options.reportDir };
+
+  const previousHash = managedHashFor(options.state, reportSkillPath, "ogb");
+  if (dirExists(targetDir) && !options.force && !previousHash) {
+    return { warning: `${options.label} conflict: ${options.reportDir} exists and is not managed by ogb; use --force to overwrite` };
+  }
+  if (fileExists(currentSkillFile) && !options.force && previousHash && sha256File(currentSkillFile) !== previousHash) {
+    return { warning: `${options.label} conflict: ${options.reportDir} was edited manually; use --force to overwrite` };
+  }
+
+  if (dirExists(targetDir)) options.backupSession.backupExisting(targetDir);
+  copyDir(options.sourceDir, targetDir, options.sourceBaseDir);
+  recordManagedSkillDir({
+    state: options.state,
+    targetDir,
+    reportDir: options.reportDir,
+    projection: options.projection,
+    origin: options.origin,
+  });
+  return { promoted: options.reportDir };
+}
+
+function recordManagedSkillDir(options: {
+  state: ReturnType<typeof emptySyncState>;
+  targetDir: string;
+  reportDir: string;
+  projection: "opencode" | "antigravity";
+  origin: string;
+}): void {
+  options.state.managedFiles = options.state.managedFiles.filter((file) =>
+    !(file.source === "ogb" && (file.path === options.reportDir || file.path.startsWith(`${options.reportDir}/`)))
+  );
+  for (const filePath of listFilesRecursive(options.targetDir)) {
+    const relFile = toPosix(path.relative(options.targetDir, filePath));
+    upsertManagedFile(options.state, {
+      path: `${options.reportDir}/${relFile}`,
+      sha256: sha256File(filePath),
+      source: "ogb",
+      kind: "skill",
+      projection: options.projection,
+      origin: options.origin,
+    });
+  }
+}
+
+function removeStaleManagedSkillDirs(options: {
+  state: ReturnType<typeof emptySyncState>;
+  root: string;
+  pathPrefix: string;
+  keepSkillFiles: Set<string>;
+  backupSession: BackupSession;
+  label: string;
+  managedKinds?: Array<"skill" | "agent">;
+  force?: boolean;
+}): { removed: string[]; removedDetails: Array<{ path: string; kind: "skill" | "agent" }>; warnings: string[] } {
+  const removed: string[] = [];
+  const removedDetails: Array<{ path: string; kind: "skill" | "agent" }> = [];
+  const warnings: string[] = [];
+  const managedKinds = new Set(options.managedKinds ?? ["skill"]);
+  const keepSkillDirs = new Set(
+    [...options.keepSkillFiles].map((filePath) => filePath.slice(0, -"/SKILL.md".length)),
+  );
+  const staleByDir = new Map<string, typeof options.state.managedFiles>();
+  for (const file of options.state.managedFiles) {
+    if (file.source !== "ogb") continue;
+    if (!file.path.startsWith(options.pathPrefix)) continue;
+    if (file.kind !== undefined && !managedKinds.has(file.kind as "skill" | "agent")) continue;
+    const skillName = file.path.slice(options.pathPrefix.length).split("/")[0];
+    if (!skillName) continue;
+    const skillRelDir = `${options.pathPrefix}${skillName}`;
+    if (keepSkillDirs.has(skillRelDir)) continue;
+    const files = staleByDir.get(skillRelDir) ?? [];
+    files.push(file);
+    staleByDir.set(skillRelDir, files);
+  }
+
+  for (const [skillRelDir, managedFiles] of staleByDir) {
+    const skillPath = targetPathFromReportPath(options.root, skillRelDir);
+    const removedKind = managedFiles.some((file) => file.kind === "agent") ? "agent" : "skill";
+
+    if (!dirExists(skillPath)) {
+      options.state.managedFiles = options.state.managedFiles.filter((item) =>
+        !(item.source === "ogb" && (item.path === skillRelDir || item.path.startsWith(`${skillRelDir}/`)))
+      );
+      continue;
+    }
+
+    const managedByPath = new Map(managedFiles.map((file) => [file.path, file]));
+    const actualPaths = listFilesRecursive(skillPath)
+      .map((filePath) => `${skillRelDir}/${toPosix(path.relative(skillPath, filePath))}`);
+    const hasUntrackedFile = actualPaths.some((filePath) => !managedByPath.has(filePath));
+    const hasEditedFile = managedFiles.some((file) => {
+      const targetPath = targetPathFromReportPath(options.root, file.path);
+      return fileExists(targetPath) && sha256File(targetPath) !== file.sha256;
+    });
+    if (!options.force && (hasUntrackedFile || hasEditedFile)) {
+      warnings.push(`${options.label} conflict: ${skillRelDir} was edited manually; leaving stale skill in place`);
+      continue;
+    }
+
+    options.backupSession.backupExisting(skillPath);
+    fs.rmSync(skillPath, { recursive: true, force: true });
+    options.state.managedFiles = options.state.managedFiles.filter((item) =>
+      !(item.source === "ogb" && (item.path === skillRelDir || item.path.startsWith(`${skillRelDir}/`)))
+    );
+    removed.push(skillRelDir);
+    removedDetails.push({ path: skillRelDir, kind: removedKind });
+  }
+
+  return { removed, removedDetails, warnings };
+}
+
 function copyManagedGlobalSkill(options: {
   state: ReturnType<typeof emptySyncState>;
-  globalRoot: string;
+  homeDir: string;
   sourceDir: string;
   sourceBaseDir: string;
   targetName: string;
@@ -1246,49 +1624,365 @@ function copyManagedGlobalSkill(options: {
   dryRun?: boolean;
   force?: boolean;
 }): { promoted?: string; warning?: string } {
-  const relDir = `skills/${safeGlobalSegment(options.targetName)}`;
-  const reportDir = globalOpenCodeRelPath(relDir);
-  const reportSkillPath = `${reportDir}/SKILL.md`;
-  const targetDir = globalTargetPath(options.globalRoot, relDir);
-  const currentSkillFile = path.join(targetDir, "SKILL.md");
-  if (options.dryRun) return { promoted: reportDir };
-
-  const previousHash = managedHashFor(options.state, reportSkillPath, "ogb");
-  if (dirExists(targetDir) && !options.force && !previousHash) {
-    return { warning: `Global skill conflict: ${reportDir} exists and is not managed by ogb; use --force to overwrite` };
-  }
-  if (fileExists(currentSkillFile) && !options.force && previousHash && sha256File(currentSkillFile) !== previousHash) {
-    return { warning: `Global skill conflict: ${reportDir} was edited manually; use --force to overwrite` };
-  }
-
-  if (dirExists(targetDir)) options.backupSession.backupExisting(targetDir);
-  copyDir(options.sourceDir, targetDir, options.sourceBaseDir);
-  upsertManagedFile(options.state, {
-    path: reportSkillPath,
-    sha256: sha256File(path.join(targetDir, "SKILL.md")),
-    source: "ogb",
+  return copyManagedSkillDir({
+    state: options.state,
+    targetRoot: options.homeDir,
+    reportDir: globalOpenCodeRelPath(`skills/${safeGlobalSegment(options.targetName)}`),
+    sourceDir: options.sourceDir,
+    sourceBaseDir: options.sourceBaseDir,
+    label: "Global skill",
+    projection: "opencode",
+    origin: options.sourceDir,
+    backupSession: options.backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
   });
-  return { promoted: reportDir };
+}
+
+function copyManagedAntigravitySkill(options: {
+  state: ReturnType<typeof emptySyncState>;
+  homeDir: string;
+  sourceDir: string;
+  sourceBaseDir: string;
+  targetName: string;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): { promoted?: string; warning?: string } {
+  return copyManagedSkillDir({
+    state: options.state,
+    targetRoot: options.homeDir,
+    reportDir: globalAntigravityRelPath(`skills/${safeGlobalSegment(options.targetName)}`),
+    sourceDir: options.sourceDir,
+    sourceBaseDir: options.sourceBaseDir,
+    label: "Antigravity skill",
+    projection: "antigravity",
+    origin: options.sourceDir,
+    backupSession: options.backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+}
+
+function listGeminiGlobalAgentFiles(homeDir: string): Array<{ agentName: string; sourcePath: string; sourceRelPath: string }> {
+  const agentsRoot = path.join(homeDir, ".gemini", "agents");
+  return listFilesRecursive(agentsRoot)
+    .filter((filePath) => filePath.endsWith(".md"))
+    .map((sourcePath) => ({
+      agentName: safeGlobalSegment(path.basename(sourcePath, ".md")),
+      sourcePath,
+      sourceRelPath: toPosix(path.relative(agentsRoot, sourcePath)),
+    }))
+    .sort((a, b) => a.sourceRelPath.localeCompare(b.sourceRelPath));
+}
+
+function listGeminiExtensionAgentFiles(homeDir: string): Array<{
+  extensionName: string;
+  extensionDir: string;
+  agentName: string;
+  sourcePath: string;
+  sourceRelPath: string;
+}> {
+  const extensionsRoot = path.join(homeDir, ".gemini", "extensions");
+  if (!dirExists(extensionsRoot)) return [];
+
+  const out: Array<{
+    extensionName: string;
+    extensionDir: string;
+    agentName: string;
+    sourcePath: string;
+    sourceRelPath: string;
+  }> = [];
+  for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
+    const extensionDir = path.join(extensionsRoot, extensionName);
+    const agentsRoot = path.join(extensionDir, "agents");
+    for (const sourcePath of listFilesRecursive(agentsRoot).filter((filePath) => filePath.endsWith(".md")).sort()) {
+      out.push({
+        extensionName,
+        extensionDir,
+        agentName: safeGlobalSegment(path.basename(sourcePath, ".md")),
+        sourcePath,
+        sourceRelPath: toPosix(path.relative(extensionDir, sourcePath)),
+      });
+    }
+  }
+  return out.sort((a, b) => `${a.extensionName}/${a.sourceRelPath}`.localeCompare(`${b.extensionName}/${b.sourceRelPath}`));
+}
+
+function workflowNameFromSource(root: string, sourcePath: string): string {
+  const relPath = toPosix(path.relative(root, sourcePath));
+  const extension = path.extname(relPath);
+  const withoutExtension = extension ? relPath.slice(0, -extension.length) : relPath;
+  return withoutExtension.split("/").map(safeGlobalSegment).filter(Boolean).join("-") || "workflow";
+}
+
+function listGeminiGlobalWorkflowFiles(homeDir: string): Array<{ workflowName: string; sourcePath: string; sourceRelPath: string }> {
+  const roots = [
+    path.join(homeDir, ".gemini", "workflows"),
+    path.join(homeDir, ".gemini", ".agent", "workflows"),
+    path.join(homeDir, ".gemini", ".agents", "workflows"),
+  ];
+  const out: Array<{ workflowName: string; sourcePath: string; sourceRelPath: string }> = [];
+  for (const root of roots) {
+    for (const sourcePath of listFilesRecursive(root).filter((filePath) => filePath.endsWith(".md")).sort()) {
+      out.push({
+        workflowName: workflowNameFromSource(root, sourcePath),
+        sourcePath,
+        sourceRelPath: toPosix(path.relative(root, sourcePath)),
+      });
+    }
+  }
+  return out.sort((a, b) => a.sourcePath.localeCompare(b.sourcePath));
+}
+
+function listGeminiExtensionWorkflowFiles(homeDir: string): Array<{
+  extensionName: string;
+  extensionDir: string;
+  workflowName: string;
+  sourcePath: string;
+  sourceRelPath: string;
+}> {
+  const extensionsRoot = path.join(homeDir, ".gemini", "extensions");
+  if (!dirExists(extensionsRoot)) return [];
+
+  const out: Array<{
+    extensionName: string;
+    extensionDir: string;
+    workflowName: string;
+    sourcePath: string;
+    sourceRelPath: string;
+  }> = [];
+  for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
+    const extensionDir = path.join(extensionsRoot, extensionName);
+    for (const relRoot of [".agent/workflows", ".agents/workflows", "_agent/workflows", "_agents/workflows"]) {
+      const workflowsRoot = path.join(extensionDir, ...relRoot.split("/"));
+      for (const sourcePath of listFilesRecursive(workflowsRoot).filter((filePath) => filePath.endsWith(".md")).sort()) {
+        out.push({
+          extensionName,
+          extensionDir,
+          workflowName: workflowNameFromSource(workflowsRoot, sourcePath),
+          sourcePath,
+          sourceRelPath: toPosix(path.relative(extensionDir, sourcePath)),
+        });
+      }
+    }
+  }
+  return out.sort((a, b) => `${a.extensionName}/${a.sourceRelPath}`.localeCompare(`${b.extensionName}/${b.sourceRelPath}`));
+}
+
+function antigravityAgentPromptMarkdown(options: {
+  targetName: string;
+  description: string;
+  body: string;
+  sourcePath: string;
+  sourceRelPath: string;
+  extensionName?: string;
+  extensionDir?: string;
+  model?: string;
+  temperature?: number;
+  maxSteps?: number;
+}): string {
+  const lines = [
+    "<!-- GENERATED BY OpenCode Gemini Bridge. DO NOT EDIT. -->",
+    `<!-- ${ANTIGRAVITY_AGENT_MARKER} -->`,
+  ];
+  if (options.extensionName) lines.push(`<!-- Source extension: ${options.extensionName} -->`);
+  lines.push(
+    `<!-- Source agent: ${options.sourceRelPath} -->`,
+    `<!-- Source file: ${options.sourcePath} -->`,
+    `<!-- Native Antigravity agent: ${safeGlobalSegment(options.targetName)} -->`,
+    `<!-- Description: ${options.description} -->`,
+  );
+  if (options.model) lines.push(`<!-- Source model: ${options.model} -->`);
+  if (options.temperature !== undefined) lines.push(`<!-- Source temperature: ${options.temperature} -->`);
+  if (options.maxSteps !== undefined) lines.push(`<!-- Source maxSteps: ${options.maxSteps} -->`);
+  lines.push(
+    "",
+    normalizeGlobalCommandPrompt(options.body, options.extensionDir),
+    "",
+  );
+  return lines.join("\n");
+}
+
+function writeManagedAntigravityText(options: {
+  state: ReturnType<typeof emptySyncState>;
+  homeDir: string;
+  reportPath: string;
+  content: string;
+  kind: "agent" | "workflow";
+  label: string;
+  origin: string;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): { promoted?: string; warning?: string } {
+  const targetPath = targetPathFromReportPath(options.homeDir, options.reportPath);
+  if (options.dryRun) return { promoted: options.reportPath };
+
+  const desiredHash = sha256Text(options.content);
+  if (fileExists(targetPath) && sha256File(targetPath) === desiredHash) {
+    upsertManagedFile(options.state, {
+      path: options.reportPath,
+      sha256: desiredHash,
+      source: "ogb",
+      kind: options.kind,
+      projection: "antigravity",
+      origin: options.origin,
+    });
+    return { promoted: options.reportPath };
+  }
+
+  const previousHash = managedHashFor(options.state, options.reportPath, "ogb");
+  if (fileExists(targetPath) && !options.force && !previousHash) {
+    return { warning: `${options.label} conflict: ${options.reportPath} exists and is not managed by ogb; use --force to overwrite` };
+  }
+  if (fileExists(targetPath) && !options.force && previousHash && sha256File(targetPath) !== previousHash) {
+    return { warning: `${options.label} conflict: ${options.reportPath} was edited manually; use --force to overwrite` };
+  }
+
+  if (fileExists(targetPath)) options.backupSession.backupExisting(targetPath);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, options.content, "utf8");
+  upsertManagedFile(options.state, {
+    path: options.reportPath,
+    sha256: desiredHash,
+    source: "ogb",
+    kind: options.kind,
+    projection: "antigravity",
+    origin: options.origin,
+  });
+  return { promoted: options.reportPath };
+}
+
+function removeStaleManagedFiles(options: {
+  state: ReturnType<typeof emptySyncState>;
+  root: string;
+  pathPrefix: string;
+  keepPaths: Set<string>;
+  backupSession: BackupSession;
+  kind: "agent" | "workflow";
+  label: string;
+  force?: boolean;
+}): { removed: string[]; warnings: string[] } {
+  const removed: string[] = [];
+  const warnings: string[] = [];
+  for (const file of [...options.state.managedFiles]) {
+    if (file.source !== "ogb") continue;
+    if (file.kind !== options.kind) continue;
+    if (!file.path.startsWith(options.pathPrefix)) continue;
+    if (options.keepPaths.has(file.path)) continue;
+
+    const targetPath = targetPathFromReportPath(options.root, file.path);
+    if (!fileExists(targetPath)) {
+      options.state.managedFiles = options.state.managedFiles.filter((item) =>
+        !(item.path === file.path && item.source === "ogb")
+      );
+      continue;
+    }
+    if (!options.force && sha256File(targetPath) !== file.sha256) {
+      warnings.push(`${options.label} conflict: ${file.path} was edited manually; leaving stale file in place`);
+      continue;
+    }
+
+    options.backupSession.backupExisting(targetPath);
+    fs.rmSync(targetPath, { force: true });
+    options.state.managedFiles = options.state.managedFiles.filter((item) =>
+      !(item.path === file.path && item.source === "ogb")
+    );
+    removed.push(file.path);
+  }
+  return { removed, warnings };
+}
+
+function writeManagedAntigravityAgent(options: {
+  state: ReturnType<typeof emptySyncState>;
+  homeDir: string;
+  targetName: string;
+  description: string;
+  body: string;
+  sourcePath: string;
+  sourceRelPath: string;
+  extensionName?: string;
+  extensionDir?: string;
+  model?: string;
+  temperature?: number;
+  maxSteps?: number;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): { promoted?: string; warning?: string } {
+  const safeName = safeGlobalSegment(options.targetName);
+  const agentReportPath = globalAntigravityRelPath(`agents/${safeName}`);
+  const promptReportPath = globalAntigravityRelPath(`agent_prompts/${safeName}.md`);
+  const promptPath = targetPathFromReportPath(options.homeDir, promptReportPath);
+  const prompt = antigravityAgentPromptMarkdown({
+    targetName: safeName,
+    description: options.description,
+    body: options.body,
+    sourcePath: options.sourcePath,
+    sourceRelPath: options.sourceRelPath,
+    extensionName: options.extensionName,
+    extensionDir: options.extensionDir,
+    model: options.model,
+    temperature: options.temperature,
+    maxSteps: options.maxSteps,
+  });
+  const config = `${JSON.stringify({
+    name: safeName,
+    description: options.description,
+    command_spec: {
+      command: "/bin/cat",
+      args: [promptPath],
+    },
+  }, null, 2)}\n`;
+
+  const promptWrite = writeManagedAntigravityText({
+    state: options.state,
+    homeDir: options.homeDir,
+    reportPath: promptReportPath,
+    content: prompt,
+    kind: "agent",
+    label: "Antigravity agent prompt",
+    origin: options.sourcePath,
+    backupSession: options.backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  if (promptWrite.warning) return { warning: promptWrite.warning };
+
+  return writeManagedAntigravityText({
+    state: options.state,
+    homeDir: options.homeDir,
+    reportPath: agentReportPath,
+    content: config,
+    kind: "agent",
+    label: "Antigravity agent",
+    origin: options.sourcePath,
+    backupSession: options.backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
 }
 
 function projectGlobalGeminiSkills(options: {
   homeDir: string;
-  globalRoot: string;
   state: ReturnType<typeof emptySyncState>;
   backupSession: BackupSession;
   dryRun?: boolean;
   force?: boolean;
-}): { promoted: string[]; warnings: string[] } {
+}): ProjectSkillDirsResult {
   const warnings: string[] = [];
   const promoted: string[] = [];
+  const keepSkillFiles = new Set<string>();
   const used = new Set<string>();
 
   for (const skill of listGeminiGlobalSkillDirs(options.homeDir)) {
     const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
     used.add(targetName);
+    keepSkillFiles.add(`${globalOpenCodeRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
     const copy = copyManagedGlobalSkill({
       state: options.state,
-      globalRoot: options.globalRoot,
+      homeDir: options.homeDir,
       sourceDir: skill.sourceDir,
       sourceBaseDir: skill.sourceDir,
       targetName,
@@ -1303,9 +1997,10 @@ function projectGlobalGeminiSkills(options: {
   for (const skill of listGeminiExtensionSkillDirs(options.homeDir)) {
     const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
     used.add(targetName);
+    keepSkillFiles.add(`${globalOpenCodeRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
     const copy = copyManagedGlobalSkill({
       state: options.state,
-      globalRoot: options.globalRoot,
+      homeDir: options.homeDir,
       sourceDir: skill.sourceDir,
       sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
       targetName,
@@ -1317,7 +2012,258 @@ function projectGlobalGeminiSkills(options: {
     if (copy.warning) warnings.push(copy.warning);
   }
 
-  return { promoted, warnings };
+  const stale = options.dryRun
+    ? { removed: [], removedDetails: [], warnings: [] }
+    : removeStaleManagedSkillDirs({
+        state: options.state,
+        root: options.homeDir,
+        pathPrefix: `${GLOBAL_OPENCODE_PREFIX}/skills/`,
+        keepSkillFiles,
+        backupSession: options.backupSession,
+        label: "Global skill",
+        force: options.force,
+      });
+  warnings.push(...stale.warnings);
+
+  return { promoted, removed: stale.removed, warnings };
+}
+
+function projectGlobalAntigravitySkills(options: {
+  homeDir: string;
+  state: ReturnType<typeof emptySyncState>;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): ProjectAntigravitySkillsResult {
+  const warnings: string[] = [];
+  const promoted: string[] = [];
+  const promotedAgents: string[] = [];
+  const keepSkillFiles = new Set<string>();
+  const used = new Set<string>();
+
+  for (const skill of listGeminiGlobalSkillDirs(options.homeDir)) {
+    const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
+    used.add(targetName);
+    keepSkillFiles.add(`${globalAntigravityRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
+    const copy = copyManagedAntigravitySkill({
+      state: options.state,
+      homeDir: options.homeDir,
+      sourceDir: skill.sourceDir,
+      sourceBaseDir: skill.sourceDir,
+      targetName,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
+    });
+    if (copy.promoted) promoted.push(copy.promoted);
+    if (copy.warning) warnings.push(copy.warning);
+  }
+
+  for (const skill of listGeminiExtensionSkillDirs(options.homeDir)) {
+    const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
+    used.add(targetName);
+    keepSkillFiles.add(`${globalAntigravityRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
+    const copy = copyManagedAntigravitySkill({
+      state: options.state,
+      homeDir: options.homeDir,
+      sourceDir: skill.sourceDir,
+      sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
+      targetName,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
+    });
+    if (copy.promoted) promoted.push(copy.promoted);
+    if (copy.warning) warnings.push(copy.warning);
+  }
+
+  const stale = options.dryRun
+    ? { removed: [], removedDetails: [], warnings: [] }
+    : removeStaleManagedSkillDirs({
+        state: options.state,
+        root: options.homeDir,
+        pathPrefix: `${GLOBAL_ANTIGRAVITY_PREFIX}/skills/`,
+        keepSkillFiles,
+        backupSession: options.backupSession,
+        label: "Antigravity skill",
+        managedKinds: ["skill", "agent"],
+        force: options.force,
+      });
+  warnings.push(...stale.warnings);
+
+  const removedAgents = stale.removedDetails
+    .filter((item) => item.kind === "agent")
+    .map((item) => item.path);
+  const removedSkills = stale.removedDetails
+    .filter((item) => item.kind !== "agent")
+    .map((item) => item.path);
+  return { promoted, removed: removedSkills, promotedAgents, removedAgents, warnings };
+}
+
+function projectGlobalAntigravityAgents(options: {
+  homeDir: string;
+  state: ReturnType<typeof emptySyncState>;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): ProjectAntigravityFilesResult {
+  const warnings: string[] = [];
+  const promoted: string[] = [];
+  const keepPaths = new Set<string>();
+  const used = new Set<string>();
+
+  for (const agent of listGeminiGlobalAgentFiles(options.homeDir)) {
+    const targetName = safeSkillTargetName(agent.agentName, used, "gemini");
+    used.add(targetName);
+    const safeName = safeGlobalSegment(targetName);
+    keepPaths.add(globalAntigravityRelPath(`agents/${safeName}`));
+    keepPaths.add(globalAntigravityRelPath(`agent_prompts/${safeName}.md`));
+    const parsed = parseMarkdownAgent(fs.readFileSync(agent.sourcePath, "utf8"), `Gemini global agent: ${agent.sourceRelPath}`);
+    const write = writeManagedAntigravityAgent({
+      state: options.state,
+      homeDir: options.homeDir,
+      targetName,
+      description: parsed.description,
+      body: parsed.body,
+      sourcePath: agent.sourcePath,
+      sourceRelPath: agent.sourceRelPath,
+      model: parsed.model,
+      temperature: parsed.temperature,
+      maxSteps: parsed.maxSteps,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
+    });
+    if (write.promoted) promoted.push(write.promoted);
+    if (write.warning) warnings.push(write.warning);
+  }
+
+  for (const agent of listGeminiExtensionAgentFiles(options.homeDir)) {
+    const targetName = safeSkillTargetName(agent.agentName, used, agent.extensionName);
+    used.add(targetName);
+    const safeName = safeGlobalSegment(targetName);
+    keepPaths.add(globalAntigravityRelPath(`agents/${safeName}`));
+    keepPaths.add(globalAntigravityRelPath(`agent_prompts/${safeName}.md`));
+    const parsed = parseMarkdownAgent(fs.readFileSync(agent.sourcePath, "utf8"), `Gemini extension agent from ${agent.extensionName}`);
+    const write = writeManagedAntigravityAgent({
+      state: options.state,
+      homeDir: options.homeDir,
+      targetName,
+      description: parsed.description,
+      body: parsed.body,
+      sourcePath: agent.sourcePath,
+      sourceRelPath: agent.sourceRelPath,
+      extensionName: agent.extensionName,
+      extensionDir: agent.extensionDir,
+      model: parsed.model,
+      temperature: parsed.temperature,
+      maxSteps: parsed.maxSteps,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
+    });
+    if (write.promoted) promoted.push(write.promoted);
+    if (write.warning) warnings.push(write.warning);
+  }
+
+  const staleAgents = options.dryRun
+    ? { removed: [], warnings: [] }
+    : removeStaleManagedFiles({
+        state: options.state,
+        root: options.homeDir,
+        pathPrefix: `${GLOBAL_ANTIGRAVITY_PREFIX}/agents/`,
+        keepPaths,
+        backupSession: options.backupSession,
+        kind: "agent",
+        label: "Antigravity agent",
+        force: options.force,
+      });
+  const stalePrompts = options.dryRun
+    ? { removed: [], warnings: [] }
+    : removeStaleManagedFiles({
+        state: options.state,
+        root: options.homeDir,
+        pathPrefix: `${GLOBAL_ANTIGRAVITY_PREFIX}/agent_prompts/`,
+        keepPaths,
+        backupSession: options.backupSession,
+        kind: "agent",
+        label: "Antigravity agent prompt",
+        force: options.force,
+      });
+  warnings.push(...staleAgents.warnings, ...stalePrompts.warnings);
+
+  return { promoted, removed: [...staleAgents.removed, ...stalePrompts.removed], warnings };
+}
+
+function projectGlobalAntigravityWorkflows(options: {
+  homeDir: string;
+  state: ReturnType<typeof emptySyncState>;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): ProjectAntigravityFilesResult {
+  const warnings: string[] = [];
+  const promoted: string[] = [];
+  const keepPaths = new Set<string>();
+  const used = new Set<string>();
+
+  for (const workflow of listGeminiGlobalWorkflowFiles(options.homeDir)) {
+    const targetName = safeSkillTargetName(workflow.workflowName, used, "gemini");
+    used.add(targetName);
+    const reportPath = globalAntigravityRelPath(`global_workflows/${safeGlobalSegment(targetName)}.md`);
+    keepPaths.add(reportPath);
+    const write = writeManagedAntigravityText({
+      state: options.state,
+      homeDir: options.homeDir,
+      reportPath,
+      content: `${fs.readFileSync(workflow.sourcePath, "utf8").trimEnd()}\n`,
+      kind: "workflow",
+      label: "Antigravity workflow",
+      origin: workflow.sourcePath,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
+    });
+    if (write.promoted) promoted.push(write.promoted);
+    if (write.warning) warnings.push(write.warning);
+  }
+
+  for (const workflow of listGeminiExtensionWorkflowFiles(options.homeDir)) {
+    const targetName = safeSkillTargetName(workflow.workflowName, used, workflow.extensionName);
+    used.add(targetName);
+    const reportPath = globalAntigravityRelPath(`global_workflows/${safeGlobalSegment(targetName)}.md`);
+    keepPaths.add(reportPath);
+    const write = writeManagedAntigravityText({
+      state: options.state,
+      homeDir: options.homeDir,
+      reportPath,
+      content: `${resolveExtensionPlaceholders(fs.readFileSync(workflow.sourcePath, "utf8"), workflow.extensionDir).trimEnd()}\n`,
+      kind: "workflow",
+      label: "Antigravity workflow",
+      origin: workflow.sourcePath,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
+    });
+    if (write.promoted) promoted.push(write.promoted);
+    if (write.warning) warnings.push(write.warning);
+  }
+
+  const stale = options.dryRun
+    ? { removed: [], warnings: [] }
+    : removeStaleManagedFiles({
+        state: options.state,
+        root: options.homeDir,
+        pathPrefix: `${GLOBAL_ANTIGRAVITY_PREFIX}/global_workflows/`,
+        keepPaths,
+        backupSession: options.backupSession,
+        kind: "workflow",
+        label: "Antigravity workflow",
+        force: options.force,
+      });
+  warnings.push(...stale.warnings);
+
+  return { promoted, removed: stale.removed, warnings };
 }
 
 function normalizeYoloOptionalPermissions(text: string): string {
@@ -1333,10 +2279,11 @@ function hasOnlyOptionalYoloPermissionDrift(file: BuiltInTextFile, currentText: 
   return normalizeYoloOptionalPermissions(currentText) === normalizeYoloOptionalPermissions(file.content);
 }
 
-function projectExtensionSkills(options: { projectRoot: string; homeDir: string; backupSession: BackupSession; dryRun?: boolean; force?: boolean }): { promoted: string[]; warnings: string[] } {
+function projectExtensionSkills(options: { projectRoot: string; homeDir: string; backupSession: BackupSession; dryRun?: boolean; force?: boolean }): ProjectSkillDirsResult {
   const extensionSkills = listGeminiExtensionSkillDirs(options.homeDir);
   const warnings: string[] = [];
   const promoted: string[] = [];
+  const keepSkillFiles = new Set<string>();
   const used = new Set<string>();
   const state = readSyncState(options.projectRoot) ?? emptySyncState(OGB_VERSION);
 
@@ -1344,38 +2291,45 @@ function projectExtensionSkills(options: { projectRoot: string; homeDir: string;
     const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
     used.add(targetName);
     const relPath = `.opencode/skills/${targetName}`;
-    const targetDir = path.join(options.projectRoot, ".opencode", "skills", targetName);
+    keepSkillFiles.add(`${relPath}/SKILL.md`);
 
     if (options.dryRun) {
       promoted.push(relPath);
       continue;
     }
 
-    const previousHash = managedHashFor(state, `${relPath}/SKILL.md`, "ogb");
-    const currentSkillFile = path.join(targetDir, "SKILL.md");
-    if (fs.existsSync(targetDir) && !options.force && previousHash && fs.existsSync(currentSkillFile) && sha256File(currentSkillFile) !== previousHash) {
-      warnings.push(`Skill conflict: ${relPath} was edited manually; use --force to overwrite`);
-      continue;
-    }
-
-    if (fs.existsSync(targetDir) && !options.force && !previousHash) {
-      warnings.push(`Skill conflict: ${relPath} exists and is not managed by ogb; use --force to overwrite`);
-      continue;
-    }
-
-    if (fs.existsSync(targetDir)) options.backupSession.backupExisting(targetDir);
-    copyDir(skill.sourceDir, targetDir, path.dirname(path.dirname(skill.sourceDir)));
-    const copiedSkillFile = path.join(targetDir, "SKILL.md");
-    upsertManagedFile(state, {
-      path: `${relPath}/SKILL.md`,
-      sha256: sha256File(copiedSkillFile),
-      source: "ogb",
+    const copy = copyManagedSkillDir({
+      state,
+      targetRoot: options.projectRoot,
+      reportDir: relPath,
+      sourceDir: skill.sourceDir,
+      sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
+      label: "Skill",
+      projection: "opencode",
+      origin: skill.sourceDir,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
     });
-    promoted.push(relPath);
+    if (copy.promoted) promoted.push(copy.promoted);
+    if (copy.warning) warnings.push(copy.warning);
   }
 
+  const stale = options.dryRun
+    ? { removed: [], removedDetails: [], warnings: [] }
+    : removeStaleManagedSkillDirs({
+        state,
+        root: options.projectRoot,
+        pathPrefix: ".opencode/skills/",
+        keepSkillFiles,
+        backupSession: options.backupSession,
+        label: "Skill",
+        force: options.force,
+      });
+  warnings.push(...stale.warnings);
+
   if (!options.dryRun) writeSyncState(state, options.projectRoot);
-  return { promoted, warnings };
+  return { promoted, removed: stale.removed, warnings };
 }
 
 function projectBuiltInFiles(options: {
@@ -1589,13 +2543,48 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
 
   const projectedSkills = projectGlobalGeminiSkills({
     homeDir: paths.homeDir,
-    globalRoot,
     state,
     backupSession,
     dryRun: options.dryRun,
     force: options.force,
   });
   warnings.push(...projectedSkills.warnings);
+
+  const projectedAntigravitySkills = projectGlobalAntigravitySkills({
+    homeDir: paths.homeDir,
+    state,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravitySkills.warnings);
+
+  const projectedAntigravityAgents = projectGlobalAntigravityAgents({
+    homeDir: paths.homeDir,
+    state,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravityAgents.warnings);
+
+  const projectedAntigravityWorkflows = projectGlobalAntigravityWorkflows({
+    homeDir: paths.homeDir,
+    state,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravityWorkflows.warnings);
+
+  const projectedAntigravityMcps = projectGlobalAntigravityMcps({
+    homeDir: paths.homeDir,
+    state,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravityMcps.warnings);
 
   const projectedExtensionMap = writeGlobalExtensionMap({
     paths,
@@ -1647,6 +2636,15 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     projectedExtensionCommands: projectedExtensionCommands.promoted,
     removedExtensionCommands: [],
     projectedSkills: projectedSkills.promoted,
+    removedSkills: projectedSkills.removed,
+    projectedAntigravitySkills: projectedAntigravitySkills.promoted,
+    removedAntigravitySkills: projectedAntigravitySkills.removed,
+    projectedAntigravityAgents: projectedAntigravityAgents.promoted,
+    removedAntigravityAgents: [...projectedAntigravitySkills.removedAgents, ...projectedAntigravityAgents.removed],
+    projectedAntigravityWorkflows: projectedAntigravityWorkflows.promoted,
+    removedAntigravityWorkflows: projectedAntigravityWorkflows.removed,
+    projectedAntigravityMcps: projectedAntigravityMcps.promoted,
+    removedAntigravityMcps: projectedAntigravityMcps.removed,
     projectedTuiFiles: [],
     projectedExternalPlugins: [],
     projectedExternalIntegrationFiles: [],
@@ -1667,8 +2665,17 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     if (projectedExtensionAgents.promoted.length > 0) console.log(`${action} ${projectedExtensionAgents.promoted.length} global Gemini extension agent(s)`);
     if (modelFallbacks.length > 0) console.log(`${action} ${modelFallbacks.length} global Gemini extension model fallback(s)`);
     if (projectedSkills.promoted.length > 0) console.log(`${action} ${projectedSkills.promoted.length} global Gemini skill(s)`);
+    if (projectedSkills.removed.length > 0) console.log(`Removed ${projectedSkills.removed.length} stale global Gemini skill(s)`);
+    if (projectedAntigravitySkills.promoted.length > 0) console.log(`${action} ${projectedAntigravitySkills.promoted.length} global Antigravity skill(s)`);
+    if (projectedAntigravitySkills.removed.length > 0) console.log(`Removed ${projectedAntigravitySkills.removed.length} stale global Antigravity skill(s)`);
+    if (projectedAntigravityAgents.promoted.length > 0) console.log(`${action} ${projectedAntigravityAgents.promoted.length} global Antigravity custom agent(s)`);
+    if (report.removedAntigravityAgents.length > 0) console.log(`Removed ${report.removedAntigravityAgents.length} stale global Antigravity custom agent file(s)`);
+    if (projectedAntigravityWorkflows.promoted.length > 0) console.log(`${action} ${projectedAntigravityWorkflows.promoted.length} global Antigravity workflow(s)`);
+    if (projectedAntigravityWorkflows.removed.length > 0) console.log(`Removed ${projectedAntigravityWorkflows.removed.length} stale global Antigravity workflow(s)`);
+    if (projectedAntigravityMcps.promoted.length > 0) console.log(`${action} ${projectedAntigravityMcps.promoted.length} global Antigravity MCP server(s)`);
+    if (projectedAntigravityMcps.removed.length > 0) console.log(`Removed ${projectedAntigravityMcps.removed.length} stale global Antigravity MCP server(s)`);
     if (projectedExtensionMap.promoted) console.log(`${options.dryRun ? "Would generate" : "Generated"} global Gemini extension map at ${projectedExtensionMap.promoted}`);
-    if (!projectedConfig.promoted && report.projectedCommands.length === 0 && report.projectedAgents.length === 0 && report.projectedExtensionAgents.length === 0 && report.projectedSkills.length === 0) {
+    if (!projectedConfig.promoted && report.projectedCommands.length === 0 && report.projectedAgents.length === 0 && report.projectedExtensionAgents.length === 0 && report.projectedSkills.length === 0 && report.projectedAntigravitySkills.length === 0 && report.projectedAntigravityAgents.length === 0 && report.projectedAntigravityWorkflows.length === 0 && report.projectedAntigravityMcps.length === 0) {
       console.log("No global Gemini rules, MCPs, commands, agents, or skills found to sync.");
     }
   }
@@ -1747,6 +2754,41 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     force: options.force,
   });
   warnings.push(...projectedSkills.warnings);
+
+  const antigravityState = readSyncState(paths.projectRoot) ?? emptySyncState(OGB_VERSION);
+  const projectedAntigravitySkills = projectGlobalAntigravitySkills({
+    homeDir: paths.homeDir,
+    state: antigravityState,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravitySkills.warnings);
+  const projectedAntigravityAgents = projectGlobalAntigravityAgents({
+    homeDir: paths.homeDir,
+    state: antigravityState,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravityAgents.warnings);
+  const projectedAntigravityWorkflows = projectGlobalAntigravityWorkflows({
+    homeDir: paths.homeDir,
+    state: antigravityState,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravityWorkflows.warnings);
+  const projectedAntigravityMcps = projectGlobalAntigravityMcps({
+    homeDir: paths.homeDir,
+    state: antigravityState,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedAntigravityMcps.warnings);
+  if (!options.dryRun) writeSyncState(antigravityState, paths.projectRoot);
 
   const projectedTui = ensureTuiSidebar({
     projectRoot: paths.projectRoot,
@@ -1829,6 +2871,15 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     projectedExtensionCommands: projectedExtensionCommands.projectedCommands,
     removedExtensionCommands: projectedExtensionCommands.removedCommands,
     projectedSkills: projectedSkills.promoted,
+    removedSkills: projectedSkills.removed,
+    projectedAntigravitySkills: projectedAntigravitySkills.promoted,
+    removedAntigravitySkills: projectedAntigravitySkills.removed,
+    projectedAntigravityAgents: projectedAntigravityAgents.promoted,
+    removedAntigravityAgents: [...projectedAntigravitySkills.removedAgents, ...projectedAntigravityAgents.removed],
+    projectedAntigravityWorkflows: projectedAntigravityWorkflows.promoted,
+    removedAntigravityWorkflows: projectedAntigravityWorkflows.removed,
+    projectedAntigravityMcps: projectedAntigravityMcps.promoted,
+    removedAntigravityMcps: projectedAntigravityMcps.removed,
     projectedTuiFiles: [projectedTui.plugin, projectedTui.config]
       .filter((item) => item.status === "created" || item.status === "updated" || item.status === "preview")
       .map((item) => item.relPath),
@@ -1875,6 +2926,15 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     if (projectedExtensionCommands.projectedCommands.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedExtensionCommands.projectedCommands.length} Gemini extension command(s)`);
     if (projectedExtensionCommands.removedCommands.length > 0) console.log(`Removed ${projectedExtensionCommands.removedCommands.length} stale Gemini extension command(s)`);
     if (projectedSkills.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedSkills.promoted.length} Gemini extension skill(s)`);
+    if (projectedSkills.removed.length > 0) console.log(`Removed ${projectedSkills.removed.length} stale Gemini extension skill(s)`);
+    if (projectedAntigravitySkills.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedAntigravitySkills.promoted.length} global Antigravity skill(s)`);
+    if (projectedAntigravitySkills.removed.length > 0) console.log(`Removed ${projectedAntigravitySkills.removed.length} stale global Antigravity skill(s)`);
+    if (projectedAntigravityAgents.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedAntigravityAgents.promoted.length} global Antigravity custom agent(s)`);
+    if (report.removedAntigravityAgents.length > 0) console.log(`Removed ${report.removedAntigravityAgents.length} stale global Antigravity custom agent file(s)`);
+    if (projectedAntigravityWorkflows.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedAntigravityWorkflows.promoted.length} global Antigravity workflow(s)`);
+    if (projectedAntigravityWorkflows.removed.length > 0) console.log(`Removed ${projectedAntigravityWorkflows.removed.length} stale global Antigravity workflow(s)`);
+    if (projectedAntigravityMcps.promoted.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${projectedAntigravityMcps.promoted.length} global Antigravity MCP server(s)`);
+    if (projectedAntigravityMcps.removed.length > 0) console.log(`Removed ${projectedAntigravityMcps.removed.length} stale global Antigravity MCP server(s)`);
     if (report.projectedTuiFiles.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${report.projectedTuiFiles.length} TUI sidebar file(s)`);
     if (report.projectedExternalPlugins.length > 0) console.log(`${options.dryRun ? "Would enable" : "Enabled"} external plugin(s): ${report.projectedExternalPlugins.join(", ")}`);
     if (report.projectedExternalIntegrationFiles.length > 0) console.log(`${options.dryRun ? "Would project" : "Projected"} ${report.projectedExternalIntegrationFiles.length} external integration file(s)`);

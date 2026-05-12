@@ -10,8 +10,13 @@ function script(name: string): string {
   return fs.readFileSync(path.join(repoRoot, "scripts", name), "utf8");
 }
 
-test("mac installer contract delegates the ritual to ogb install", () => {
-  const text = script("install-mac.sh");
+function assertScriptExists(name: string): void {
+  assert.equal(fs.existsSync(path.join(repoRoot, "scripts", name)), true, `Expected scripts/${name} to exist.`);
+}
+
+test("posix installer contract delegates the ritual to ogb install", () => {
+  assertScriptExists("install-posix.sh");
+  const text = script("install-posix.sh");
 
   assert.match(text, /INSTALL_ARGS=\(--project "\$PROJECT_DIR" install --rulesync "\$RULESYNC_MODE"\)/);
   assert.match(text, /Running OGB install ritual/);
@@ -25,15 +30,61 @@ test("mac installer contract delegates the ritual to ogb install", () => {
   assert.doesNotMatch(text, /\brun_final_check\b/);
 });
 
+test("mac installer remains a darwin wrapper around the shared POSIX installer", () => {
+  const text = script("install-mac.sh");
+
+  assert.match(text, /install-posix\.sh/);
+  assert.match(text, /--platform darwin/);
+});
+
+test("linux public scripts wrap the shared POSIX implementation", () => {
+  for (const name of ["install-linux.sh", "bootstrap-linux.sh", "upgrade-linux.sh", "uninstall-linux.sh"]) {
+    assertScriptExists(name);
+  }
+
+  assert.match(script("install-linux.sh"), /install-posix\.sh/);
+  assert.match(script("install-linux.sh"), /--platform linux/);
+  assert.match(script("bootstrap-linux.sh"), /install-linux\.sh/);
+  assert.match(script("bootstrap-linux.sh"), /install-posix\.sh/);
+  assert.match(script("bootstrap-linux.sh"), /install-mac\.sh/);
+  assert.match(script("bootstrap-linux.sh"), /legacy POSIX installer/);
+  assert.match(script("bootstrap-linux.sh"), /opencode-gemini-bridge-pack\.zip/);
+  assert.match(script("upgrade-linux.sh"), /install-linux\.sh/);
+  assert.match(script("uninstall-linux.sh"), /uninstall-posix\.sh/);
+});
+
+test("linux POSIX installer persists env without macOS zsh config", () => {
+  assertScriptExists("install-posix.sh");
+  const text = script("install-posix.sh");
+
+  assert.match(text, /linux_profile_targets/);
+  assert.match(text, /\.profile/);
+  assert.match(text, /\.bashrc/);
+  assert.match(text, /\.zshrc/);
+  assert.match(text, /\.config\/fish\/config\.fish/);
+  assert.match(text, /set -gx OPENCODE_ENABLE_EXA 1/);
+  assert.match(text, /contains "\$PREFIX\/bin" \\\$PATH/);
+  assert.match(text, /OPENCODE_ENABLE_EXA/);
+  assert.match(text, /repair_ogb_shim/);
+  assert.match(text, /npm install did not complete/);
+  assert.match(text, /rm -f "\$OGB_BIN"/);
+  assert.match(text, /exec node/);
+  assert.match(text, /Installed ogb verification returned no version output/);
+  const linuxTargets = text.match(/linux_profile_targets\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.doesNotMatch(linuxTargets, /\.config\/zsh/);
+});
+
 test("windows installer contract delegates the ritual to ogb install", () => {
   const text = script("install-windows.ps1");
 
   assert.match(text, /\$InstallArgs = @\("--project", \$Project, "install", "--rulesync", \$Rulesync, "--windows"\)/);
   assert.match(text, /Running OGB install ritual/);
+  assert.match(text, /%USERPROFILE%\\\.ai\\opencode-pack\\opencode-gemini-bridge-cli\\dist\\cli\.js/);
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-check/);
   assert.match(text, /--reset-global/);
+  assert.doesNotMatch(text, /node `"\$CliTarget`" %\*/);
   assert.doesNotMatch(text, /\bsetup-ux\b/);
   assert.doesNotMatch(text, /\bsetup-opencode\b/);
   assert.doesNotMatch(text, /\bcleanup-home\b/);

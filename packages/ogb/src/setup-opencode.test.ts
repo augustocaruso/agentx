@@ -277,6 +277,60 @@ test("startup plugin uses global generated lock and status when cwd is home", as
   }
 });
 
+test("startup plugin expands runtime home placeholders before spawning", async () => {
+  const root = tempProject();
+  const homeDir = path.join(root, "home");
+  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const pluginDir = path.join(root, "plugin");
+  const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
+  const runnerPath = path.join(homeDir, "runner.mjs");
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
+  fs.writeFileSync(runnerPath, "console.log('RUNNER_ARGS=' + JSON.stringify(process.argv.slice(2)))\n", "utf8");
+  fs.writeFileSync(path.join(generatedDir, "ogb-startup-sync.json"), JSON.stringify({
+    version: 1,
+    enabled: true,
+    autoUpdate: false,
+    command: process.execPath,
+    baseArgs: ["{OGB_HOME}/runner.mjs", "--project", "{OGB_HOME}"],
+    syncArgs: ["startup-sync"],
+    updateArgs: ["check-update", "--no-write"],
+    lockTtlMs: 10 * 60_000,
+  }, null, 2) + "\n");
+
+  const previousHome = process.env.HOME;
+  const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
+  process.env.HOME = homeDir;
+  process.env.OGB_STARTUP_DELAY_MS = "600000";
+  try {
+    const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}-runtime-home`);
+    const plugin = await mod.default({
+      directory: homeDir,
+      worktree: homeDir,
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async () => undefined },
+      },
+    });
+
+    await plugin.event({ event: { type: "session.created" } });
+
+    const statusPath = path.join(generatedDir, "ogb-plugin-status.json");
+    await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "pass");
+
+    const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
+    assert.deepEqual(status.args, [runnerPath, "--project", homeDir, "startup-sync"]);
+    assert.match(status.stdoutTail, /RUNNER_ARGS=/);
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
+    else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+  }
+});
+
 test("startup plugin sends OGB command output directly to chat", async () => {
   const root = tempProject();
   const projectRoot = path.join(root, "project");

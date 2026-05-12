@@ -7,7 +7,7 @@ import { runDoctor, type DoctorReport } from "./doctor.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { runNativeCommand } from "./native-runner.js";
 import { runPass, type PassReport } from "./pass.js";
-import { createPlatformAdapter } from "./platform-adapter.js";
+import { createPlatformAdapter, type PersistedEnvPlan } from "./platform-adapter.js";
 import { resolveProjectPaths } from "./paths.js";
 import { emitRitualProgress, progressStatusFromFindings, progressStatusFromOutcome, type RitualProgressSink } from "./ritual-progress.js";
 import { setupUx, type SetupUxReport } from "./setup-ux.js";
@@ -78,6 +78,24 @@ function appendLineIfMissing(filePath: string, line: string, pattern: RegExp, dr
   return { path: filePath, status: "configured", message: `Added OPENCODE_ENABLE_EXA=1 to ${filePath}.` };
 }
 
+function regexEscape(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function lineForEnvPlan(plan: PersistedEnvPlan): string {
+  if (plan.target === "fish-config") return `set -gx ${plan.name} ${plan.value}`;
+  return `export ${plan.name}=${plan.value}`;
+}
+
+function patternForEnvPlan(plan: PersistedEnvPlan): RegExp {
+  const name = regexEscape(plan.name);
+  const value = regexEscape(plan.value);
+  if (plan.target === "fish-config") {
+    return new RegExp(`^[ \\t]*set[ \\t]+-(?:gx|xg)[ \\t]+${name}[ \\t]+${value}([ \\t]*(#.*)?)?$`, "m");
+  }
+  return new RegExp(`^[ \\t]*(export[ \\t]+)?${name}=${value}([ \\t]*(#.*)?)?$`, "m");
+}
+
 function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv; dryRun?: boolean }): ResetEnvReport {
   const adapter = createPlatformAdapter({ homeDir: options.homeDir, platform: options.platform, env: options.env });
   if (adapter.platform === "win32") {
@@ -103,13 +121,32 @@ function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; en
     };
   }
 
-  const envPlan = adapter.persistEnv("OPENCODE_ENABLE_EXA", "1");
-  return appendLineIfMissing(
-    envPlan.path ?? adapter.join(adapter.homeDir, ".config", "zsh", ".zshrc"),
-    "export OPENCODE_ENABLE_EXA=1",
-    /^[ \t]*(export[ \t]+)?OPENCODE_ENABLE_EXA=1([ \t]*(#.*)?)?$/m,
-    options.dryRun,
+  const reports = adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").map((envPlan) =>
+    appendLineIfMissing(
+      envPlan.path ?? adapter.join(adapter.homeDir, ".config", "zsh", ".zshrc"),
+      lineForEnvPlan(envPlan),
+      patternForEnvPlan(envPlan),
+      options.dryRun,
+    )
   );
+  if (reports.length === 1) return reports[0];
+
+  const paths = reports.map((report) => report.path).filter((filePath): filePath is string => Boolean(filePath));
+  const status = reports.some((report) => report.status === "configured")
+    ? "configured"
+    : reports.every((report) => report.status === "unchanged")
+      ? "unchanged"
+      : reports.every((report) => report.status === "preview")
+        ? "preview"
+        : "warning";
+  const verb = status === "configured"
+    ? "Added"
+    : status === "unchanged"
+      ? "OPENCODE_ENABLE_EXA=1 already configured in"
+      : status === "preview"
+        ? "Would add OPENCODE_ENABLE_EXA=1 to"
+        : "Could not fully configure OPENCODE_ENABLE_EXA=1 in";
+  return { path: paths.join(", "), status, message: `${verb} ${paths.join(", ")}.` };
 }
 
 function clearStartupSyncStatus(homeDir: string): void {

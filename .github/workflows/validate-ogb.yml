@@ -31,11 +31,17 @@ jobs:
         run: node --check dist/tui-sidebar.js
       - name: Syntax check shell installers
         run: |
+          bash -n scripts/install-posix.sh
           bash -n scripts/install-mac.sh
+          bash -n scripts/install-linux.sh
           bash -n scripts/bootstrap-mac.sh
+          bash -n scripts/bootstrap-linux.sh
           bash -n artifacts/scripts/bootstrap-mac.sh
           bash -n scripts/upgrade-mac.sh
+          bash -n scripts/upgrade-linux.sh
+          bash -n scripts/uninstall-posix.sh
           bash -n scripts/uninstall-mac.sh
+          bash -n scripts/uninstall-linux.sh
       - name: Syntax check PowerShell installers
         shell: pwsh
         run: |

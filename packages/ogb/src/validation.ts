@@ -76,11 +76,19 @@ function globalOpenCodeConfigPath(homeDir: string): string {
   return files.find((filePath) => fs.existsSync(filePath)) ?? path.join(globalOpenCodeConfigDir({ homeDir }), "opencode.json");
 }
 
-function configReferencesInstruction(configPath: string, instructionPath: string): boolean {
+function resolveConfigPathReference(configPath: string, reference: string, homeDir: string): string {
+  if (reference.startsWith("~/")) return path.resolve(homeDir, reference.slice(2));
+  if (path.isAbsolute(reference)) return path.resolve(reference);
+  return path.resolve(path.dirname(configPath), reference);
+}
+
+function configReferencesInstruction(configPath: string, instructionPath: string, homeDir: string): boolean {
   const config = readJsonc(configPath);
   const instructions = Array.isArray(config?.instructions) ? config.instructions : [];
   const expected = path.resolve(instructionPath);
-  return instructions.some((item: unknown) => typeof item === "string" && path.resolve(item) === expected);
+  return instructions.some((item: unknown) =>
+    typeof item === "string" && resolveConfigPathReference(configPath, item, homeDir) === expected
+  );
 }
 
 function configHasOgbStartupPlugin(configPath: string, homeDir: string): boolean {
@@ -151,8 +159,8 @@ function validateHomeGlobalFiles(paths: ReturnType<typeof resolveProjectPaths>, 
 
   checks.push({
     name: "Global OpenCode instructions",
-    status: configReferencesInstruction(configPath, paths.expandedGeminiPath) ? "pass" : "fail",
-    message: configReferencesInstruction(configPath, paths.expandedGeminiPath)
+    status: configReferencesInstruction(configPath, paths.expandedGeminiPath, paths.homeDir) ? "pass" : "fail",
+    message: configReferencesInstruction(configPath, paths.expandedGeminiPath, paths.homeDir)
       ? "Global OpenCode config references the OGB expanded Gemini context."
       : "Global OpenCode config does not reference the OGB expanded Gemini context. Run ogb sync.",
   });
@@ -312,29 +320,82 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     return;
   }
 
+  const requiredFiles = [
+    "scripts/install-posix.sh",
+    "scripts/install-mac.sh",
+    "scripts/install-linux.sh",
+    "scripts/bootstrap-mac.sh",
+    "scripts/bootstrap-linux.sh",
+    "scripts/bootstrap-windows.ps1",
+    "scripts/upgrade-linux.sh",
+    "scripts/uninstall-posix.sh",
+    "scripts/uninstall-linux.sh",
+    "scripts/install-windows.ps1",
+  ];
+  const missingFiles = requiredFiles.filter((relPath) => !fs.existsSync(path.join(repoRoot, relPath)));
+  if (missingFiles.length > 0) {
+    checks.push({
+      name: "Release bootstrap static check",
+      status: "fail",
+      message: `Missing expected release/bootstrap file(s): ${missingFiles.join(", ")}.`,
+      details: { repoRoot },
+    });
+    return;
+  }
+
+  const readScript = (name: string) => fs.readFileSync(path.join(repoRoot, "scripts", name), "utf8");
   const scripts = {
-    macBootstrap: fs.readFileSync(path.join(repoRoot, "scripts", "bootstrap-mac.sh"), "utf8"),
-    windowsBootstrap: fs.readFileSync(path.join(repoRoot, "scripts", "bootstrap-windows.ps1"), "utf8"),
-    macInstaller: fs.readFileSync(path.join(repoRoot, "scripts", "install-mac.sh"), "utf8"),
-    windowsInstaller: fs.readFileSync(path.join(repoRoot, "scripts", "install-windows.ps1"), "utf8"),
+    posixInstaller: readScript("install-posix.sh"),
+    macInstaller: readScript("install-mac.sh"),
+    linuxInstaller: readScript("install-linux.sh"),
+    macBootstrap: readScript("bootstrap-mac.sh"),
+    linuxBootstrap: readScript("bootstrap-linux.sh"),
+    windowsBootstrap: readScript("bootstrap-windows.ps1"),
+    linuxUpgrade: readScript("upgrade-linux.sh"),
+    posixUninstaller: readScript("uninstall-posix.sh"),
+    linuxUninstaller: readScript("uninstall-linux.sh"),
+    windowsInstaller: readScript("install-windows.ps1"),
   };
   const required = [
     ["bootstrap-mac.sh default repo", scripts.macBootstrap, "augustocaruso/opencode-gemini-bridge"],
     ["bootstrap-mac.sh release asset", scripts.macBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
     ["bootstrap-mac.sh installer", scripts.macBootstrap, "install-mac.sh"],
+    ["bootstrap-linux.sh default repo", scripts.linuxBootstrap, "augustocaruso/opencode-gemini-bridge"],
+    ["bootstrap-linux.sh release asset", scripts.linuxBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
+    ["bootstrap-linux.sh installer", scripts.linuxBootstrap, "install-linux.sh"],
+    ["bootstrap-linux.sh posix fallback", scripts.linuxBootstrap, "install-posix.sh"],
+    ["bootstrap-linux.sh legacy fallback", scripts.linuxBootstrap, "install-mac.sh"],
+    ["bootstrap-linux.sh fallback message", scripts.linuxBootstrap, "legacy POSIX installer"],
     ["bootstrap-windows.ps1 default repo", scripts.windowsBootstrap, "augustocaruso/opencode-gemini-bridge"],
     ["bootstrap-windows.ps1 release asset", scripts.windowsBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
     ["bootstrap-windows.ps1 installer", scripts.windowsBootstrap, "install-windows.ps1"],
     ["bootstrap-windows.ps1 path arg normalization", scripts.windowsBootstrap, "Normalize-PathArgument"],
-    ["install-mac.sh delegates install", scripts.macInstaller, "install --rulesync"],
-    ["install-mac.sh ritual message", scripts.macInstaller, "Running OGB install ritual"],
-    ["install-mac.sh no ux flag", scripts.macInstaller, "--no-ux"],
-    ["install-mac.sh no opencode flag", scripts.macInstaller, "--no-install-opencode"],
-    ["install-mac.sh no check flag", scripts.macInstaller, "--no-check"],
-    ["install-mac.sh home sync", scripts.macInstaller, "RUN_HOME_SYNC"],
-    ["install-mac.sh reset global", scripts.macInstaller, "--reset-global"],
-    ["install-mac.sh Exa websearch env", scripts.macInstaller, "OPENCODE_ENABLE_EXA"],
-    ["install-mac.sh zsh config", scripts.macInstaller, ".config/zsh/.zshrc"],
+    ["install-posix.sh delegates install", scripts.posixInstaller, "install --rulesync"],
+    ["install-posix.sh ritual message", scripts.posixInstaller, "Running OGB install ritual"],
+    ["install-posix.sh no ux flag", scripts.posixInstaller, "--no-ux"],
+    ["install-posix.sh no opencode flag", scripts.posixInstaller, "--no-install-opencode"],
+    ["install-posix.sh no check flag", scripts.posixInstaller, "--no-check"],
+    ["install-posix.sh home sync", scripts.posixInstaller, "RUN_HOME_SYNC"],
+    ["install-posix.sh reset global", scripts.posixInstaller, "--reset-global"],
+    ["install-posix.sh Exa websearch env", scripts.posixInstaller, "OPENCODE_ENABLE_EXA"],
+    ["install-posix.sh macOS zsh config", scripts.posixInstaller, ".config/zsh/.zshrc"],
+    ["install-posix.sh Linux profile targets", scripts.posixInstaller, "linux_profile_targets"],
+    ["install-posix.sh Linux profile", scripts.posixInstaller, ".profile"],
+    ["install-posix.sh Linux bash rc", scripts.posixInstaller, ".bashrc"],
+    ["install-posix.sh Linux fish config", scripts.posixInstaller, ".config/fish/config.fish"],
+    ["install-posix.sh fish env syntax", scripts.posixInstaller, "set -gx OPENCODE_ENABLE_EXA 1"],
+    ["install-posix.sh repairs ogb shim", scripts.posixInstaller, "repair_ogb_shim"],
+    ["install-posix.sh retries npm install on stale shim", scripts.posixInstaller, "npm install did not complete"],
+    ["install-posix.sh removes broken shim before wrapper", scripts.posixInstaller, "rm -f \"$OGB_BIN\""],
+    ["install-posix.sh node shim fallback", scripts.posixInstaller, "exec node"],
+    ["install-posix.sh version verification", scripts.posixInstaller, "Installed ogb verification returned no version output"],
+    ["install-mac.sh shared POSIX installer", scripts.macInstaller, "install-posix.sh"],
+    ["install-mac.sh darwin platform", scripts.macInstaller, "--platform darwin"],
+    ["install-linux.sh shared POSIX installer", scripts.linuxInstaller, "install-posix.sh"],
+    ["install-linux.sh linux platform", scripts.linuxInstaller, "--platform linux"],
+    ["upgrade-linux.sh delegates Linux installer", scripts.linuxUpgrade, "install-linux.sh"],
+    ["uninstall-posix.sh removes CLI", scripts.posixUninstaller, "npm uninstall"],
+    ["uninstall-linux.sh shared POSIX uninstaller", scripts.linuxUninstaller, "uninstall-posix.sh"],
     ["install-windows.ps1 path arg normalization", scripts.windowsInstaller, "Normalize-PathArgument"],
     ["install-windows.ps1 delegates install", scripts.windowsInstaller, "\"install\", \"--rulesync\""],
     ["install-windows.ps1 ritual message", scripts.windowsInstaller, "Running OGB install ritual"],
@@ -353,7 +414,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     status: missing.length ? "fail" : "pass",
     message: missing.length
       ? `Missing expected release/bootstrap token(s): ${missing.join(", ")}.`
-      : "Bootstrap scripts download the release pack, set Exa websearch env, and thin installers delegate the ritual to ogb install with the expected platform flags.",
+      : "Bootstrap scripts for macOS, Linux, fish, and Windows download the release pack, set Exa websearch env, and thin installers delegate the ritual to ogb install with the expected platform flags.",
     details: { repoRoot },
   });
 }
@@ -389,7 +450,8 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "Repair-HomeOgbShim $CliTarget",
     "Repaired old home ogb shim",
     "Installed ogb verification returned no version output.",
-    "node `\"$CliTarget`\" %*",
+    "Runtime-OgbCliTarget",
+    "%USERPROFILE%\\.ai\\opencode-pack\\opencode-gemini-bridge-cli\\dist\\cli.js",
     "ogb.cmd",
     "\"install\", \"--rulesync\"",
     "--no-ux",

@@ -235,8 +235,13 @@ function Repair-BrokenOgbShims($Prefix) {
   }
 }
 
+function Runtime-OgbCliTarget {
+  return "%USERPROFILE%\.ai\opencode-pack\opencode-gemini-bridge-cli\dist\cli.js"
+}
+
 function Write-OgbCmdShim($ShimPath, $CliTarget) {
-  "@ECHO off`r`nnode `"$CliTarget`" %*`r`n" | Set-Content -Path $ShimPath -Encoding ASCII
+  $RuntimeCliTarget = Runtime-OgbCliTarget
+  "@ECHO off`r`nnode `"$RuntimeCliTarget`" %*`r`n" | Set-Content -Path $ShimPath -Encoding ASCII
 }
 
 function Repair-HomeOgbShim($CliTarget) {
@@ -310,8 +315,9 @@ function Test-CleanOgbShim($ShimPath, $CliTarget) {
   if ($Content -match "added \d+ packages|audited \d+ packages|npm fund|npm audit") {
     throw "Generated ogb shim contains npm output: $ShimPath"
   }
-  if ($Content -notmatch [regex]::Escape($CliTarget)) {
-    throw "Generated ogb shim does not point at expected CLI target: $CliTarget"
+  $RuntimeCliTarget = Runtime-OgbCliTarget
+  if ($Content -notmatch [regex]::Escape($RuntimeCliTarget)) {
+    throw "Generated ogb shim does not point at runtime CLI target: $RuntimeCliTarget"
   }
   $NonEmptyLines = @($Content -split "\r?\n" | Where-Object { $_.Trim() })
   if ($NonEmptyLines.Count -ne 2) {

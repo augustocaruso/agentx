@@ -71,6 +71,10 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
 
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.deepEqual(globalConfig.plugin, expectedGlobalPlugins(configDir));
+  assert.equal(globalConfig.plugin.includes("file:plugins/ogb-startup-sync.js"), true);
+  assert.equal(globalConfig.plugin.some((plugin: unknown) =>
+    typeof plugin === "string" && plugin.startsWith("file:///") && plugin.includes("ogb-startup-sync.js")
+  ), false);
   assert.equal(globalConfig.plugin.includes("opencode-auto-fallback@0.4.2"), false);
   assert.equal(globalConfig.plugin.includes("opencode-websearch-cited@1.2.0"), false);
   assert.equal(globalConfig.share, "manual");
@@ -129,7 +133,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(startupConfig.failureBackoffMs, 10 * 60_000);
 });
 
-test("setupUx writes an absolute Windows ogb shim path for startup sync", () => {
+test("setupUx writes runtime-expanded Windows ogb shim path for startup sync", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const appData = path.join(homeDir, "AppData", "Roaming");
@@ -152,8 +156,8 @@ test("setupUx writes an absolute Windows ogb shim path for startup sync", () => 
   });
 
   const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
-  assert.equal(startupConfig.command, ogbShim);
-  assert.deepEqual(startupConfig.baseArgs, ["--project", homeDir]);
+  assert.equal(startupConfig.command, "{OGB_APPDATA}/npm/ogb.cmd");
+  assert.deepEqual(startupConfig.baseArgs, ["--project", "{OGB_HOME}"]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
 });
 

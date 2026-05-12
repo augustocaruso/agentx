@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { resolveCommand } from "./command-resolution.js";
 import { readLocalRole } from "./local-role.js";
@@ -22,9 +22,10 @@ export const OGB_UX_PLUGINS = OGB_UX_SAFE_PLUGINS;
 export const OGB_TUI_RUNTIME_DEPENDENCIES = { ...UX_PROFILE_PRESET.tuiRuntimeDependencies };
 export const REMOVED_GLOBAL_UX_COMMANDS = [...UX_PROFILE_PRESET.removedGlobalCommands];
 const UX_PROFILE_COMMANDS: Record<string, string> = UX_PROFILE_PRESET.files.commands;
+const GLOBAL_STARTUP_PLUGIN_SPEC = "file:plugins/ogb-startup-sync.js";
 
-export function globalStartupPluginSpec(pluginPath: string): string {
-  return pathToFileURL(pluginPath).href;
+export function globalStartupPluginSpec(_pluginPath?: string): string {
+  return GLOBAL_STARTUP_PLUGIN_SPEC;
 }
 
 export const RESEARCH_COMMAND = UX_PROFILE_COMMANDS.research ?? "";
@@ -471,6 +472,24 @@ function currentCliPath(): string | undefined {
   return undefined;
 }
 
+function pathWithRuntimeToken(value: string, adapter: PlatformAdapter): string {
+  if (adapter.platform !== "win32") return value;
+
+  function replaceRoot(root: string | undefined, token: string): string | undefined {
+    if (!root) return undefined;
+    const valuePath = adapter.resolvePath(value);
+    const rootPath = adapter.resolvePath(root);
+    const relPath = adapter.pathApi.relative(rootPath, valuePath);
+    if (relPath === "") return token;
+    if (relPath.startsWith("..") || adapter.pathApi.isAbsolute(relPath)) return undefined;
+    return adapter.join(token, relPath);
+  }
+
+  return replaceRoot(adapter.appDataDir, "{OGB_APPDATA}")
+    ?? replaceRoot(adapter.homeDir, "{OGB_HOME}")
+    ?? value;
+}
+
 function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptions, "platform" | "env">): { command: string; baseArgs: string[] } {
   const crossPlatformResolution = options.platform !== undefined && options.platform !== process.platform;
   const ogbCommand = resolveCommand("ogb", {
@@ -482,8 +501,8 @@ function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptio
   });
   if (ogbCommand) {
     return {
-      command: ogbCommand,
-      baseArgs: ["--project", adapter.homeDir],
+      command: pathWithRuntimeToken(ogbCommand, adapter),
+      baseArgs: ["--project", pathWithRuntimeToken(adapter.homeDir, adapter)],
     };
   }
 
@@ -497,14 +516,14 @@ function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptio
       includeNpmPrefix: crossPlatformResolution ? false : undefined,
     }) ?? process.execPath;
     return {
-      command: nodeCommand,
-      baseArgs: [cliPath, "--project", adapter.homeDir],
+      command: pathWithRuntimeToken(nodeCommand, adapter),
+      baseArgs: [pathWithRuntimeToken(cliPath, adapter), "--project", pathWithRuntimeToken(adapter.homeDir, adapter)],
     };
   }
 
   return {
     command: "ogb",
-    baseArgs: ["--project", adapter.homeDir],
+    baseArgs: ["--project", pathWithRuntimeToken(adapter.homeDir, adapter)],
   };
 }
 

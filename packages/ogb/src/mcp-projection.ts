@@ -60,19 +60,20 @@ export function projectGeminiMcpEnvironment(
       continue;
     }
 
-    const envName = referencedEnvName(rawValue);
+    const mappedValue = mapValue(rawValue);
+    const envName = referencedEnvName(mappedValue);
     if (envName) {
       environment[key] = openCodeEnvReference(envName);
       continue;
     }
 
-    if (shouldStoreMcpEnvLiteral(key, rawValue)) {
+    if (shouldStoreMcpEnvLiteral(key, mappedValue)) {
       environment[key] = openCodeEnvReference(key);
       secretEnvKeys.push(key);
       continue;
     }
 
-    environment[key] = mapValue(rawValue);
+    environment[key] = mappedValue;
   }
 
   return {

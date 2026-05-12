@@ -99,7 +99,7 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.ok(report.projectedSkills.includes(".config/opencode/skills/review-notes"));
   assert.equal(fs.readFileSync(path.join(globalRoot, "AGENTS.md"), "utf8"), "Manual OpenCode global rules\n");
   assert.match(expandedGemini, /Imported global rules/);
-  assert.ok(globalConfig.instructions.includes(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")));
+  assert.ok(globalConfig.instructions.includes("../opencode-gemini-bridge/generated/GEMINI.expanded.md"));
   assert.match(reviewCommand, /Review: \$ARGUMENTS/);
   assert.match(planCommand, /Plan: \$ARGUMENTS/);
   assert.match(extensionCommand, new RegExp(path.join(extensionDir, "docs", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -134,6 +134,28 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agents", "YOLO.md")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "opencode.generated.json")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands")), false);
+});
+
+test("syncToOpenCode replaces stale absolute global instruction paths", () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const configDir = path.join(homeDir, ".config", "opencode");
+  fs.mkdirSync(path.join(homeDir, ".gemini"), { recursive: true });
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".gemini", "GEMINI.md"), "Global rules\n");
+  fs.writeFileSync(path.join(configDir, "opencode.json"), JSON.stringify({
+    instructions: [
+      "C:\\Users\\leona\\.config\\opencode-gemini-bridge\\generated\\GEMINI.expanded.md",
+      "./manual.md",
+    ],
+  }, null, 2));
+
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+
+  const globalConfig = JSON.parse(fs.readFileSync(path.join(configDir, "opencode.json"), "utf8"));
+  assert.deepEqual(globalConfig.instructions, [
+    "./manual.md",
+    "../opencode-gemini-bridge/generated/GEMINI.expanded.md",
+  ]);
 });
 
 test("syncToOpenCode treats an accidentally quoted home project path as global sync", () => {
@@ -191,7 +213,7 @@ test("syncToOpenCode builds global context from Gemini extensions and imports gl
   assert.match(expandedGemini, /Extension rules live at/);
   assert.match(expandedGemini, new RegExp(path.join(extensionDir, "docs").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(expandedGemini, /Missing import: .*\.gemini\/GEMINI\.md/);
-  assert.ok(globalConfig.instructions.includes(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")));
+  assert.ok(globalConfig.instructions.includes("../opencode-gemini-bridge/generated/GEMINI.expanded.md"));
   assert.deepEqual(globalConfig.mcp["anki-mcp"].command, ["uvx", "anki-mcp"]);
   assert.deepEqual(globalConfig.mcp["gemini-md-export"].command, ["node", path.join(extensionDir, "src", "mcp-server.js")]);
   assert.deepEqual(globalConfig.mcp["gemini-md-export"].environment, {
@@ -421,6 +443,286 @@ test("syncToOpenCode projects Gemini extension skills into OpenCode skills", () 
   assert.match(projectedSkill, new RegExp(path.join(extensionDir, "references", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(projectedSkill, /\$\{extensionPath\}/);
   assert.match(projectedGuide, new RegExp(extensionDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("syncToOpenCode removes stale managed project extension skills", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const skillDir = path.join(extensionDir, "skills", "review-notes");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: review-notes\ndescription: Review notes.\n---\n# Review\n");
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projected = path.join(projectRoot, ".opencode", "skills", "review-notes");
+  assert.equal(fs.existsSync(path.join(projected, "SKILL.md")), true);
+
+  fs.rmSync(skillDir, { recursive: true, force: true });
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+
+  assert.ok(report.removedSkills.includes(".opencode/skills/review-notes"));
+  assert.equal(fs.existsSync(projected), false);
+  assert.equal(state.managedFiles.some((file: { path: string }) => file.path === ".opencode/skills/review-notes/SKILL.md"), false);
+});
+
+test("syncToOpenCode preserves stale project extension skills edited by hand", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const skillDir = path.join(extensionDir, "skills", "review-notes");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: review-notes\ndescription: Review notes.\n---\n# Review\n");
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projected = path.join(projectRoot, ".opencode", "skills", "review-notes");
+  fs.writeFileSync(path.join(projected, "SKILL.md"), "manual local edit\n", "utf8");
+  fs.rmSync(skillDir, { recursive: true, force: true });
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+
+  assert.equal(fs.readFileSync(path.join(projected, "SKILL.md"), "utf8"), "manual local edit\n");
+  assert.ok(report.warnings.some((warning) => warning.includes("Skill conflict: .opencode/skills/review-notes was edited manually; leaving stale skill in place")));
+});
+
+test("syncToOpenCode preserves stale project extension skills when a copied reference was edited by hand", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const skillDir = path.join(extensionDir, "skills", "review-notes");
+  fs.mkdirSync(path.join(skillDir, "references"), { recursive: true });
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: review-notes\ndescription: Review notes.\n---\n# Review\n");
+  fs.writeFileSync(path.join(skillDir, "references", "guide.md"), "# Original guide\n");
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projected = path.join(projectRoot, ".opencode", "skills", "review-notes");
+  const guidePath = path.join(projected, "references", "guide.md");
+  fs.writeFileSync(guidePath, "# Manual guide edit\n", "utf8");
+  fs.rmSync(skillDir, { recursive: true, force: true });
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+
+  assert.equal(fs.readFileSync(guidePath, "utf8"), "# Manual guide edit\n");
+  assert.ok(report.warnings.some((warning) => warning.includes("Skill conflict: .opencode/skills/review-notes was edited manually; leaving stale skill in place")));
+});
+
+test("syncToOpenCode projects Gemini skills to global Antigravity skills", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const globalSkillDir = path.join(homeDir, ".gemini", "skills", "study-notes");
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const extensionSkillDir = path.join(extensionDir, "skills", "review-notes");
+  fs.mkdirSync(globalSkillDir, { recursive: true });
+  fs.mkdirSync(extensionSkillDir, { recursive: true });
+  fs.writeFileSync(path.join(globalSkillDir, "SKILL.md"), "---\nname: study-notes\ndescription: Study notes.\n---\n# Study\n");
+  fs.writeFileSync(path.join(extensionSkillDir, "SKILL.md"), `---\nname: review-notes\ndescription: Review notes.\n---\n# Review\nUse ${"${extensionPath}"}${"${/}"}references${"${/}"}guide.md\n`);
+  fs.mkdirSync(path.join(extensionSkillDir, "references"), { recursive: true });
+  fs.writeFileSync(path.join(extensionSkillDir, "references", "guide.md"), `Bundle: ${"${extensionPath}"}\n`);
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const antigravityRoot = path.join(homeDir, ".gemini", "antigravity", "skills");
+  const globalProjected = path.join(antigravityRoot, "study-notes", "SKILL.md");
+  const extensionProjected = path.join(antigravityRoot, "review-notes", "SKILL.md");
+  const extensionGuide = path.join(antigravityRoot, "review-notes", "references", "guide.md");
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+
+  assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/study-notes"));
+  assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/review-notes"));
+  assert.equal(fs.existsSync(globalProjected), true);
+  assert.match(fs.readFileSync(extensionProjected, "utf8"), new RegExp(path.join(extensionDir, "references", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(fs.readFileSync(extensionGuide, "utf8"), new RegExp(extensionDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
+    file.path === ".gemini/antigravity/skills/review-notes/SKILL.md"
+    && file.kind === "skill"
+    && file.projection === "antigravity"
+  ));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
+    file.path === ".gemini/antigravity/skills/review-notes/references/guide.md"
+    && file.kind === "skill"
+    && file.projection === "antigravity"
+  ));
+});
+
+test("syncToOpenCode projects global Gemini MCPs to Antigravity mcp_config", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  fs.mkdirSync(path.join(homeDir, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      "anki-mcp": {
+        command: "uvx",
+        args: ["anki-mcp"],
+      },
+    },
+  }));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  fs.mkdirSync(extensionDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({
+    name: "study-pack",
+    mcpServers: {
+      "study-pack": {
+        command: "node",
+        args: ["${extensionPath}${/}src${/}mcp-server.js"],
+        env: {
+          STUDY_HOME: "${extensionPath}",
+        },
+      },
+    },
+  }));
+  fs.mkdirSync(path.join(homeDir, ".gemini", "antigravity"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".gemini", "antigravity", "mcp_config.json"), JSON.stringify({
+    mcpServers: {
+      manual: {
+        command: "node",
+        args: ["manual.js"],
+      },
+    },
+  }, null, 2) + "\n");
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const config = JSON.parse(fs.readFileSync(path.join(homeDir, ".gemini", "antigravity", "mcp_config.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+
+  assert.ok(report.projectedAntigravityMcps.includes(".gemini/antigravity/mcp_config.json#mcpServers/anki-mcp"));
+  assert.ok(report.projectedAntigravityMcps.includes(".gemini/antigravity/mcp_config.json#mcpServers/study-pack"));
+  assert.deepEqual(config.mcpServers.manual, { command: "node", args: ["manual.js"] });
+  assert.deepEqual(config.mcpServers["anki-mcp"], { command: "uvx", args: ["anki-mcp"] });
+  assert.deepEqual(config.mcpServers["study-pack"], {
+    command: "node",
+    args: [path.join(extensionDir, "src", "mcp-server.js")],
+    env: {
+      STUDY_HOME: extensionDir,
+    },
+  });
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
+    file.path === ".gemini/antigravity/mcp_config.json#mcpServers/study-pack"
+    && file.kind === "mcp"
+    && file.projection === "antigravity"
+  ));
+});
+
+test("syncToOpenCode preserves Antigravity MCPs edited by hand", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  fs.mkdirSync(path.join(homeDir, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      "anki-mcp": {
+        command: "uvx",
+        args: ["anki-mcp"],
+      },
+    },
+  }));
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const configPath = path.join(homeDir, ".gemini", "antigravity", "mcp_config.json");
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  config.mcpServers["anki-mcp"].args = ["manual-anki"];
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf8");
+  fs.rmSync(path.join(homeDir, ".gemini", "settings.json"), { force: true });
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const after = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+  assert.deepEqual(after.mcpServers["anki-mcp"], { command: "uvx", args: ["manual-anki"] });
+  assert.ok(report.warnings.some((warning) => warning.includes("Antigravity MCP conflict: .gemini/antigravity/mcp_config.json#mcpServers/anki-mcp was edited manually; leaving stale server in place")));
+});
+
+test("syncToOpenCode projects Gemini extension subagents to native Antigravity agents", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const agentsDir = path.join(extensionDir, "agents");
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.writeFileSync(path.join(agentsDir, "researcher.md"), `---\ndescription: Research notes.\n---\n# Researcher\nUse ${"${extensionPath}"}${"${/}"}docs${"${/}"}guide.md\n`);
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const agentPath = path.join(homeDir, ".gemini", "antigravity", "agents", "researcher");
+  const promptPath = path.join(homeDir, ".gemini", "antigravity", "agent_prompts", "researcher.md");
+  const agent = JSON.parse(fs.readFileSync(agentPath, "utf8"));
+  const prompt = fs.readFileSync(promptPath, "utf8");
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+
+  assert.ok(report.projectedAntigravityAgents.includes(".gemini/antigravity/agents/researcher"));
+  assert.equal(fs.existsSync(path.join(homeDir, ".gemini", "antigravity", "skills", "agent-researcher")), false);
+  assert.deepEqual(agent, {
+    name: "researcher",
+    description: "Research notes.",
+    command_spec: {
+      command: "/bin/cat",
+      args: [promptPath],
+    },
+  });
+  assert.match(prompt, /SOURCE_KIND: gemini-antigravity-agent/);
+  assert.match(prompt, /# Researcher/);
+  assert.match(prompt, new RegExp(path.join(extensionDir, "docs", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
+    file.path === ".gemini/antigravity/agents/researcher"
+    && file.kind === "agent"
+    && file.projection === "antigravity"
+  ));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
+    file.path === ".gemini/antigravity/agent_prompts/researcher.md"
+    && file.kind === "agent"
+    && file.projection === "antigravity"
+  ));
+});
+
+test("syncToOpenCode migrates old Antigravity agent compatibility skills to native agents", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const agentsDir = path.join(extensionDir, "agents");
+  const oldSkillDir = path.join(homeDir, ".gemini", "antigravity", "skills", "agent-researcher");
+  const statePath = path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json");
+  const oldSkill = "---\nname: agent-researcher\n---\n# old compatibility skill\n";
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.mkdirSync(oldSkillDir, { recursive: true });
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(path.join(agentsDir, "researcher.md"), "---\ndescription: Research notes.\n---\n# Researcher\n");
+  fs.writeFileSync(path.join(oldSkillDir, "SKILL.md"), oldSkill, "utf8");
+  fs.writeFileSync(statePath, JSON.stringify({
+    version: OGB_VERSION,
+    managedFiles: [
+      {
+        path: ".gemini/antigravity/skills/agent-researcher/SKILL.md",
+        sha256: sha256Text(oldSkill),
+        source: "ogb",
+        kind: "agent",
+        projection: "antigravity",
+      },
+    ],
+  }, null, 2) + "\n");
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+
+  assert.ok(report.projectedAntigravityAgents.includes(".gemini/antigravity/agents/researcher"));
+  assert.ok(report.removedAntigravityAgents.includes(".gemini/antigravity/skills/agent-researcher"));
+  assert.equal(fs.existsSync(oldSkillDir), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".gemini", "antigravity", "agents", "researcher")), true);
+});
+
+test("syncToOpenCode projects Gemini extension workflows to global Antigravity workflows", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const workflowsDir = path.join(extensionDir, ".agent", "workflows");
+  fs.mkdirSync(workflowsDir, { recursive: true });
+  fs.writeFileSync(path.join(workflowsDir, "verify-skills.md"), `# Verify skills\nUse ${"${extensionPath}"}${"${/}"}docs${"${/}"}guide.md\n`);
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projected = path.join(homeDir, ".gemini", "antigravity", "global_workflows", "verify-skills.md");
+  const workflow = fs.readFileSync(projected, "utf8");
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+
+  assert.ok(report.projectedAntigravityWorkflows.includes(".gemini/antigravity/global_workflows/verify-skills.md"));
+  assert.match(workflow, /# Verify skills/);
+  assert.match(workflow, new RegExp(path.join(extensionDir, "docs", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
+    file.path === ".gemini/antigravity/global_workflows/verify-skills.md"
+    && file.kind === "workflow"
+    && file.projection === "antigravity"
+  ));
 });
 
 test("syncToOpenCode resolves extension placeholders in expanded Gemini context", () => {

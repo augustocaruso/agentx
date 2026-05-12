@@ -374,7 +374,7 @@ export function buildSelfUpdateCommand(options: SelfUpdateOptions = {}, platform
   const adapter = createPlatformAdapter({ platform, homeDir: options.projectRoot ?? process.cwd() });
   const projectRoot = adapter.resolvePath(options.projectRoot ?? process.cwd());
 
-  if (platform === "win32") {
+  if (adapter.platform === "win32") {
     const bootstrapUrl = `https://raw.githubusercontent.com/${repo}/main/scripts/bootstrap-windows.ps1`;
     const args = windowsBootstrapArgs(options, repo, version, projectRoot).join(" ");
     const script = [
@@ -387,7 +387,8 @@ export function buildSelfUpdateCommand(options: SelfUpdateOptions = {}, platform
     return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script];
   }
 
-  const bootstrapUrl = `https://raw.githubusercontent.com/${repo}/main/scripts/bootstrap-mac.sh`;
+  const bootstrapScript = adapter.platform === "linux" ? "bootstrap-linux.sh" : "bootstrap-mac.sh";
+  const bootstrapUrl = `https://raw.githubusercontent.com/${repo}/main/scripts/${bootstrapScript}`;
   const args = bootstrapArgs(options, repo, version, projectRoot).map(shQuote).join(" ");
   const script = `curl -fsSL ${shQuote(bootstrapUrl)} | bash -s -- ${args}`;
   return ["bash", "-lc", script];

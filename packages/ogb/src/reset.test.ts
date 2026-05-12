@@ -195,7 +195,7 @@ test("runReset cleans home project artifacts and recreates global config", async
   assert.equal(globalConfig.default_agent, "YOLO");
   assert.ok(globalConfig.plugin.includes(globalStartupPluginSpec(path.join(homeDir, ".config", "opencode", "plugins", "ogb-startup-sync.js"))));
   assert.equal(globalConfig.permission.websearch, "allow");
-  assert.ok(globalConfig.instructions.includes(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")));
+  assert.ok(globalConfig.instructions.includes("../opencode-gemini-bridge/generated/GEMINI.expanded.md"));
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "plugins", "ogb-startup-sync.js")), true);
   assert.equal(fs.readFileSync(path.join(homeDir, ".config", "opencode", "AGENTS.md"), "utf8"), GLOBAL_AGENTS_MD);
@@ -213,6 +213,56 @@ test("runReset cleans home project artifacts and recreates global config", async
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
   assert.match(fs.readFileSync(path.join(homeDir, ".config", "zsh", ".zshrc"), "utf8"), /OPENCODE_ENABLE_EXA=1/);
   assert.equal(report.doctor?.warnings.some((warning) => warning.includes("Last OpenCode startup sync failed")), false);
+});
+
+test("runReset persists Linux Exa env to profile and bash rc without creating macOS zsh config", async () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  fs.mkdirSync(homeDir, { recursive: true });
+  writeFile(path.join(homeDir, ".gemini", "GEMINI.md"), "# Global Gemini\n");
+
+  const report = await runReset({
+    homeDir,
+    projectRoot: homeDir,
+    yes: true,
+    platform: "linux",
+    env: { SHELL: "/bin/bash" },
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+    rulesyncMode: "off",
+  });
+
+  assert.equal(report.outcome, "pass");
+  assert.equal(report.exaEnv.status, "configured");
+  assert.match(fs.readFileSync(path.join(homeDir, ".profile"), "utf8"), /OPENCODE_ENABLE_EXA=1/);
+  assert.match(fs.readFileSync(path.join(homeDir, ".bashrc"), "utf8"), /OPENCODE_ENABLE_EXA=1/);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "zsh", ".zshrc")), false);
+});
+
+test("runReset persists Linux Exa env to fish config with fish syntax", async () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  fs.mkdirSync(homeDir, { recursive: true });
+  writeFile(path.join(homeDir, ".gemini", "GEMINI.md"), "# Global Gemini\n");
+
+  const report = await runReset({
+    homeDir,
+    projectRoot: homeDir,
+    yes: true,
+    platform: "linux",
+    env: { SHELL: "/usr/bin/fish" },
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+    rulesyncMode: "off",
+  });
+
+  assert.equal(report.outcome, "pass");
+  assert.equal(report.exaEnv.status, "configured");
+  assert.match(fs.readFileSync(path.join(homeDir, ".profile"), "utf8"), /export OPENCODE_ENABLE_EXA=1/);
+  assert.match(fs.readFileSync(path.join(homeDir, ".config", "fish", "config.fish"), "utf8"), /set -gx OPENCODE_ENABLE_EXA 1/);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "zsh", ".zshrc")), false);
 });
 
 test("runReset respects maintainer protection even though it rebuilds with force", async () => {

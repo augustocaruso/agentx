@@ -28,6 +28,8 @@ export interface ProviderUsage {
   plan?: string;
   fetchedAt: string;
   lines?: UsageLine[];
+  stale?: boolean;
+  staleReason?: string;
 }
 
 export interface LimitsSourceStatus {
@@ -98,6 +100,13 @@ function cachedReport(filePath: string, ttlMs: number): LimitsReport | undefined
   return parsed as LimitsReport;
 }
 
+function existingReport(filePath: string): LimitsReport | undefined {
+  const parsed = readJson(filePath);
+  if (!parsed || typeof parsed !== "object") return undefined;
+  if (!Array.isArray(parsed.providers)) return undefined;
+  return parsed as LimitsReport;
+}
+
 async function fetchOpenUsage(url: string): Promise<ProviderUsage[]> {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`OpenUsage HTTP ${response.status}`);
@@ -118,6 +127,44 @@ function hasOpenAIProvider(providers: ProviderUsage[]): boolean {
 
 function hasAnthropicProvider(providers: ProviderUsage[]): boolean {
   return providers.some((provider) => /anthropic|claude/i.test(`${provider.providerId ?? ""} ${provider.displayName}`));
+}
+
+function providerKind(provider: ProviderUsage): "openai" | "anthropic" | "gemini" | undefined {
+  const name = `${provider.providerId ?? ""} ${provider.displayName}`.toLowerCase();
+  if (/openai|chatgpt|codex/.test(name)) return "openai";
+  if (/anthropic|claude/.test(name)) return "anthropic";
+  if (/gemini|google/.test(name)) return "gemini";
+  return undefined;
+}
+
+function hasProviderKind(providers: ProviderUsage[], kind: "openai" | "anthropic" | "gemini"): boolean {
+  return providers.some((provider) => providerKind(provider) === kind);
+}
+
+function staleProviderFrom(previous: LimitsReport | undefined, kind: "openai" | "anthropic" | "gemini", reason: string | undefined): ProviderUsage | undefined {
+  const provider = previous?.providers.find((item) => providerKind(item) === kind);
+  if (!provider) return undefined;
+  return {
+    ...provider,
+    stale: true,
+    staleReason: reason,
+  };
+}
+
+function preserveStaleProvider(options: {
+  providers: ProviderUsage[];
+  previous?: LimitsReport;
+  kind: "openai" | "anthropic" | "gemini";
+  source: LimitsSourceStatus;
+  warnings: string[];
+}): ProviderUsage[] {
+  if (options.source.status !== "error") return options.providers;
+  if (hasProviderKind(options.providers, options.kind)) return options.providers;
+  const stale = staleProviderFrom(options.previous, options.kind, options.source.message);
+  if (!stale) return options.providers;
+  const label = options.kind === "openai" ? "OpenAI" : options.kind === "anthropic" ? "Claude" : "Gemini";
+  options.warnings.push(`${label} limits refresh failed; keeping last successful usage value.`);
+  return [...options.providers, stale];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -449,6 +496,7 @@ function quotaReportToProvider(report: QuotaReport): ProviderUsage | undefined {
 }
 
 function statusFrom(openusage: LimitsSourceStatus, openai: LimitsSourceStatus, anthropic: LimitsSourceStatus, gemini: LimitsSourceStatus, providers: ProviderUsage[]): LimitsReport["status"] {
+  if (providers.some((provider) => provider.stale)) return "partial";
   if (providers.length > 0 && (openusage.status === "ok" || openai.status === "ok" || anthropic.status === "ok" || gemini.status === "ok")) {
     return openusage.status === "error" || openai.status === "error" || anthropic.status === "error" || gemini.status === "error" ? "partial" : "ok";
   }
@@ -460,6 +508,7 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   const write = options.write !== false;
   const ttlMs = options.ttlMs ?? DEFAULT_CACHE_TTL_MS;
+  const previous = existingReport(paths.limitsPath);
 
   if (!options.force) {
     const cached = cachedReport(paths.limitsPath, ttlMs);
@@ -534,6 +583,28 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
       };
     }
   }
+
+  providers = preserveStaleProvider({
+    providers,
+    previous,
+    kind: "openai",
+    source: openaiChatGPT,
+    warnings,
+  });
+  providers = preserveStaleProvider({
+    providers,
+    previous,
+    kind: "anthropic",
+    source: anthropicClaude,
+    warnings,
+  });
+  providers = preserveStaleProvider({
+    providers,
+    previous,
+    kind: "gemini",
+    source: geminiCodeAssist,
+    warnings,
+  });
 
   if (openusage.status !== "ok" && openaiChatGPT.status !== "ok" && anthropicClaude.status !== "ok") warnings.push("OpenUsage offline; OpenAI/Anthropic native fallbacks unavailable.");
   if (openusage.status !== "ok" && openaiChatGPT.status === "ok") warnings.push("OpenUsage offline; OpenAI limits are using native ChatGPT OAuth fallback.");

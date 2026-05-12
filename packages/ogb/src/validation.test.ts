@@ -40,6 +40,10 @@ test("runValidation validates home/global OpenCode files without project artifac
     assert.equal(report.checks.find((check) => check.name === "Global expanded Gemini context")?.status, "pass");
     assert.equal(report.checks.find((check) => check.name === "Global OpenCode config")?.status, "pass");
     assert.equal(report.checks.find((check) => check.name === "Global OGB startup plugin")?.status, "pass");
+    const releaseCheck = report.checks.find((check) => check.name === "Release bootstrap static check");
+    assert.equal(releaseCheck?.status, "pass");
+    assert.match(releaseCheck?.message ?? "", /Linux/);
+    assert.match(releaseCheck?.message ?? "", /fish/);
     assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "opencode.generated.json")), false);
     assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agents", "YOLO.md")), false);
   } finally {
