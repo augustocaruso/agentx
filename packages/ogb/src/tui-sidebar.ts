@@ -19,6 +19,7 @@ export const TUI_SIDEBAR_PLUGIN_SPEC = "./tui-plugins/ogb-sidebar.js";
 export const TUI_SIDEBAR_PLUGIN_SOURCE = String.raw`import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createComponent, createElement, insert, spread } from "@opentui/solid";
 import { createSignal, onCleanup, onMount } from "solid-js";
 
@@ -26,6 +27,8 @@ const id = "ogb:sidebar";
 const REFRESH_MS = 5000;
 const PROMPT_REFRESH_MS = 1000;
 const GLOBAL_GENERATED_DIR = path.join(os.homedir(), ".config", "opencode-gemini-bridge", "generated");
+const GLOBAL_TUI_PLUGIN_PATH = path.join(os.homedir(), ".config", "opencode", "tui-plugins", "ogb-sidebar.js");
+const PLUGIN_FILE = fileURLToPath(import.meta.url);
 let eventsRegistered = false;
 let activeCall;
 let eventDisposers = [];
@@ -53,6 +56,30 @@ function safeReadJson(filePath) {
   } catch {
     return undefined;
   }
+}
+
+function samePath(left, right) {
+  try {
+    return path.resolve(left) === path.resolve(right);
+  } catch {
+    return false;
+  }
+}
+
+function projectTuiPluginPath(root) {
+  return path.join(root, ".opencode", "tui-plugins", "ogb-sidebar.js");
+}
+
+function staleProjectSidebarInstalled(root) {
+  const projectPlugin = projectTuiPluginPath(root);
+  if (samePath(PLUGIN_FILE, projectPlugin)) return false;
+  if (!fs.existsSync(projectPlugin)) return false;
+  return textFileIncludes(projectPlugin, "ogb:sidebar") && !textFileIncludes(projectPlugin, "shouldRegisterOgbSidebar");
+}
+
+function shouldRegisterOgbSidebar(root) {
+  if (samePath(PLUGIN_FILE, GLOBAL_TUI_PLUGIN_PATH)) return !staleProjectSidebarInstalled(root);
+  return !fs.existsSync(GLOBAL_TUI_PLUGIN_PATH);
 }
 
 function isHomeRoot(root) {
@@ -187,9 +214,38 @@ function providerFooterLine(provider) {
   return session || quota || weekly || lines[0] || providerPrimaryLine(provider);
 }
 
+function limitsReportAt(filePath) {
+  const limits = safeReadJson(filePath);
+  if (!limits || !Array.isArray(limits.providers)) return undefined;
+  const generatedAt = Date.parse(String(limits.generatedAt || ""));
+  let timestamp = Number.isFinite(generatedAt) ? generatedAt : 0;
+  if (timestamp <= 0) {
+    try {
+      timestamp = fs.statSync(filePath).mtimeMs;
+    } catch {
+      timestamp = 0;
+    }
+  }
+  return { limits, timestamp };
+}
+
+function newestLimitsReport(root) {
+  const candidates = [
+    path.join(generatedDir(root), "ogb-limits.json"),
+    path.join(GLOBAL_GENERATED_DIR, "ogb-limits.json"),
+  ];
+  let best;
+  for (const filePath of [...new Set(candidates)]) {
+    const report = limitsReportAt(filePath);
+    if (!report) continue;
+    if (!best || report.timestamp > best.timestamp) best = report;
+  }
+  return best?.limits;
+}
+
 function readLimits(root) {
-  const limits = safeReadJson(path.join(generatedDir(root), "ogb-limits.json"));
-  if (!limits || !Array.isArray(limits.providers)) return { providers: [], status: "missing" };
+  const limits = newestLimitsReport(root);
+  if (!limits) return { providers: [], status: "missing" };
   return {
     providers: limits.providers,
     status: String(limits.status || "unknown"),
@@ -346,10 +402,19 @@ function formatQuotaRows(entries, errors) {
   return lines;
 }
 
-function providerQuotaRows(provider) {
+function displayLimitLines(provider) {
   const lines = (Array.isArray(provider?.lines) ? provider.lines : [])
     .filter((item) => item?.type === "progress" || lineUsedPercent(item) !== undefined)
     .slice(0, 4);
+  const weekly = lineWithLabel(lines, "Weekly");
+  if ((lineUsedPercent(weekly) ?? 0) >= 100) {
+    return lines.filter((item) => String(item?.label || "").toLowerCase() !== "session");
+  }
+  return lines;
+}
+
+function providerQuotaRows(provider) {
+  const lines = displayLimitLines(provider);
   const effectiveLines = lines.length > 0 ? lines : [providerPrimaryLine(provider)].filter(Boolean);
   const providerName = providerDisplayName(provider);
   return effectiveLines
@@ -370,19 +435,8 @@ function providerQuotaRows(provider) {
 }
 
 function unavailableLimitRows(root) {
-  const limits = readLimits(root);
-  const providers = limits.providers || [];
-  const providerText = providers.map((provider) => (String(provider.providerId || "") + " " + String(provider.displayName || "")).toLowerCase()).join(" ");
-  const rows = [];
-  const anthropic = limits.sources?.anthropicClaude;
-  if (!providerText.includes("anthropic") && anthropic?.status && anthropic.status !== "ok" && anthropic.status !== "skipped") {
-    rows.push({ label: "Anthropic", message: "unavailable" });
-  }
-  const gemini = limits.sources?.geminiCodeAssist;
-  if (!providerText.includes("gemini") && gemini?.status && gemini.status !== "ok" && gemini.status !== "skipped") {
-    rows.push({ label: "Gemini", message: "unavailable" });
-  }
-  return rows;
+  void root;
+  return [];
 }
 
 function quotaRows(root) {
@@ -1053,6 +1107,7 @@ function PromptRight(props) {
 
 const tui = async (api) => {
   const root = api.state.path.directory || process.cwd();
+  if (!shouldRegisterOgbSidebar(root)) return;
   registerElapsedEvents(api);
 
   api.slots.register({

@@ -17,7 +17,7 @@ import { resolveRulesyncCommand } from "./rulesync.js";
 import { missingGlobalTuiRuntimeDependencies } from "./setup-ux.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import { readSyncState } from "./sync-state.js";
-import { hookTrustKey, readTrustFile } from "./trust.js";
+import { hookTrustKeys, hookTrustRecordMatches, readTrustFile } from "./trust.js";
 import { GLOBAL_TUI_SIDEBAR_PLUGIN_PATH, TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 import { OGB_VERSION, type Inventory, type ResourceStatus, type StatusCounts } from "./types.js";
 
@@ -135,9 +135,10 @@ function opencodeStatusCounts<T extends { source?: string; status: ResourceStatu
 
 function hookIsTrusted(hook: Inventory["hooks"][number], projectRoot: string, homeDir: string): boolean {
   const trust = readTrustFile(projectRoot, homeDir);
-  const record = trust.hooks?.[hookTrustKey(hook)];
-  if (!record || !fs.existsSync(hook.source)) return false;
-  return sha256File(hook.source) === record.sha256;
+  return hookTrustKeys(hook, projectRoot, homeDir).some((key) => {
+    const record = trust.hooks?.[key];
+    return record ? hookTrustRecordMatches(hook, record) : false;
+  });
 }
 
 function collectWarnings(inv: Inventory, projectRoot: string, homeDir: string): string[] {

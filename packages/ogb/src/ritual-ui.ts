@@ -286,6 +286,11 @@ function updateModel(report: SelfUpdateReport): RitualViewModel {
   const postUpdateTone = toneFromOutcome(report.postUpdate?.status);
   const releaseFlagIndex = report.plan.delegation.args.indexOf("--release");
   const release = releaseFlagIndex >= 0 ? report.plan.delegation.args[releaseFlagIndex + 1] : undefined;
+  const bootstrapDetail = report.status === "preview"
+    ? "Release pack download and installer would run."
+    : report.status === "applied"
+      ? "Release pack installed."
+      : "Release pack install did not complete.";
   return {
     title: titleForKind("update"),
     subtitle: report.message,
@@ -297,7 +302,7 @@ function updateModel(report: SelfUpdateReport): RitualViewModel {
       { label: "mode", value: report.status === "preview" ? "dry-run" : "apply" },
     ],
     steps: [
-      { label: "download + bootstrap", status: tone, detail: report.command.join(" ") },
+      { label: "download + bootstrap", status: tone, detail: bootstrapDetail },
       ...(report.postUpdate ? [{ label: "post-update check", status: postUpdateTone, detail: report.postUpdate.message }] : []),
     ],
     callouts: report.status === "error" ? uniqueLines([report.message, report.stderrTail, report.stdoutTail, report.postUpdate?.stderrTail, report.postUpdate?.stdoutTail]) : [],

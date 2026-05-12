@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,6 +29,14 @@ function hasGit(): boolean {
   return !result.error && result.status === 0;
 }
 
+function pythonCommand(): string | undefined {
+  for (const command of ["python3", "python"]) {
+    const result = spawnSync(command, ["--version"], { encoding: "utf8" });
+    if (!result.error && result.status === 0) return command;
+  }
+  return undefined;
+}
+
 function git(cwd: string, args: string[]): void {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   assert.equal(result.status, 0, `${args.join(" ")}\n${result.stderr}`);
@@ -37,6 +46,10 @@ function gitOutput(cwd: string, args: string[]): string {
   const result = spawnSync("git", args, { cwd, encoding: "utf8" });
   assert.equal(result.status, 0, `${args.join(" ")}\n${result.stderr}`);
   return result.stdout;
+}
+
+function sha256Text(value: string): string {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 function patch(overrides: Partial<OgbPatch> & Pick<OgbPatch, "id" | "phase" | "run">): OgbPatch {
@@ -333,6 +346,120 @@ test("medical notes pre-update snapshot captures allowlisted diffs and scripts",
   assert.match(snapshot.generated_scripts[0].content, /patched before update|agent hotfix/);
 });
 
+test("medical notes pre-update snapshot recovers manifest drift when git status is clean", { skip: !hasGit() }, () => {
+  const homeDir = tempRoot();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  fs.mkdirSync(extensionPath, { recursive: true });
+  fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench", version: "0.3.10" }), "utf8");
+  const oldGemini = "# Router\nold route\n";
+  const newGemini = "# Router\nnew route\n";
+  fs.writeFileSync(path.join(extensionPath, "GEMINI.md"), oldGemini, "utf8");
+  git(extensionPath, ["init"]);
+  git(extensionPath, ["config", "user.email", "test@example.com"]);
+  git(extensionPath, ["config", "user.name", "Test"]);
+  git(extensionPath, ["add", "gemini-extension.json", "GEMINI.md"]);
+  git(extensionPath, ["commit", "-m", "old release"]);
+  fs.writeFileSync(path.join(extensionPath, "extension-integrity-manifest.json"), JSON.stringify({
+    schema: "medical-notes-workbench.extension-integrity-manifest.v1",
+    app_version: "0.3.10",
+    files: [{
+      path: "GEMINI.md",
+      kind: "prompt",
+      sha256: sha256Text(oldGemini),
+      normalized_sha256: sha256Text(oldGemini),
+      size_bytes: Buffer.byteLength(oldGemini, "utf8"),
+      line_count: 2,
+    }],
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(extensionPath, "GEMINI.md"), newGemini, "utf8");
+  git(extensionPath, ["add", "GEMINI.md", "extension-integrity-manifest.json"]);
+  git(extensionPath, ["commit", "-m", "agent changed release"]);
+
+  const report = runBeforeGeminiExtensionUpdatePatches({
+    projectRoot: homeDir,
+    homeDir,
+    registry: OGB_PATCHES,
+    now: new Date("2026-05-08T13:00:00.000Z"),
+    extension: {
+      name: "medical-notes-workbench",
+      extensionPath,
+      manifestPath: path.join(extensionPath, "gemini-extension.json"),
+      currentVersion: "0.3.10",
+    },
+  });
+  const snapshotJsonPath = report.results[0]?.writes?.find((item) => item.endsWith("snapshot.json"));
+  assert.equal(report.outcome, "pass");
+  assert.equal(report.results[0]?.status, "applied");
+  assert.ok(snapshotJsonPath);
+  const snapshotDir = path.dirname(snapshotJsonPath);
+  const snapshot = JSON.parse(fs.readFileSync(snapshotJsonPath, "utf8"));
+  const trackedDiff = fs.readFileSync(path.join(snapshotDir, "tracked.diff"), "utf8");
+  const extensionFullDiff = fs.readFileSync(path.join(snapshotDir, "extension-full.diff"), "utf8");
+
+  assert.equal(snapshot.changed_path_count, 1);
+  assert.equal(snapshot.manifest_drift_path_count, 1);
+  assert.equal(snapshot.baseline_recovered_count, 1);
+  assert.deepEqual(snapshot.changed_paths, ["GEMINI.md"]);
+  assert.match(trackedDiff, /old route/);
+  assert.match(trackedDiff, /new route/);
+  assert.match(extensionFullDiff, /old route/);
+  assert.match(extensionFullDiff, /new route/);
+});
+
+test("medical notes pre-update snapshot prefers installed capture_extension_diff script", { skip: !hasGit() || !pythonCommand() }, () => {
+  const homeDir = tempRoot();
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  fs.mkdirSync(path.join(extensionPath, "scripts", "mednotes"), { recursive: true });
+  fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench", version: "0.3.18" }), "utf8");
+  fs.writeFileSync(path.join(extensionPath, "GEMINI.md"), "baseline\n", "utf8");
+  fs.writeFileSync(path.join(extensionPath, "scripts", "mednotes", "capture_extension_diff.py"), [
+    "import argparse, json",
+    "from pathlib import Path",
+    "parser = argparse.ArgumentParser()",
+    "parser.add_argument('--extension-path')",
+    "parser.add_argument('--output-dir')",
+    "parser.add_argument('--no-flush', action='store_true')",
+    "parser.add_argument('--no-existing-snapshots', action='store_true')",
+    "args = parser.parse_args()",
+    "out = Path(args.output_dir)",
+    "out.mkdir(parents=True, exist_ok=True)",
+    "patch = 'diff --git a/GEMINI.md b/GEMINI.md\\n--- a/GEMINI.md\\n+++ b/GEMINI.md\\n@@\\n-script old\\n+script captured drift\\n'",
+    "(out / 'tracked.diff').write_text(patch, encoding='utf-8')",
+    "(out / 'extension-full.diff').write_text(patch, encoding='utf-8')",
+    "(out / 'staged.diff').write_text('', encoding='utf-8')",
+    "(out / 'untracked.diff').write_text('', encoding='utf-8')",
+    "(out / 'snapshot.json').write_text(json.dumps({'schema': 'medical-notes-workbench.pre-update-extension-snapshot.v1', 'snapshot_id': out.name, 'snapshot_path': str(out), 'changed_path_count': 1, 'untracked_path_count': 0, 'capture_script': 'fixture'}, indent=2), encoding='utf-8')",
+    "print(json.dumps({'ok': True, 'snapshot_path': str(out)}))",
+  ].join("\n"), "utf8");
+  git(extensionPath, ["init"]);
+  git(extensionPath, ["config", "user.email", "test@example.com"]);
+  git(extensionPath, ["config", "user.name", "Test"]);
+  git(extensionPath, ["add", "."]);
+  git(extensionPath, ["commit", "-m", "baseline"]);
+  fs.writeFileSync(path.join(extensionPath, "GEMINI.md"), "local drift\n", "utf8");
+
+  const report = runBeforeGeminiExtensionUpdatePatches({
+    projectRoot: homeDir,
+    homeDir,
+    registry: OGB_PATCHES,
+    env: { ...process.env, OGB_PYTHON: pythonCommand() },
+    now: new Date("2026-05-08T14:00:00.000Z"),
+    extension: {
+      name: "medical-notes-workbench",
+      extensionPath,
+      manifestPath: path.join(extensionPath, "gemini-extension.json"),
+      currentVersion: "0.3.18",
+    },
+  });
+  const snapshotJsonPath = report.results[0]?.writes?.find((item) => item.endsWith("snapshot.json"));
+  assert.equal(report.outcome, "pass");
+  assert.equal(report.results[0]?.status, "applied");
+  assert.match(report.results[0]?.message ?? "", /capture_extension_diff\.py/);
+  assert.ok(snapshotJsonPath);
+  const trackedDiff = fs.readFileSync(path.join(path.dirname(snapshotJsonPath), "tracked.diff"), "utf8");
+  assert.match(trackedDiff, /script captured drift/);
+});
+
 test("patch phases emit progress events with canonical step ids", () => {
   const homeDir = tempRoot();
   const events: RitualProgressEvent[] = [];
@@ -354,10 +481,33 @@ test("patch phases emit progress events with canonical step ids", () => {
     onProgress: (event) => events.push(event),
   });
 
-  assert.deepEqual(events.map((event) => `${event.stepId}:${event.status}`), [
-    "patches-pre-sync:running",
-    "patches-pre-sync:pass",
-  ]);
+  assert.deepEqual(events.map((event) => `${event.stepId}:${event.status}`), ["patches-pre-sync:pass"]);
+});
+
+test("patch phases stay silent when no patch applies", () => {
+  const homeDir = tempRoot();
+  const events: RitualProgressEvent[] = [];
+  const registry = [
+    patch({
+      id: "not-applicable",
+      phase: "pre-sync",
+      applies: () => false,
+      run() {
+        return { status: "applied", message: "should not run" };
+      },
+    }),
+  ];
+
+  const report = runPatchesForPhase({
+    phase: "pre-sync",
+    projectRoot: homeDir,
+    homeDir,
+    registry,
+    onProgress: (event) => events.push(event),
+  });
+
+  assert.equal(report.outcome, "skipped");
+  assert.deepEqual(events, []);
 });
 
 test("patches receive project, platform and command contract in context", () => {

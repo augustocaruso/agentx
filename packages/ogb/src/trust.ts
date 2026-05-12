@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
-import { sha256File } from "./file-hash.js";
+import { sha256File, sha256Text } from "./file-hash.js";
 import { resolveProjectPaths } from "./paths.js";
 import { OGB_VERSION, type HookInfo } from "./types.js";
 
@@ -89,6 +89,45 @@ export function writeTrustFile(filePath: string, value: OgbTrustFile): void {
 
 export function hookTrustKey(hook: Pick<HookInfo, "source" | "name">): string {
   return `${path.resolve(hook.source)}#${hook.name}`;
+}
+
+function toPosix(input: string): string {
+  return input.split(path.sep).join("/");
+}
+
+function stableRelativePath(root: string | undefined, filePath: string): string | undefined {
+  if (!root) return undefined;
+  const relativePath = path.relative(path.resolve(root), path.resolve(filePath));
+  if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) return undefined;
+  return toPosix(relativePath);
+}
+
+export function hookTrustKeys(hook: Pick<HookInfo, "source" | "name" | "scope">, projectRoot?: string, homeDir?: string): string[] {
+  const keys = [hookTrustKey(hook)];
+  const scopeRoot = hook.scope === "global" ? homeDir : projectRoot;
+  const relativePath = stableRelativePath(scopeRoot, hook.source);
+  if (relativePath) keys.push(`${hook.scope}:${relativePath}#${hook.name}`);
+  return [...new Set(keys)];
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(object[key])}`).join(",")}}`;
+}
+
+export function hookTrustHash(hook: Pick<HookInfo, "source" | "name">): string {
+  const parsed = readJsonc(hook.source);
+  const hookValue = parsed?.hooks && typeof parsed.hooks === "object" ? parsed.hooks[hook.name] : undefined;
+  if (hookValue !== undefined) return sha256Text(`ogb-hook-trust.v1\n${hook.name}\n${canonicalJson(hookValue)}\n`);
+  return sha256File(hook.source);
+}
+
+export function hookTrustRecordMatches(hook: Pick<HookInfo, "source" | "name">, record: TrustedResource): boolean {
+  if (!fs.existsSync(hook.source)) return false;
+  if (hookTrustHash(hook) === record.sha256) return true;
+  return sha256File(hook.source) === record.sha256;
 }
 
 function findExtension(map: any, name: string): any | undefined {

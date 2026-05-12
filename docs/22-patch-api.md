@@ -171,7 +171,12 @@ substituir ou justificar algum patch.
 
 ## Progresso
 
-As fases de check aparecem no contrato publico `--progress-json` e na UI viva como TODOs:
+Patches nao fazem parte da lista normal de TODOs do `ogb check`. Eles sao
+infraestrutura de reparo, nao tarefas que o usuario precisa acompanhar a cada
+execucao.
+
+As fases abaixo so aparecem no contrato publico `--progress-json` e na UI viva
+quando um patch realmente executa, gera warning ou falha:
 
 - `patches-pre-extension-update`
 - `patches-post-extension-update`
@@ -180,7 +185,11 @@ As fases de check aparecem no contrato publico `--progress-json` e na UI viva co
 - `patches-pre-doctor`
 - `patches-post-check`
 
-`ogb check --no-patches` remove essas fases e nao executa patches.
+Fases sem patch aplicavel ficam silenciosas. Isso evita placeholders como
+"no patches apply" poluindo update/check limpos.
+
+`ogb check --no-patches` continua sendo o escape hatch para nao executar patch
+nenhum.
 
 ## Patch do Medical Notes Workbench
 
@@ -196,6 +205,15 @@ Regra:
 - com drift e snapshot falhou: o patch retorna `failed`, e por ser `required`, o update de Gemini Extensions fica `blocked`.
 - com drift relevante detectado mas sem diff/script util capturado: o patch
   retorna `failed` e bloqueia o update.
+- se a extensao instalada ja tiver
+  `scripts/mednotes/capture_extension_diff.py`, o patch prefere rodar esse
+  script via Python pelo `native-runner`, antes de chamar o Gemini CLI;
+- se o script nao existir, Python nao estiver disponivel, ou o script nao gerar
+  snapshot util, o patch cai para a captura nativa do OGB;
+- a captura nativa tambem compara `extension-integrity-manifest.json`: quando
+  `git status` esta limpo mas o manifest denuncia drift, o OGB procura no
+  historico Git um blob cujo `sha256` bate com o manifest e reconstrui um patch
+  em `tracked.diff` e `extension-full.diff`.
 
 Para evitar snapshots vazios ou ruidosos, o patch so considera arquivos
 allowlisted da extensao:
@@ -221,6 +239,7 @@ O snapshot persistente e gravado fora da pasta da extensao:
   tracked.diff
   staged.diff
   untracked.diff
+  extension-full.diff
 ```
 
 `snapshot.json` usa schema `medical-notes-workbench.pre-update-extension-snapshot.v1` e contem pelo menos:
@@ -239,6 +258,9 @@ O snapshot persistente e gravado fora da pasta da extensao:
 - `changed_paths`
 - `untracked_paths`
 - `ignored_paths`
+- `manifest_drift_path_count`
+- `manifest_drift_paths`
+- `baseline_recovered_count`
 - `snapshot_useful`
 - `generated_scripts`
 
@@ -247,7 +269,9 @@ O diff de untracked concatena diffs `git diff --binary --no-index` para
 preservar conteudo novo antes do update. Scripts operacionais allowlisted com
 extensao `.py`, `.js`, `.mjs`, `.cjs`, `.sh`, `.ps1` ou `.cmd` tambem entram em
 `generated_scripts` com linguagem, tamanho e conteudo quando estiverem abaixo do
-limite de captura.
+limite de captura. Quando o script de resgate roda, o snapshot tambem pode
+conter `telemetry-envelope.json`, `capture-result.json`, `capture.zip` e
+arquivos auxiliares de diagnostico.
 
 ## Como adicionar um patch
 

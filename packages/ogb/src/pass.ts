@@ -3,7 +3,6 @@ import path from "node:path";
 import { runDashboard, type DashboardReport } from "./dashboard.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { updateGeminiExtensions, type ExtensionCommandReport } from "./extensions.js";
-import { sha256File } from "./file-hash.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { buildInventory } from "./inventory.js";
 import { runPatchesForPhase, summarizePatchReport, type OgbPatch, type PatchPhase, type PatchRunReport } from "./patches.js";
@@ -11,7 +10,7 @@ import { resolveProjectPaths } from "./paths.js";
 import { runSecurityCheck, type SecurityReport } from "./security.js";
 import { setupOpenCode, type SetupOpenCodeReport } from "./setup-opencode.js";
 import { syncToOpenCode, type SyncReport } from "./sync.js";
-import { hookTrustKey, readTrustFile, writeTrustFile } from "./trust.js";
+import { hookTrustHash, hookTrustKeys, readTrustFile, writeTrustFile } from "./trust.js";
 import { OGB_VERSION } from "./types.js";
 import { runValidation, type ValidationReport } from "./validation.js";
 import type { RulesyncMode } from "./rulesync.js";
@@ -197,10 +196,11 @@ function acceptCurrentHooks(projectRoot: string, homeDir: string, dryRun?: boole
 
   for (const hook of inv.hooks) {
     if (!fs.existsSync(hook.source)) continue;
-    trust.hooks[hookTrustKey(hook)] = {
-      sha256: sha256File(hook.source),
+    const record = {
+      sha256: hookTrustHash(hook),
       trustedAt: new Date().toISOString(),
     };
+    for (const key of hookTrustKeys(hook, paths.projectRoot, paths.homeDir)) trust.hooks[key] = record;
     accepted.push(`${hook.name} (${hook.source})`);
   }
 
@@ -348,6 +348,14 @@ function patchReportStepStatus(report: PatchRunReport): PassStep["status"] {
   return "pass";
 }
 
+function patchResultIsVisible(result: PatchRunReport["results"][number]): boolean {
+  return result.status !== "skipped";
+}
+
+function patchReportHasVisibleResults(report: PatchRunReport): boolean {
+  return report.results.some(patchResultIsVisible);
+}
+
 export function runPass(options: PassOptions = {}): PassReport {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   const plan = buildInstallerPlan({
@@ -406,7 +414,7 @@ export function runPass(options: PassOptions = {}): PassReport {
       onProgress: options.onProgress,
     });
     patchReports.push(report);
-    if (report.results.length > 0) automated.push(`patches:${phase}`);
+    if (patchReportHasVisibleResults(report)) automated.push(`patches:${phase}`);
     recordPatchBlockers(report);
     return report;
   }
@@ -417,11 +425,11 @@ export function runPass(options: PassOptions = {}): PassReport {
         blockers.push(blocker(
           "patch",
           result.required ? "fail" : "warn",
-          `Patch ${result.id} falhou: ${result.message}`,
+          `Patch OGB encontrou um problema em ${result.id}: ${result.message}`,
           patchAction(result),
         ));
       } else if (result.status === "warning") {
-        blockers.push(blocker("patch", "warn", `Patch ${result.id}: ${result.message}`, patchAction(result)));
+        blockers.push(blocker("patch", "warn", `Patch OGB pediu atencao em ${result.id}: ${result.message}`, patchAction(result)));
       }
     }
   }
@@ -441,7 +449,7 @@ export function runPass(options: PassOptions = {}): PassReport {
     if (extensionUpdate.patches?.length) {
       patchReports.push(...extensionUpdate.patches);
       for (const report of extensionUpdate.patches) recordPatchBlockers(report);
-      if (extensionUpdate.patches.some((report) => report.results.length > 0)) automated.push("patches:before-gemini-extension-update");
+      if (extensionUpdate.patches.some(patchReportHasVisibleResults)) automated.push("patches:before-gemini-extension-update");
     }
     const message = extensionUpdateMessage(extensionUpdate);
     emitCheckProgress(
@@ -605,10 +613,10 @@ export function runPass(options: PassOptions = {}): PassReport {
   const steps: PassStep[] = [];
   const appendPatchStep = (phase: PatchPhase) => {
     const reports = patchReports.filter((item) => item.phase === phase || (phase === "pre-extension-update" && item.phase === "before-gemini-extension-update"));
-    if (reports.length === 0 || reports.every((report) => report.results.length === 0)) return;
+    if (reports.length === 0 || reports.every((report) => !patchReportHasVisibleResults(report))) return;
     const errors = reports.reduce((count, report) => count + report.errors.length, 0);
     const warnings = reports.reduce((count, report) => count + report.warnings.length, 0);
-    const resultCount = reports.reduce((count, report) => count + report.results.length, 0);
+    const resultCount = reports.reduce((count, report) => count + report.results.filter(patchResultIsVisible).length, 0);
     steps.push({
       name: `patches:${phase}`,
       status: errors > 0 ? "fail" : warnings > 0 ? "warn" : "pass",

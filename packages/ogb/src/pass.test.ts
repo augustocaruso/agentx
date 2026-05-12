@@ -69,20 +69,14 @@ test("runPass emits real progress events in ritual order", () => {
   const runningOrder = events.filter((event) => event.status === "running").map((event) => event.stepId);
   assert.deepEqual(runningOrder, [
     "setup",
-    "patches-pre-extension-update",
     "extension-update",
-    "patches-post-extension-update",
-    "patches-pre-sync",
     "sync",
-    "patches-post-sync",
-    "patches-pre-doctor",
     "doctor",
     "validate",
     "security",
     "dashboard",
-    "patches-post-check",
   ]);
-  assert.equal(events.at(-1)?.stepId, "patches-post-check");
+  assert.equal(events.at(-1)?.stepId, "dashboard");
   assert.notEqual(events.at(-1)?.status, "running");
   process.exitCode = oldExitCode;
 });
@@ -105,7 +99,7 @@ test("runPass removes progress steps disabled by check flags", () => {
     onProgress: (event) => events.push(event),
   });
 
-  assert.deepEqual([...new Set(events.map((event) => event.stepId))], ["patches-pre-doctor", "doctor", "patches-post-check"]);
+  assert.deepEqual([...new Set(events.map((event) => event.stepId))], ["doctor"]);
   process.exitCode = oldExitCode;
 });
 
@@ -200,6 +194,59 @@ test("trusted Gemini hooks require review again after settings change", () => {
   const doctor = runDoctor({ projectRoot, homeDir: projectRoot, silent: true });
 
   assert.equal(doctor.warnings.some((warning) => warning.startsWith("Hook needs review:")), true);
+  process.exitCode = oldExitCode;
+});
+
+test("trusted Gemini hooks survive unrelated settings changes", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+  writeHookSettings(projectRoot);
+  runPass({
+    projectRoot,
+    homeDir: projectRoot,
+    acceptHooks: true,
+    skipExtensionUpdate: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+  });
+
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    hooks: {
+      BeforeTool: [{ command: "echo ok" }],
+    },
+    mcpServers: {
+      demo: { command: "node", args: ["server.js"] },
+    },
+  }, null, 2), "utf8");
+
+  const doctor = runDoctor({ projectRoot, homeDir: projectRoot, silent: true });
+
+  assert.equal(doctor.warnings.some((warning) => warning.startsWith("Hook needs review:")), false);
+  process.exitCode = oldExitCode;
+});
+
+test("trusted Gemini hooks survive project directory moves", () => {
+  const homeDir = tempRoot();
+  const projectRoot = path.join(homeDir, "project-before");
+  const movedRoot = path.join(homeDir, "project-after");
+  const oldExitCode = process.exitCode;
+  fs.mkdirSync(projectRoot, { recursive: true });
+  writeHookSettings(projectRoot);
+  runPass({
+    projectRoot,
+    homeDir,
+    acceptHooks: true,
+    skipExtensionUpdate: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+  });
+
+  fs.renameSync(projectRoot, movedRoot);
+  const doctor = runDoctor({ projectRoot: movedRoot, homeDir, silent: true });
+
+  assert.equal(doctor.warnings.some((warning) => warning.startsWith("Hook needs review:")), false);
   process.exitCode = oldExitCode;
 });
 

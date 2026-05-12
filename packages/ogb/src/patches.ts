@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
@@ -369,9 +370,7 @@ function emitPatchProgress(
 ): void {
   const definition = PATCH_PROGRESS_BY_PHASE[phase];
   if (!definition) return;
-  const prefix = phase === "before-gemini-extension-update" ? "Extension patch" : undefined;
-  const scopedMessage = prefix && message ? `${prefix}: ${message}` : message;
-  emitRitualProgress(sink, { ...definition, status, message: scopedMessage });
+  emitRitualProgress(sink, { ...definition, status, message });
 }
 
 function outcomeForResults(results: readonly PatchRunResult[]): PatchRunReport["outcome"] {
@@ -386,6 +385,10 @@ function progressStatusForReport(report: PatchRunReport): RitualProgressStatus {
   if (report.outcome === "warn") return "warn";
   if (report.outcome === "skipped") return "skipped";
   return "pass";
+}
+
+function shouldShowPatchProgress(results: readonly PatchRunResult[]): boolean {
+  return results.some((result) => result.status !== "skipped");
 }
 
 export function patchPhaseStepId(phase: PatchPhase): string | undefined {
@@ -685,8 +688,8 @@ export function runPatchesForPhase(options: RunPatchesOptions): PatchRunReport {
     },
   };
 
-  emitPatchProgress(options.onProgress, options.phase, "running");
   const results: PatchRunResult[] = [];
+  const runnable: OgbPatch[] = [];
 
   for (const patch of phasePatches) {
     const stateKey = patchStateKey(patch, context);
@@ -707,7 +710,10 @@ export function runPatchesForPhase(options: RunPatchesOptions): PatchRunReport {
       continue;
     }
     if (!applies) continue;
+    runnable.push(patch);
+  }
 
+  for (const patch of runnable) {
     try {
       const result = patch.run(context);
       results.push(normalizePatchResult(patch, result, context));
@@ -751,7 +757,9 @@ export function runPatchesForPhase(options: RunPatchesOptions): PatchRunReport {
     });
   }
 
-  emitPatchProgress(options.onProgress, options.phase, progressStatusForReport(report), summarizePatchReport(report));
+  if (shouldShowPatchProgress(results)) {
+    emitPatchProgress(options.onProgress, options.phase, progressStatusForReport(report), summarizePatchReport(report));
+  }
   return report;
 }
 
@@ -782,6 +790,17 @@ function commandFailed(result: NativeCommandResult, allowedStatus: Array<number 
   return !allowedStatus.includes(result.status);
 }
 
+function gitCommand(): string {
+  const configured = process.env.OGB_GIT_BIN?.trim();
+  if (configured) return configured;
+  if (process.platform !== "win32") {
+    for (const candidate of ["/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"]) {
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return "git";
+}
+
 const MEDNOTES_SNAPSHOT_ALLOWED_EXACT = new Set(["GEMINI.md"]);
 const MEDNOTES_SNAPSHOT_ALLOWED_PREFIXES = [
   "commands/",
@@ -796,10 +815,23 @@ const MEDNOTES_SNAPSHOT_ALLOWED_PREFIXES = [
 const MEDNOTES_SNAPSHOT_DENY_BASENAMES = new Set([".env", ".env.local", ".gemini-extension-install.json", "telemetry.defaults.json"]);
 const MEDNOTES_SCRIPT_EXTENSIONS = new Set([".py", ".js", ".mjs", ".cjs", ".sh", ".ps1", ".cmd"]);
 const MEDNOTES_MAX_GENERATED_SCRIPT_BYTES = 96 * 1024;
+const MEDNOTES_INTEGRITY_MANIFEST = "extension-integrity-manifest.json";
+const MEDNOTES_CAPTURE_SCRIPT_REL = "scripts/mednotes/capture_extension_diff.py";
+const MEDNOTES_MAX_GIT_HISTORY_COMMITS = 600;
+
+interface ManifestDrift {
+  changed: string[];
+  missing: string[];
+  lineEndingOnly: string[];
+  patches: string[];
+  baselineRecoveredCount: number;
+  gitDiffEmptyCount: number;
+  unavailable: Array<{ path: string; reason: string }>;
+}
 
 function git(context: PatchContext, args: string[], timeoutMs = 60_000): NativeCommandResult {
   return context.runCommand({
-    command: "git",
+    command: gitCommand(),
     args,
     cwd: context.extension?.extensionPath ?? context.projectRoot,
     stdio: "pipe",
@@ -861,7 +893,7 @@ function writeUntrackedDiff(context: PatchContext, snapshotDir: string, untracke
     const fullPath = path.resolve(extensionPath, relPath);
     if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) continue;
     const result = context.runCommand({
-      command: "git",
+      command: gitCommand(),
       args: ["diff", "--binary", "--no-index", "--", emptyPath, fullPath],
       cwd: extensionPath,
       stdio: "pipe",
@@ -940,6 +972,240 @@ function generatedScriptsFromDrift(extensionPath: string, paths: string[]): Arra
   return scripts;
 }
 
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeGitStatusPath(value);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function sha256Text(value: string): string {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function emptyManifestDrift(): ManifestDrift {
+  return {
+    changed: [],
+    missing: [],
+    lineEndingOnly: [],
+    patches: [],
+    baselineRecoveredCount: 0,
+    gitDiffEmptyCount: 0,
+    unavailable: [],
+  };
+}
+
+function manifestFileEntries(manifest: Record<string, unknown> | undefined): Array<Record<string, unknown>> {
+  const files = manifest?.files;
+  return Array.isArray(files) ? files.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null) : [];
+}
+
+function recoverManifestBaseline(context: PatchContext, extensionPath: string, relPath: string, expected: Record<string, unknown>): { content?: string; source?: string } {
+  const expectedSha = typeof expected.sha256 === "string" ? expected.sha256 : "";
+  const expectedNormalizedSha = typeof expected.normalized_sha256 === "string" ? expected.normalized_sha256 : "";
+  const history = git(context, ["-C", extensionPath, "rev-list", "--all", "--", relPath], 60_000);
+  if (commandFailed(history)) return {};
+  const commits = history.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, MEDNOTES_MAX_GIT_HISTORY_COMMITS);
+  for (const commit of commits) {
+    const show = git(context, ["-C", extensionPath, "show", `${commit}:${relPath}`], 60_000);
+    if (commandFailed(show)) continue;
+    const content = show.stdout;
+    if (expectedSha && sha256Text(content) === expectedSha) return { content, source: `git:${commit.slice(0, 12)}` };
+    if (expectedNormalizedSha && sha256Text(normalizeLineEndings(content)) === expectedNormalizedSha) {
+      return { content, source: `git:${commit.slice(0, 12)}:normalized` };
+    }
+  }
+  return {};
+}
+
+function patchLines(value: string): string[] {
+  const normalized = normalizeLineEndings(value);
+  const lines = normalized.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  return lines;
+}
+
+function wholeFilePatch(relPath: string, oldText: string, newText: string, baselineSource: string): string {
+  const oldLines = patchLines(oldText);
+  const newLines = patchLines(newText);
+  const oldCount = Math.max(1, oldLines.length);
+  const newCount = Math.max(1, newLines.length);
+  const lines = [
+    `diff --git a/${relPath} b/${relPath}`,
+    `# baseline-source: ${baselineSource}`,
+    `--- a/${relPath}`,
+    `+++ b/${relPath}`,
+    `@@ -1,${oldCount} +1,${newCount} @@`,
+    ...oldLines.map((line) => `-${line}`),
+    ...newLines.map((line) => `+${line}`),
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+function inspectManifestDrift(context: PatchContext, extensionPath: string): ManifestDrift {
+  const manifest = readJsonFile(path.join(extensionPath, MEDNOTES_INTEGRITY_MANIFEST));
+  const entries = manifestFileEntries(manifest);
+  if (entries.length === 0) return emptyManifestDrift();
+  const drift = emptyManifestDrift();
+
+  for (const entry of entries) {
+    const relPath = normalizeGitStatusPath(String(entry.path ?? ""));
+    if (!isMedNotesSnapshotPathAllowed(relPath)) continue;
+    const fullPath = path.resolve(extensionPath, relPath);
+    if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) {
+      drift.missing.push(relPath);
+      const recovered = recoverManifestBaseline(context, extensionPath, relPath, entry);
+      if (recovered.content !== undefined) {
+        drift.baselineRecoveredCount += 1;
+        drift.gitDiffEmptyCount += 1;
+        drift.patches.push(wholeFilePatch(relPath, recovered.content, "", recovered.source ?? "git"));
+      } else {
+        drift.unavailable.push({ path: relPath, reason: "manifest_baseline_not_found" });
+      }
+      continue;
+    }
+
+    const current = fs.readFileSync(fullPath, "utf8");
+    const expectedSha = typeof entry.sha256 === "string" ? entry.sha256 : "";
+    const expectedNormalizedSha = typeof entry.normalized_sha256 === "string" ? entry.normalized_sha256 : "";
+    if (expectedSha && sha256Text(current) === expectedSha) continue;
+    if (expectedNormalizedSha && sha256Text(normalizeLineEndings(current)) === expectedNormalizedSha) {
+      drift.lineEndingOnly.push(relPath);
+      continue;
+    }
+
+    drift.changed.push(relPath);
+    const directDiff = git(context, ["-C", extensionPath, "diff", "--binary", "--", relPath], 60_000);
+    if (!commandFailed(directDiff) && directDiff.stdout.trim()) continue;
+    drift.gitDiffEmptyCount += 1;
+    const recovered = recoverManifestBaseline(context, extensionPath, relPath, entry);
+    if (recovered.content !== undefined) {
+      drift.baselineRecoveredCount += 1;
+      drift.patches.push(wholeFilePatch(relPath, recovered.content, current, recovered.source ?? "git"));
+    } else {
+      drift.unavailable.push({ path: relPath, reason: "git_diff_empty_and_manifest_baseline_not_found" });
+    }
+  }
+
+  drift.changed = uniqueStrings(drift.changed);
+  drift.missing = uniqueStrings(drift.missing);
+  drift.lineEndingOnly = uniqueStrings(drift.lineEndingOnly);
+  return drift;
+}
+
+function combineDiffs(...parts: string[]): string {
+  const chunks = parts.map((part) => part.trim()).filter(Boolean);
+  return chunks.length > 0 ? `${chunks.join("\n\n")}\n` : "";
+}
+
+function medicalNotesCaptureScriptPath(extensionPath: string): string | undefined {
+  const scriptPath = path.join(extensionPath, ...MEDNOTES_CAPTURE_SCRIPT_REL.split("/"));
+  return fs.existsSync(scriptPath) && fs.statSync(scriptPath).isFile() ? scriptPath : undefined;
+}
+
+function pythonCandidates(context: PatchContext): Array<{ command: string; argsPrefix: string[] }> {
+  const envPython = context.adapter.env.OGB_PYTHON || context.adapter.env.PYTHON;
+  const candidates: Array<{ command: string; argsPrefix: string[] }> = [];
+  if (envPython) candidates.push({ command: envPython, argsPrefix: [] });
+  if (context.platform === "win32") candidates.push({ command: "py", argsPrefix: ["-3"] });
+  else {
+    for (const command of ["/usr/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"]) {
+      if (fs.existsSync(command)) candidates.push({ command, argsPrefix: [] });
+    }
+  }
+  candidates.push({ command: "python3", argsPrefix: [] }, { command: "python", argsPrefix: [] });
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.command}\0${candidate.argsPrefix.join("\0")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function collectSnapshotWrites(snapshotDir: string): string[] {
+  return [
+    "snapshot.json",
+    "tracked.diff",
+    "staged.diff",
+    "untracked.diff",
+    "extension-full.diff",
+    "telemetry-envelope.json",
+    "capture-result.json",
+    "capture.zip",
+    "send-result.json",
+    "diff-unavailable.json",
+    "existing-pre-update-snapshots.json",
+  ].map((filename) => path.join(snapshotDir, filename)).filter((filePath) => fs.existsSync(filePath));
+}
+
+function snapshotDirUseful(snapshotDir: string): boolean {
+  for (const filename of ["tracked.diff", "staged.diff", "untracked.diff", "extension-full.diff"]) {
+    const filePath = path.join(snapshotDir, filename);
+    if (fs.existsSync(filePath) && fs.readFileSync(filePath, "utf8").trim()) return true;
+  }
+  const snapshot = readJsonFile(path.join(snapshotDir, "snapshot.json"));
+  const generatedScripts = snapshot?.generated_scripts;
+  return Array.isArray(generatedScripts) && generatedScripts.length > 0;
+}
+
+function runMedicalNotesCaptureScript(context: PatchContext, scriptPath: string, snapshotDir: string): PatchResult | undefined {
+  const extension = context.extension;
+  if (!extension) return undefined;
+  const errors: string[] = [];
+  for (const candidate of pythonCandidates(context)) {
+    const result = context.runCommand({
+      command: candidate.command,
+      args: [
+        ...candidate.argsPrefix,
+        scriptPath,
+        "--extension-path",
+        extension.extensionPath,
+        "--output-dir",
+        snapshotDir,
+        "--no-flush",
+        "--no-existing-snapshots",
+      ],
+      cwd: extension.extensionPath,
+      stdio: "pipe",
+      timeoutMs: 120_000,
+    });
+    if (commandFailed(result)) {
+      errors.push(`${candidate.command}: ${result.stderr || result.error || `exit ${result.status}`}`);
+      continue;
+    }
+    if (!snapshotDirUseful(snapshotDir)) {
+      errors.push(`${candidate.command}: capture_extension_diff.py completed but did not write a useful snapshot`);
+      continue;
+    }
+    return {
+      status: "applied",
+      message: `Snapshot saved via capture_extension_diff.py for ${extension.name}: ${snapshotDir}`,
+      writes: collectSnapshotWrites(snapshotDir),
+      stdoutTail: result.stdout.trim().slice(-2000),
+      stderrTail: result.stderr.trim().slice(-2000),
+      exitCode: result.status,
+      signal: result.signal,
+    };
+  }
+  if (errors.length > 0) {
+    return {
+      status: "warning",
+      message: `capture_extension_diff.py could not run; falling back to native OGB snapshot. ${errors.slice(0, 2).join(" ")}`,
+    };
+  }
+  return undefined;
+}
+
 function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult {
   const extension = context.extension;
   if (!extension) return { status: "skipped", message: "No Gemini extension context was provided." };
@@ -956,7 +1222,9 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
     };
   }
   const drift = parseGitStatus(status.stdout);
-  if (drift.changed.length === 0 && drift.untracked.length === 0) {
+  const manifestDrift = inspectManifestDrift(context, extensionPath);
+  const changedPaths = uniqueStrings([...drift.changed, ...manifestDrift.changed, ...manifestDrift.missing]);
+  if (changedPaths.length === 0 && drift.untracked.length === 0) {
     const ignored = drift.ignored.length ? ` Ignored non-extension drift: ${drift.ignored.slice(0, 5).join(", ")}.` : "";
     return { status: "skipped", message: `${extension.name} has no allowlisted local drift.${ignored}` };
   }
@@ -977,33 +1245,45 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
   const trackedDiffPath = path.join(snapshotDir, "tracked.diff");
   const stagedDiffPath = path.join(snapshotDir, "staged.diff");
   const untrackedDiffPath = path.join(snapshotDir, "untracked.diff");
-  const writes = [snapshotJsonPath, trackedDiffPath, stagedDiffPath, untrackedDiffPath];
+  const extensionFullDiffPath = path.join(snapshotDir, "extension-full.diff");
+  const writes = [snapshotJsonPath, trackedDiffPath, stagedDiffPath, untrackedDiffPath, extensionFullDiffPath];
 
   if (context.dryRun) {
     return {
       status: "preview",
-      message: `Would snapshot ${extension.name} local drift before update.`,
+      message: medicalNotesCaptureScriptPath(extensionPath)
+        ? `Would run capture_extension_diff.py and snapshot ${extension.name} local drift before update.`
+        : `Would snapshot ${extension.name} local drift before update.`,
       writes,
     };
   }
 
   try {
     fs.mkdirSync(snapshotDir, { recursive: true });
+    const captureScript = medicalNotesCaptureScriptPath(extensionPath);
+    if (captureScript) {
+      const scriptResult = runMedicalNotesCaptureScript(context, captureScript, snapshotDir);
+      if (scriptResult?.status === "applied") return scriptResult;
+    }
+
     const pathspecs = medNotesPathspecs();
     const tracked = git(context, ["-C", extensionPath, "diff", "--binary", "--", ...pathspecs]);
     const staged = git(context, ["-C", extensionPath, "diff", "--cached", "--binary", "--", ...pathspecs]);
     if (commandFailed(tracked)) throw new Error(tracked.stderr ?? tracked.error ?? "git diff failed");
     if (commandFailed(staged)) throw new Error(staged.stderr ?? staged.error ?? "git diff --cached failed");
     const untrackedDiff = writeUntrackedDiff(context, snapshotDir, drift.untracked);
-    const generatedScripts = generatedScriptsFromDrift(extensionPath, [...drift.changed, ...drift.untracked]);
-    const snapshotUseful = Boolean(tracked.stdout.trim() || staged.stdout.trim() || untrackedDiff.trim() || generatedScripts.length > 0);
+    const trackedWithManifest = combineDiffs(tracked.stdout, ...manifestDrift.patches);
+    const extensionFullDiff = combineDiffs(trackedWithManifest, staged.stdout, untrackedDiff);
+    const generatedScripts = generatedScriptsFromDrift(extensionPath, [...changedPaths, ...drift.untracked]);
+    const snapshotUseful = Boolean(extensionFullDiff.trim() || generatedScripts.length > 0);
     if (!snapshotUseful) {
       throw new Error("allowlisted drift was detected, but no useful diff or script content was captured");
     }
 
-    fs.writeFileSync(trackedDiffPath, tracked.stdout, "utf8");
+    fs.writeFileSync(trackedDiffPath, trackedWithManifest, "utf8");
     fs.writeFileSync(stagedDiffPath, staged.stdout, "utf8");
     fs.writeFileSync(untrackedDiffPath, untrackedDiff, "utf8");
+    fs.writeFileSync(extensionFullDiffPath, extensionFullDiff, "utf8");
 
     const manifest = extension.manifestPath ? readJsonFile(extension.manifestPath) : undefined;
     const snapshot = {
@@ -1018,12 +1298,19 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
       current_ref: extension.currentRef,
       target_ref: extension.targetRef,
       git_head: gitHead,
-      changed_path_count: drift.changed.length,
+      changed_path_count: changedPaths.length,
       untracked_path_count: drift.untracked.length,
       ignored_path_count: drift.ignored.length,
-      changed_paths: drift.changed,
+      changed_paths: changedPaths,
       untracked_paths: drift.untracked,
       ignored_paths: drift.ignored,
+      manifest_drift_path_count: manifestDrift.changed.length + manifestDrift.missing.length,
+      manifest_drift_paths: uniqueStrings([...manifestDrift.changed, ...manifestDrift.missing]),
+      line_ending_only_count: manifestDrift.lineEndingOnly.length,
+      line_ending_only_paths: manifestDrift.lineEndingOnly,
+      baseline_recovered_count: manifestDrift.baselineRecoveredCount,
+      git_diff_empty_count: manifestDrift.gitDiffEmptyCount,
+      diff_unavailable: manifestDrift.unavailable,
       snapshot_useful: snapshotUseful,
       generated_scripts: generatedScripts,
     };

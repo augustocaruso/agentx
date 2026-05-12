@@ -289,18 +289,12 @@ export const UPDATE_PROGRESS_STEPS = {
 } as const satisfies Record<string, RitualProgressDefinition>;
 
 export function checkProgressSteps(options: CheckProgressOptions = {}): RitualProgressDefinition[] {
-  const patches = options.patches !== false;
   const syncEnabled = options.sync !== false;
   const extensionUpdateEnabled = syncEnabled && options.extensionUpdate !== false;
   return [
     ...(options.setup === false ? [] : [CHECK_PROGRESS_STEPS.setup]),
-    ...(patches && extensionUpdateEnabled ? [CHECK_PROGRESS_STEPS.patchPreExtensionUpdate] : []),
     ...(extensionUpdateEnabled ? [CHECK_PROGRESS_STEPS.extensionUpdate] : []),
-    ...(patches && extensionUpdateEnabled ? [CHECK_PROGRESS_STEPS.patchPostExtensionUpdate] : []),
-    ...(patches && syncEnabled ? [CHECK_PROGRESS_STEPS.patchPreSync] : []),
     ...(syncEnabled ? [CHECK_PROGRESS_STEPS.sync] : []),
-    ...(patches && syncEnabled ? [CHECK_PROGRESS_STEPS.patchPostSync] : []),
-    ...(patches ? [CHECK_PROGRESS_STEPS.patchPreDoctor] : []),
     CHECK_PROGRESS_STEPS.doctor,
     ...(options.acceptHooks ? [CHECK_PROGRESS_STEPS.hookReview] : []),
     ...(options.validation === false ? [] : [{
@@ -309,7 +303,6 @@ export function checkProgressSteps(options: CheckProgressOptions = {}): RitualPr
     }]),
     ...(options.security === false ? [] : [CHECK_PROGRESS_STEPS.security]),
     ...(options.dashboard === false ? [] : [CHECK_PROGRESS_STEPS.dashboard]),
-    ...(patches ? [CHECK_PROGRESS_STEPS.patchPostCheck] : []),
   ];
 }
 

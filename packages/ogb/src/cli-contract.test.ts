@@ -84,7 +84,7 @@ test("check --progress-json emits only versioned NDJSON on stdout", () => {
   assert.equal(events[0].type, "ritual.started");
   assert.equal(events.at(-1).type, "ritual.finished");
   assert.ok(events.every((event) => event.schemaVersion === RITUAL_PROGRESS_SCHEMA_VERSION));
-  assert.deepEqual(events.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId), ["patches-pre-doctor", "doctor", "patches-post-check"]);
+  assert.deepEqual(events.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId), ["doctor"]);
   assert.equal(events.at(-1).exitCode, 0);
 });
 
@@ -115,28 +115,16 @@ test("check --progress-json includes extension-update before sync unless skipped
   assert.ok(withUpdate.status === 0 || withUpdate.status === 1, withUpdate.stderr);
   const withUpdateEvents = parseNdjson(withUpdate.stdout);
   assert.deepEqual(withUpdateEvents[0].steps.map((step: any) => step.stepId), [
-    "patches-pre-extension-update",
     "extension-update",
-    "patches-post-extension-update",
-    "patches-pre-sync",
     "sync",
-    "patches-post-sync",
-    "patches-pre-doctor",
     "doctor",
-    "patches-post-check",
   ]);
   assert.deepEqual(
     withUpdateEvents.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId),
     [
-      "patches-pre-extension-update",
       "extension-update",
-      "patches-post-extension-update",
-      "patches-pre-sync",
       "sync",
-      "patches-post-sync",
-      "patches-pre-doctor",
       "doctor",
-      "patches-post-check",
     ],
   );
 
@@ -144,12 +132,8 @@ test("check --progress-json includes extension-update before sync unless skipped
   assert.ok(skipped.status === 0 || skipped.status === 1, skipped.stderr);
   const skippedEvents = parseNdjson(skipped.stdout);
   assert.deepEqual(skippedEvents[0].steps.map((step: any) => step.stepId), [
-    "patches-pre-sync",
     "sync",
-    "patches-post-sync",
-    "patches-pre-doctor",
     "doctor",
-    "patches-post-check",
   ]);
 });
 
