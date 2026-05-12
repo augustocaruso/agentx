@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
+import { resolveCommand } from "./command-resolution.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { externalOpenCodePlugins, externalTuiPlugins } from "./external-integrations.js";
 import { sha256Text } from "./file-hash.js";
@@ -1197,6 +1198,10 @@ function currentCliBaseArgs(): string[] {
   return [];
 }
 
+function defaultNodeCommand(options: SetupOpenCodeOptions): string {
+  return resolveCommand("node", { homeDir: options.homeDir }) ?? process.execPath;
+}
+
 export function defaultCommandPlan(options: SetupOpenCodeOptions): SetupCommandPlan {
   if (options.command) {
     return {
@@ -1209,7 +1214,7 @@ export function defaultCommandPlan(options: SetupOpenCodeOptions): SetupCommandP
   const baseArgs = options.baseArgs ?? currentCliBaseArgs();
   if (baseArgs.length > 0) {
     return {
-      command: process.execPath,
+      command: defaultNodeCommand(options),
       baseArgs,
       syncArgs: options.syncArgs ?? ["startup-sync"],
     };

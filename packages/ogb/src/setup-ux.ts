@@ -474,8 +474,13 @@ function currentCliPath(): string | undefined {
 function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptions, "platform" | "env">): { command: string; baseArgs: string[] } {
   const cliPath = currentCliPath();
   if (cliPath) {
+    const nodeCommand = resolveCommand("node", {
+      homeDir: adapter.homeDir,
+      platform: adapter.platform,
+      env: adapter.env,
+    }) ?? process.execPath;
     return {
-      command: process.execPath,
+      command: nodeCommand,
       baseArgs: [cliPath, "--project", adapter.homeDir],
     };
   }
@@ -491,6 +496,53 @@ function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptio
     }) ?? "ogb",
     baseArgs: ["--project", adapter.homeDir],
   };
+}
+
+function startupLauncherArgs(plan: { baseArgs: string[] }): string[] {
+  return [...plan.baseArgs, "startup-sync"];
+}
+
+function sameStringArray(left: unknown, right: string[]): boolean {
+  return Array.isArray(left)
+    && left.length === right.length
+    && left.every((item, index) => item === right[index]);
+}
+
+function clearStaleStartupFailureAfterLauncherRepair(options: {
+  statusPath: string;
+  cwd: string;
+  startupCommand: { command: string; baseArgs: string[] };
+  startupConfigWrite: SetupUxWrite;
+  dryRun?: boolean;
+}): boolean {
+  const status = readJsonc(options.statusPath);
+  if (status.state !== "fail" && status.state !== "error") return false;
+
+  const desiredArgs = startupLauncherArgs(options.startupCommand);
+  const alreadyCurrent = status.command === options.startupCommand.command
+    && sameStringArray(status.args, desiredArgs);
+  const launcherChanged = options.startupConfigWrite.status === "created"
+    || options.startupConfigWrite.status === "updated"
+    || !alreadyCurrent;
+  if (!launcherChanged) return false;
+
+  if (!options.dryRun) {
+    fs.mkdirSync(path.dirname(options.statusPath), { recursive: true });
+    fs.writeFileSync(options.statusPath, `${JSON.stringify({
+      version: 1,
+      state: "pass",
+      reason: "setup-ux.replaced-stale-startup-launcher",
+      cwd: options.cwd,
+      startedAt: typeof status.startedAt === "string" ? status.startedAt : new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      durationMs: typeof status.durationMs === "number" ? status.durationMs : undefined,
+      exitCode: 0,
+      command: options.startupCommand.command,
+      args: desiredArgs,
+      stdoutTail: "Cleared stale startup sync failure after rewriting the startup launcher.",
+    }, null, 2)}\n`, "utf8");
+  }
+  return true;
 }
 
 export function ensureGlobalStartupPlugin(options: {
@@ -590,6 +642,16 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
       ...(projectRoot ? [{ root: projectRoot, prefix: "project" }] : []),
     ],
   });
+  const runtimeWriter = createProfileWriter({
+    bridgeConfigDir: adapter.bridgeConfigDir,
+    profileRoot: root,
+    dryRun: options.dryRun,
+    pathApi: adapter.pathApi,
+    backupRoots: [
+      ...(legacyRoot ? [{ root: legacyRoot, prefix: "legacy-opencode" }] : []),
+      ...(projectRoot ? [{ root: projectRoot, prefix: "project" }] : []),
+    ],
+  });
   const writes: SetupUxWrite[] = [];
   const commands: SetupUxCommand[] = [];
   const notices: string[] = [];
@@ -655,7 +717,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     filePath: fallbackConfigPath,
     text: `${JSON.stringify(UX_PROFILE_PRESET.fallbackConfig ?? fallbackConfigFromProfile(OGB_UX_PROJECT_CONFIG), null, 2)}\n`,
   }));
-  writes.push(profileWriter.writeText({
+  writes.push(runtimeWriter.writeText({
     filePath: globalStartupPluginPath,
     text: startupPluginSourceText,
   }));
@@ -683,14 +745,15 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     notices.push("Global TUI sidebar installed; restart OpenCode to load it.");
   }
   warnings.push(...globalTui.warnings);
-  writes.push(profileWriter.writeText({
+  const startupConfigWrite = runtimeWriter.writeText({
     filePath: globalStartupConfigPath,
     text: startupConfigSource({
       command: startupCommand.command,
       baseArgs: startupCommand.baseArgs,
       syncArgs: ["startup-sync"],
     }),
-  }));
+  });
+  writes.push(startupConfigWrite);
   for (const [command, content] of Object.entries(UX_PROFILE_PRESET.files.commands)) {
     writes.push(profileWriter.writeText({
       filePath: adapter.join(commandsDir, `${command}.md`),
@@ -772,11 +835,19 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     reason: "setup-ux.recovered-stale",
     dryRun: Boolean(options.dryRun),
   });
+  clearStaleStartupFailureAfterLauncherRepair({
+    statusPath: adapter.join(globalGeneratedDir, "ogb-plugin-status.json"),
+    cwd: homeDir,
+    startupCommand,
+    startupConfigWrite,
+    dryRun: Boolean(options.dryRun),
+  });
   for (const write of writes) {
     if (write.status === "conflict") warnings.push(`${write.path} exists and differs; re-run setup-ux with --force to replace the OGB profile.`);
     if (write.status === "protected") warnings.push(`${write.path} protegido pelo modo mantenedor local; arquivo mantido sem alteracao.`);
   }
   warnings.push(...profileWriter.retention.warnings);
+  warnings.push(...runtimeWriter.retention.warnings);
 
   return {
     version: OGB_VERSION,

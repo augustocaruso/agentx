@@ -213,6 +213,55 @@ test("setupUx protects differing OpenCode profile files when maintainer mode is 
   assert.equal(report.warnings.some((warning) => warning.includes("modo mantenedor local")), true);
 });
 
+test("setupUx still repairs startup runtime files when maintainer mode is enabled", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const configDir = path.join(root, "config", "opencode");
+  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const projectRoot = path.join(root, "project");
+  const startupConfigPath = path.join(generatedDir, "ogb-startup-sync.json");
+  const startupStatusPath = path.join(generatedDir, "ogb-plugin-status.json");
+  fs.mkdirSync(projectRoot, { recursive: true });
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.writeFileSync(startupConfigPath, JSON.stringify({
+    version: 1,
+    enabled: true,
+    command: "/missing/node",
+    baseArgs: ["/old/ogb/dist/cli.js", "--project", homeDir],
+    syncArgs: ["startup-sync"],
+  }, null, 2) + "\n", "utf8");
+  fs.writeFileSync(startupStatusPath, JSON.stringify({
+    version: 1,
+    state: "fail",
+    reason: "plugin.init",
+    cwd: homeDir,
+    startedAt: "2026-05-12T04:00:00.000Z",
+    finishedAt: "2026-05-12T04:00:00.010Z",
+    exitCode: null,
+    command: "/missing/node",
+    args: ["/old/ogb/dist/cli.js", "--project", homeDir, "startup-sync"],
+    error: "ENOENT: no such file or directory, posix_spawn '/missing/node'",
+  }, null, 2) + "\n", "utf8");
+  enableMaintainerRole({ homeDir });
+
+  const report = setupUx({
+    homeDir,
+    configDir,
+    projectRoot,
+    installOpenCode: false,
+    installPlugins: false,
+  });
+
+  const startupConfig = readJson(startupConfigPath);
+  const startupStatus = readJson(startupStatusPath);
+  assert.notEqual(startupConfig.command, "/missing/node");
+  assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
+  assert.equal(startupStatus.state, "pass");
+  assert.equal(startupStatus.reason, "setup-ux.replaced-stale-startup-launcher");
+  assert.equal(report.writes.find((write) => write.path === startupConfigPath)?.status, "updated");
+  assert.equal(report.warnings.some((warning) => warning.includes(`${startupConfigPath} protegido`)), false);
+});
+
 test("setupUx overwrites user profile files with backups by default", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
