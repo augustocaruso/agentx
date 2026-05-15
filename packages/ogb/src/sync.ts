@@ -1534,7 +1534,8 @@ function copyManagedSkillDir(options: {
   if (options.dryRun) return { promoted: options.reportDir };
 
   const previousHash = managedHashFor(options.state, reportSkillPath, "ogb");
-  if (dirExists(targetDir) && !previousHash && projectedDirMatchesSource({
+  const currentSkillHash = fileExists(currentSkillFile) ? sha256File(currentSkillFile) : undefined;
+  if (dirExists(targetDir) && (!previousHash || currentSkillHash !== previousHash) && projectedDirMatchesSource({
     sourceDir: options.sourceDir,
     targetDir,
     sourceBaseDir: options.sourceBaseDir,
@@ -1552,7 +1553,7 @@ function copyManagedSkillDir(options: {
   if (dirExists(targetDir) && !options.force && !previousHash) {
     return { warning: `${options.label} conflict: ${options.reportDir} exists and is not managed by ogb; use --force to overwrite` };
   }
-  if (fileExists(currentSkillFile) && !options.force && previousHash && sha256File(currentSkillFile) !== previousHash) {
+  if (currentSkillHash && !options.force && previousHash && currentSkillHash !== previousHash) {
     return { warning: `${options.label} conflict: ${options.reportDir} was edited manually; use --force to overwrite` };
   }
 

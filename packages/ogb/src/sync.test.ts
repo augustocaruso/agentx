@@ -586,6 +586,47 @@ test("syncToOpenCode adopts identical unmanaged Antigravity skill projections", 
   ));
 });
 
+test("syncToOpenCode refreshes stale Antigravity skill state when target already matches source", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const extensionSkillDir = path.join(extensionDir, "skills", "review-notes");
+  const projectedSkillDir = path.join(homeDir, ".gemini", "antigravity", "skills", "review-notes");
+  const projectedSkillText = "---\nname: review-notes\ndescription: Updated review notes.\n---\n# Updated Review\n";
+  fs.mkdirSync(extensionSkillDir, { recursive: true });
+  fs.mkdirSync(projectedSkillDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionSkillDir, "SKILL.md"), projectedSkillText);
+  fs.writeFileSync(path.join(projectedSkillDir, "SKILL.md"), projectedSkillText);
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), JSON.stringify({
+    version: "0.1.25",
+    managedFiles: [
+      {
+        path: ".gemini/antigravity/skills/review-notes/SKILL.md",
+        sha256: sha256Text("---\nname: review-notes\ndescription: Old review notes.\n---\n# Old Review\n"),
+        source: "ogb",
+        kind: "skill",
+        projection: "antigravity",
+        origin: extensionSkillDir,
+      },
+    ],
+  }, null, 2));
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const managed = state.managedFiles.find((file: { path: string; source: string }) =>
+    file.path === ".gemini/antigravity/skills/review-notes/SKILL.md"
+    && file.source === "ogb"
+  );
+
+  assert.equal(
+    report.warnings.some((warning) => warning.includes(".gemini/antigravity/skills/review-notes was edited manually")),
+    false,
+  );
+  assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/review-notes"));
+  assert.equal(managed.sha256, sha256Text(projectedSkillText));
+});
+
 test("syncToOpenCode preserves different unmanaged Antigravity skill projections", () => {
   const projectRoot = tempProject();
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));

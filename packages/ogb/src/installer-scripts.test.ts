@@ -24,6 +24,9 @@ test("posix installer contract delegates the ritual to ogb install", () => {
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-check/);
   assert.match(text, /--reset-global/);
+  assert.match(text, /INSTALL_STATUS=\$\?/);
+  assert.match(text, /"\$INSTALL_STATUS" -eq 1/);
+  assert.match(text, /exit "\$INSTALL_STATUS"/);
   assert.doesNotMatch(text, /\bsetup-ux\b/);
   assert.doesNotMatch(text, /\bsetup-opencode\b/);
   assert.doesNotMatch(text, /\bcleanup-home\b/);
@@ -89,6 +92,9 @@ test("windows installer contract delegates the ritual to ogb install", () => {
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-check/);
   assert.match(text, /--reset-global/);
+  assert.match(text, /\$InstallStatus = \$LASTEXITCODE/);
+  assert.match(text, /\$InstallStatus -eq 1/);
+  assert.match(text, /exit \$InstallStatus/);
   assert.doesNotMatch(text, /node `"\$CliTarget`" %\*/);
   assert.doesNotMatch(text, /\bsetup-ux\b/);
   assert.doesNotMatch(text, /\bsetup-opencode\b/);

@@ -338,7 +338,15 @@ if [[ "$RUN_SETUP" -eq 0 && "$RUN_HOME_SYNC" -eq 0 ]]; then
 fi
 
 echo "Running OGB install ritual for $PROJECT_DIR..."
+set +e
 "$OGB_BIN" "${INSTALL_ARGS[@]}"
+INSTALL_STATUS=$?
+set -e
+if [[ "$INSTALL_STATUS" -eq 1 ]]; then
+  echo "OGB install completed with warnings; continuing bootstrap."
+elif [[ "$INSTALL_STATUS" -ne 0 ]]; then
+  exit "$INSTALL_STATUS"
+fi
 
 echo "Done."
 if command -v ogb >/dev/null 2>&1; then

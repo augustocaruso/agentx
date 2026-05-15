@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.27 - Update tolera warnings
+
+- Atualiza o sync para refrescar hashes gerenciados quando a skill Antigravity existente ja bate com a projecao atual, evitando falso conflito de edicao manual.
+- Faz os instaladores tratarem `ogb install` com exit 1 como instalacao concluida com avisos, permitindo que `ogb update` finalize e reporte o post-check WARN corretamente.
+- Mantem falha real para exit codes maiores que 1.
+
 ## 0.1.25 - Migração segura de skills Antigravity
 
 - Adota projeções Antigravity já existentes quando o conteúdo é idêntico ao que o OGB geraria, registrando-as no estado gerenciado sem overwrite.

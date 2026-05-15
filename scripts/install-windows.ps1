@@ -419,6 +419,12 @@ if ($NoSetup -and (-not $RunHomeSync)) {
 
 Write-Host "Running OGB install ritual for $Project..."
 & $OgbBin @InstallArgs
+$InstallStatus = $LASTEXITCODE
+if ($InstallStatus -eq 1) {
+  Write-Host "OGB install completed with warnings; continuing bootstrap."
+} elseif ($InstallStatus -ne 0) {
+  exit $InstallStatus
+}
 
 Write-Host "Done."
 Write-Host "ogb command: $OgbBin"
