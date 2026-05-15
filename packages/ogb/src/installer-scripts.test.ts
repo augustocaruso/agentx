@@ -82,6 +82,16 @@ test("linux POSIX installer persists env without macOS zsh config", () => {
   assert.doesNotMatch(linuxTargets, /\.config\/zsh/);
 });
 
+test("installers fail early when Node is older than 22", () => {
+  const posix = script("install-posix.sh");
+  const windows = script("install-windows.ps1");
+
+  assert.match(posix, /require_node_22/);
+  assert.match(posix, /Node\.js >=22 is required before installing ogb/);
+  assert.match(windows, /Require-Node22/);
+  assert.match(windows, /Node\.js >=22 is required before installing ogb/);
+});
+
 test("windows installer contract delegates the ritual to ogb install", () => {
   const text = script("install-windows.ps1");
 

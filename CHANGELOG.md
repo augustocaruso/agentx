@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.33 - Ink 7 com render incremental
+
+- Migra a UI rica para Ink 7 e assume Node.js >=22 como requisito oficial.
+- Usa `incrementalRendering` e `maxFps` para impedir que ticks do spinner redesenhem o painel inteiro.
+- Troca o ticker manual do spinner por `useAnimation` e remove a linha experimental de atividade no rodape.
+- Faz os instaladores macOS, Linux e Windows falharem cedo quando o Node.js instalado for antigo.
+
 ## 0.1.32 - Spinner volta com redraw controlado
 
 - Reativa o spinner da UI rica por padrao em terminais interativos seguros.

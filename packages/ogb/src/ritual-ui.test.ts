@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { Writable } from "node:stream";
 import test from "node:test";
+import React from "react";
+import { Box, Text, render as renderInk } from "ink";
 import { buildInstallerPlan } from "./installer-planner.js";
 import { applyRitualProgressEvent, cleanInkFrame, createLiveRitualModel, failLiveRitualModel, finishLiveRitualModel, ritualViewModel, shouldAnimateRitualUi, shouldUseRitualUi } from "./ritual-ui.js";
 import type { InstallReport } from "./install.js";
@@ -9,6 +12,7 @@ import type { SelfUpdateReport } from "./self-update.js";
 
 const projectRoot = "/tmp/ogb-project";
 const homeDir = "/tmp/ogb-home";
+const CSI_PATTERN = /\x1B\[[0-?]*[ -/]*[@-~]/g;
 const noisyBootstrapTail = [
   "% Total    % Received % Xferd  Average Speed   Time    Time     Time  Current",
   "                                 Dload  Upload   Total   Spent    Left  Speed",
@@ -17,6 +21,50 @@ const noisyBootstrapTail = [
   "npm warn deprecated koa-router@14.0.0: Please use @koa/router instead, starting from v9!",
   "sync: Antigravity skill conflict: .gemini/antigravity/skills/process-medical-chats was edited manually; use --force to overwrite",
 ].join("\n");
+
+class CaptureTty extends Writable {
+  readonly isTTY = true;
+  columns = 100;
+  rows = 40;
+  chunks: string[] = [];
+
+  _write(chunk: Buffer | string, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
+    this.chunks.push(Buffer.isBuffer(chunk) ? chunk.toString("utf8") : chunk);
+    callback();
+  }
+
+  clear(): void {
+    this.chunks = [];
+  }
+
+  text(): string {
+    return this.chunks.join("");
+  }
+}
+
+function ansiWriteStats(text: string): { bytes: number; clearTerminal: number; eraseLine: number; cursorUp: number } {
+  const csi = text.match(CSI_PATTERN) ?? [];
+  return {
+    bytes: Buffer.byteLength(text),
+    clearTerminal: (text.match(/\x1B\[2J|\x1Bc/g) ?? []).length,
+    eraseLine: csi.filter((item) => item === "\x1B[2K").length,
+    cursorUp: csi.filter((item) => /^\x1B\[\d*A$/.test(item)).length,
+  };
+}
+
+function SpinnerBenchmarkPanel(props: { frame: number }): React.ReactElement {
+  const frames = ["◐", "◓", "◑", "◒"];
+  return React.createElement(
+    Box,
+    { borderStyle: "round", flexDirection: "column", width: 80, paddingX: 1 },
+    React.createElement(Text, null, "RUN OGB update                                               running"),
+    ...Array.from({ length: 18 }, (_, index) => React.createElement(
+      Text,
+      { key: index },
+      `${index === 9 ? frames[props.frame % frames.length] : "RUN"} row ${String(index).padStart(2, "0")} ${"x".repeat(45)}`,
+    )),
+  );
+}
 
 function passReport(overrides: Partial<PassReport> = {}): PassReport {
   return {
@@ -80,6 +128,32 @@ test("ritual UI animation is on by default but can be disabled", () => {
   assert.equal(shouldAnimateRitualUi({}), true);
   assert.equal(shouldAnimateRitualUi({ OGB_UI_ANIMATE: "1" }), true);
   assert.equal(shouldAnimateRitualUi({ OGB_UI_ANIMATE: "0" }), false);
+});
+
+test("Ink incremental rendering keeps spinner ticks from repainting the whole ritual panel", async () => {
+  const stdout = new CaptureTty();
+  const instance = renderInk(React.createElement(SpinnerBenchmarkPanel, { frame: 0 }), {
+    stdout: stdout as unknown as NodeJS.WriteStream,
+    stderr: stdout as unknown as NodeJS.WriteStream,
+    stdin: process.stdin,
+    exitOnCtrlC: false,
+    patchConsole: false,
+    incrementalRendering: true,
+    maxFps: 10,
+  } as Parameters<typeof renderInk>[1] & { incrementalRendering: boolean; maxFps: number });
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  stdout.clear();
+  instance.rerender(React.createElement(SpinnerBenchmarkPanel, { frame: 1 }));
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  const stats = ansiWriteStats(stdout.text());
+  instance.unmount();
+  instance.cleanup();
+
+  assert.equal(stats.clearTerminal, 0);
+  assert.ok(stats.bytes < 600, `expected incremental spinner tick under 600 bytes, got ${JSON.stringify(stats)}`);
+  assert.ok(stats.eraseLine < 3, `expected spinner tick to avoid full-panel line erases, got ${JSON.stringify(stats)}`);
 });
 
 test("Ink frame cleanup keeps the final rendered frame for transcript captures", () => {

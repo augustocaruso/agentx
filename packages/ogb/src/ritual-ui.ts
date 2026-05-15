@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, render, type Instance, useStdout } from "ink";
+import { Box, Text, render, type Instance, useAnimation, useStdout } from "ink";
 import type { InstallReport } from "./install.js";
 import type { PassReport } from "./pass.js";
 import type { ResetReport } from "./reset.js";
@@ -140,6 +140,7 @@ const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 const MAX_DISPLAY_LINE_LENGTH = 280;
 const MIN_RITUAL_UI_COLUMNS = 80;
 const RITUAL_UI_SPINNER_INTERVAL_MS = 1000;
+const RITUAL_UI_MAX_FPS = 10;
 
 function isTransferProgressLine(line: string): boolean {
   if (/^% Total\s+% Received\s+% Xferd/.test(line)) return true;
@@ -610,16 +611,6 @@ function BulletList(props: { title: string; items: string[]; tone?: RitualTone }
   );
 }
 
-function useTicker(final: boolean, animate: boolean): number {
-  const [tick, setTick] = useState(Date.now());
-  useEffect(() => {
-    if (final || !animate) return undefined;
-    const timer = setInterval(() => setTick(Date.now()), RITUAL_UI_SPINNER_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [final, animate]);
-  return animate ? tick : Date.now();
-}
-
 function useTerminalWidth(): number {
   const { stdout } = useStdout();
   const readWidth = () => Math.max(20, stdout.columns ?? process.stdout.columns ?? 100);
@@ -641,15 +632,18 @@ function RitualPanel(props: { model: LiveRitualModel; animate: boolean }) {
   const model = props.model;
   const visibleSteps = visibleTodoSteps(model.steps);
   const width = useTerminalWidth();
-  const tick = useTicker(model.final, props.animate);
+  const animation = useAnimation({
+    interval: RITUAL_UI_SPINNER_INTERVAL_MS,
+    isActive: props.animate && !model.final,
+  });
   const spinnerFrames = useMemo(() => ["◐", "◓", "◑", "◒"], []);
-  const spinner = props.animate ? spinnerFrames[Math.floor(tick / RITUAL_UI_SPINNER_INTERVAL_MS) % spinnerFrames.length] : "RUN";
-  const rowStatus = "RUN";
+  const spinner = props.animate ? spinnerFrames[animation.frame % spinnerFrames.length] : "RUN";
   const current = visibleSteps.find((step) => step.status === "running")
     ?? visibleSteps.find((step) => step.stepId === model.currentStepId)
     ?? visibleSteps.find((step) => step.status === "queued")
     ?? visibleSteps.at(-1);
-  const elapsed = formatElapsed((model.finishedAt ?? tick) - model.startedAt);
+  const activeNow = props.animate && !model.final ? model.startedAt + animation.time : Date.now();
+  const elapsed = formatElapsed((model.finishedAt ?? activeNow) - model.startedAt);
   const headerStatus = model.final ? elapsed : "running";
   const borderColor = model.final ? colorFromTone(model.tone) : "gray";
   const headline = model.final ? model.statusLabel : "RUN";
@@ -686,16 +680,11 @@ function RitualPanel(props: { model: LiveRitualModel; animate: boolean }) {
       : null,
     React.createElement(Box, { flexDirection: "column", marginTop: 1 },
       React.createElement(SectionTitle, null, "TODOs"),
-      ...visibleSteps.map((step) => React.createElement(TodoRow, { key: step.stepId, step, spinner: rowStatus })),
+      ...visibleSteps.map((step) => React.createElement(TodoRow, { key: step.stepId, step, spinner })),
     ),
     React.createElement(BulletList, { title: model.tone === "fail" ? "Problems" : "Notes", items: model.callouts, tone: model.tone === "fail" ? "fail" : "warn" }),
     React.createElement(BulletList, { title: "Next", items: model.next }),
     React.createElement(BulletList, { title: "Reports", items: model.files }),
-    !model.final && props.animate
-      ? React.createElement(Box, { marginTop: 1 },
-        React.createElement(Text, { color: "cyan" }, `${spinner} active ${elapsed}`),
-      )
-      : null,
   );
 }
 
@@ -707,6 +696,8 @@ function renderModel(instance: Instance | undefined, model: LiveRitualModel, opt
   }
   return render(node, {
     exitOnCtrlC: false,
+    incrementalRendering: true,
+    maxFps: RITUAL_UI_MAX_FPS,
     patchConsole: false,
   });
 }

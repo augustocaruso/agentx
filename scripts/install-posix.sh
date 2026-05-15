@@ -49,6 +49,22 @@ bash_quote() {
   printf '%q' "$1"
 }
 
+require_node_22() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo "Node.js >=22 is required before installing ogb." >&2
+    exit 1
+  fi
+
+  local node_version
+  local node_major
+  node_version="$(node -p 'process.versions.node' 2>/dev/null || true)"
+  node_major="${node_version%%.*}"
+  if [[ ! "$node_major" =~ ^[0-9]+$ || "$node_major" -lt 22 ]]; then
+    echo "Node.js >=22 is required before installing ogb. Found Node.js ${node_version:-unknown} at $(command -v node)." >&2
+    exit 1
+  fi
+}
+
 emit_unique_targets() {
   local seen=$'\n'
   local target
@@ -262,18 +278,15 @@ case "$INSTALL_PLATFORM" in
     ;;
 esac
 
-if [[ -z "$PREFIX" ]]; then
-  PREFIX="$(default_prefix)"
-fi
-
-if ! command -v node >/dev/null 2>&1; then
-  echo "Node.js is required before installing ogb." >&2
-  exit 1
-fi
+require_node_22
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm is required before installing ogb." >&2
   exit 1
+fi
+
+if [[ -z "$PREFIX" ]]; then
+  PREFIX="$(default_prefix)"
 fi
 
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"

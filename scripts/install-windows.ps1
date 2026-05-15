@@ -20,6 +20,21 @@ function Require-Command($Name) {
   return $Command.Source
 }
 
+function Require-Node22 {
+  $NodePath = Require-Command "node"
+  $NodeVersionOutput = @(& $NodePath -p "process.versions.node" 2>$null)
+  if ($LASTEXITCODE -ne 0 -or -not $NodeVersionOutput) {
+    throw "Node.js >=22 is required before installing ogb. Could not read the installed Node.js version."
+  }
+  $NodeVersion = ([string]($NodeVersionOutput | Select-Object -First 1)).Trim()
+  $MajorText = ($NodeVersion -split "\.")[0]
+  $Major = 0
+  if ((-not [int]::TryParse($MajorText, [ref]$Major)) -or $Major -lt 22) {
+    throw "Node.js >=22 is required before installing ogb. Found Node.js $NodeVersion at $NodePath."
+  }
+  return $NodePath
+}
+
 function Resolve-NpmCommand {
   foreach ($Name in @("npm.cmd", "npm.exe", "npm")) {
     $Command = Get-Command $Name -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -329,7 +344,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 $CliDir = Join-Path (Join-Path $RepoRoot "packages") "ogb"
 
-Require-Command "node" | Out-Null
+Require-Node22 | Out-Null
 Require-Command "npm" | Out-Null
 $script:NpmCommand = Resolve-NpmCommand
 
