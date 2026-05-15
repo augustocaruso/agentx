@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildInstallerPlan } from "./installer-planner.js";
-import { applyRitualProgressEvent, cleanInkFrame, createLiveRitualModel, failLiveRitualModel, finishLiveRitualModel, ritualViewModel, shouldUseRitualUi } from "./ritual-ui.js";
+import { applyRitualProgressEvent, cleanInkFrame, createLiveRitualModel, failLiveRitualModel, finishLiveRitualModel, ritualViewModel, shouldAnimateRitualUi, shouldUseRitualUi } from "./ritual-ui.js";
 import type { InstallReport } from "./install.js";
 import type { PassReport } from "./pass.js";
 import type { ResetReport } from "./reset.js";
@@ -70,8 +70,15 @@ test("rich ritual UI is opt-in to an interactive human terminal", () => {
   assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { CODEX_CI: "1" } }), false);
   assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { CODEX_SHELL: "1" } }), false);
   assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { TERM: "dumb" } }), false);
+  assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, stdoutColumns: 79, env: {} }), false);
+  assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, stdoutColumns: 80, env: {} }), true);
   assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { OGB_PLAIN: "1" } }), false);
   assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { OGB_UI: "0" } }), false);
+});
+
+test("ritual UI animation is explicit opt-in", () => {
+  assert.equal(shouldAnimateRitualUi({}), false);
+  assert.equal(shouldAnimateRitualUi({ OGB_UI_ANIMATE: "1" }), true);
 });
 
 test("Ink frame cleanup keeps the final rendered frame for transcript captures", () => {

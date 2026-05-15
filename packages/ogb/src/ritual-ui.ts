@@ -61,6 +61,7 @@ export interface RitualUiOptions {
   plain?: boolean;
   progressJson?: boolean;
   stdoutIsTTY?: boolean;
+  stdoutColumns?: number;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -84,6 +85,10 @@ export interface RunWithRitualProcessUiOptions {
 export interface RitualProcessUiResult {
   exitCode: number;
   signal?: NodeJS.Signals | null;
+}
+
+interface RenderRitualOptions {
+  animate: boolean;
 }
 
 export function titleForKind(kind: RitualKind): string {
@@ -133,6 +138,7 @@ function countChangedWrites(report: InstallReport | ResetReport): number | undef
 
 const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 const MAX_DISPLAY_LINE_LENGTH = 280;
+const MIN_RITUAL_UI_COLUMNS = 80;
 
 function isTransferProgressLine(line: string): boolean {
   if (/^% Total\s+% Received\s+% Xferd/.test(line)) return true;
@@ -509,6 +515,7 @@ export function shouldUseRitualUi(options: RitualUiOptions = {}): boolean {
   if (options.json || options.plain || options.progressJson) return false;
   const env = options.env ?? process.env;
   const term = (env.TERM ?? "").toLowerCase();
+  const columns = options.stdoutColumns ?? process.stdout.columns;
   if (
     env.CI
     || env.CODEX_CI
@@ -517,7 +524,12 @@ export function shouldUseRitualUi(options: RitualUiOptions = {}): boolean {
     || env.OGB_PLAIN === "1"
     || env.OGB_UI === "0"
   ) return false;
+  if (typeof columns === "number" && columns > 0 && columns < MIN_RITUAL_UI_COLUMNS) return false;
   return options.stdoutIsTTY ?? process.stdout.isTTY ?? false;
+}
+
+export function shouldAnimateRitualUi(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.OGB_UI_ANIMATE === "1";
 }
 
 export function cleanInkFrame(raw: string): string {
@@ -597,14 +609,14 @@ function BulletList(props: { title: string; items: string[]; tone?: RitualTone }
   );
 }
 
-function useTicker(final: boolean): number {
+function useTicker(final: boolean, animate: boolean): number {
   const [tick, setTick] = useState(Date.now());
   useEffect(() => {
-    if (final) return undefined;
+    if (final || !animate) return undefined;
     const timer = setInterval(() => setTick(Date.now()), 160);
     return () => clearInterval(timer);
-  }, [final]);
-  return tick;
+  }, [final, animate]);
+  return animate ? tick : Date.now();
 }
 
 function useTerminalWidth(): number {
@@ -624,13 +636,13 @@ function useTerminalWidth(): number {
   return width;
 }
 
-function RitualPanel(props: { model: LiveRitualModel }) {
+function RitualPanel(props: { model: LiveRitualModel; animate: boolean }) {
   const model = props.model;
   const visibleSteps = visibleTodoSteps(model.steps);
   const width = useTerminalWidth();
-  const tick = useTicker(model.final);
+  const tick = useTicker(model.final, props.animate);
   const spinnerFrames = useMemo(() => ["◐", "◓", "◑", "◒"], []);
-  const spinner = spinnerFrames[Math.floor(tick / 160) % spinnerFrames.length];
+  const spinner = props.animate ? spinnerFrames[Math.floor(tick / 160) % spinnerFrames.length] : "RUN";
   const current = visibleSteps.find((step) => step.status === "running")
     ?? visibleSteps.find((step) => step.stepId === model.currentStepId)
     ?? visibleSteps.find((step) => step.status === "queued")
@@ -639,7 +651,7 @@ function RitualPanel(props: { model: LiveRitualModel }) {
   const borderColor = model.final ? colorFromTone(model.tone) : "gray";
   const headline = model.final
     ? model.statusLabel
-    : `${spinner} RUN`;
+    : props.animate ? `${spinner} RUN` : "RUN";
 
   return React.createElement(
     Box,
@@ -681,8 +693,8 @@ function RitualPanel(props: { model: LiveRitualModel }) {
   );
 }
 
-function renderModel(instance: Instance | undefined, model: LiveRitualModel): Instance {
-  const node = React.createElement(RitualPanel, { model });
+function renderModel(instance: Instance | undefined, model: LiveRitualModel, options: RenderRitualOptions): Instance {
+  const node = React.createElement(RitualPanel, { model, animate: options.animate });
   if (instance) {
     instance.rerender(node);
     return instance;
@@ -702,23 +714,24 @@ export async function runWithRitualUi<TReport extends InstallReport | PassReport
 ): Promise<TReport> {
   let model = createLiveRitualModel(options.kind, options.subtitle, options.steps);
   let instance: Instance | undefined;
-  instance = renderModel(instance, model);
+  const renderOptions = { animate: shouldAnimateRitualUi() };
+  instance = renderModel(instance, model, renderOptions);
   await delay(25);
 
   const sink: RitualProgressSink = (event) => {
     model = applyRitualProgressEvent(model, event);
-    instance = renderModel(instance, model);
+    instance = renderModel(instance, model, renderOptions);
   };
 
   try {
     const report = await options.run(sink);
     model = finishLiveRitualModel(model, report);
-    instance = renderModel(instance, model);
+    instance = renderModel(instance, model, renderOptions);
     await delay(40);
     return report;
   } catch (error) {
     model = failLiveRitualModel(model, error);
-    instance = renderModel(instance, model);
+    instance = renderModel(instance, model, renderOptions);
     await delay(40);
     throw error;
   } finally {
@@ -754,7 +767,8 @@ export async function runWithRitualProcessUi(options: RunWithRitualProcessUiOpti
   let stdoutBuffer = "";
   let stderrBuffer = "";
   let finalReceived = false;
-  instance = renderModel(instance, model);
+  const renderOptions = { animate: shouldAnimateRitualUi() };
+  instance = renderModel(instance, model, renderOptions);
   await delay(25);
 
   const child = spawnCommand(options.command, options.args, {
@@ -788,7 +802,7 @@ export async function runWithRitualProcessUi(options: RunWithRitualProcessUiOpti
         model = failLiveRitualModel(model, new Error(event.error));
         model = { ...model, next: event.summary?.next ?? model.next };
       }
-      instance = renderModel(instance, model);
+      instance = renderModel(instance, model, renderOptions);
     }
   });
 
@@ -799,7 +813,7 @@ export async function runWithRitualProcessUi(options: RunWithRitualProcessUiOpti
   const result = await new Promise<RitualProcessUiResult>((resolve) => {
     child.on("error", (error) => {
       model = failLiveRitualModel(model, error);
-      instance = renderModel(instance, model);
+      instance = renderModel(instance, model, renderOptions);
       resolve({ exitCode: 2 });
     });
     child.on("exit", (code, signal) => {
@@ -818,7 +832,7 @@ export async function runWithRitualProcessUi(options: RunWithRitualProcessUiOpti
         const tail = tailText(stderrBuffer) || `Ritual process exited with code ${exitCode}.`;
         model = failLiveRitualModel(model, new Error(tail));
       }
-      instance = renderModel(instance, model);
+      instance = renderModel(instance, model, renderOptions);
       resolve({ exitCode, signal });
     });
   });

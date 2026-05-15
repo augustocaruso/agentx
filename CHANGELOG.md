@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.31 - Update sem redraw agressivo
+
+- Para de animar a UI rica por padrao, evitando redraws ANSI periodicos enquanto bootstrap/check ficam sem output.
+- Desliga a UI rica em terminais com menos de 80 colunas, caindo no modo texto estavel em pseudo-TTYs estreitos.
+- Mantem animacao apenas como opt-in explicito via `OGB_UI_ANIMATE=1`.
+
 ## 0.1.30 - Update desliga UI rica em transcripts
 
 - Desliga automaticamente a UI Ink quando o terminal anuncia `TERM=dumb` ou o shell vem do Codex, evitando frames ANSI repetidos no transcript.
