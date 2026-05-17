@@ -77,10 +77,10 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
 
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.deepEqual(globalConfig.plugin, expectedGlobalPlugins(configDir));
-  assert.equal(globalConfig.plugin.includes("file:plugins/ogb-startup-sync.js"), true);
+  assert.equal(globalConfig.plugin.includes("file:plugins/ogb-startup-sync.js"), false);
   assert.equal(globalConfig.plugin.some((plugin: unknown) =>
     typeof plugin === "string" && plugin.startsWith("file:///") && plugin.includes("ogb-startup-sync.js")
-  ), false);
+  ), true);
   assert.equal(globalConfig.plugin.includes("opencode-auto-fallback@0.4.2"), false);
   assert.equal(globalConfig.plugin.includes("opencode-websearch-cited@1.2.0"), false);
   assert.equal(globalConfig.share, "manual");
@@ -172,6 +172,34 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(startupConfig.autoUpdate, false);
   assert.deepEqual(startupConfig.updateArgs, ["check-update", "--no-write"]);
   assert.equal(startupConfig.failureBackoffMs, 10 * 60_000);
+});
+
+test("setupUx replaces the legacy relative OGB startup plugin spec", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const configDir = path.join(root, "config", "opencode");
+  const projectRoot = path.join(root, "project");
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.mkdirSync(projectRoot, { recursive: true });
+  fs.writeFileSync(path.join(configDir, "opencode.json"), JSON.stringify({
+    plugin: [
+      "opencode-gemini-auth@1.4.12",
+      "file:plugins/ogb-startup-sync.js",
+    ],
+  }, null, 2), "utf8");
+
+  const report = setupUx({
+    homeDir,
+    configDir,
+    projectRoot,
+    installOpenCode: false,
+    installPlugins: false,
+  });
+
+  const globalConfig = readJson(path.join(configDir, "opencode.json"));
+  assert.equal(globalConfig.plugin.includes("file:plugins/ogb-startup-sync.js"), false);
+  assert.equal(globalConfig.plugin.includes(globalStartupPluginSpec(path.join(configDir, "plugins", "ogb-startup-sync.js"))), true);
+  assert.equal(report.warnings.some((warning) => warning.includes("file:plugins/ogb-startup-sync.js")), true);
 });
 
 test("setupUx writes runtime-expanded Windows ogb shim path for startup sync", () => {

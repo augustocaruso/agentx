@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.39 - Plugin global por URL absoluta
+
+- Corrige o `setup-ux` para configurar o plugin global `ogb-startup-sync.js` como URL absoluta `file:///...`, em vez do spec legado `file:plugins/...` que o OpenCode tentava instalar como pacote.
+- Faz o `setup-ux` remover o spec legado quando ele aparece em configs antigas e avisar que a troca foi aplicada.
+- Faz `doctor` e `validate` falharem quando a config global ainda contém o spec legado, mesmo se a URL correta também estiver presente.
+
 ## 0.1.38 - Hooks Gemini sem opt-in
 
 - Faz hooks Gemini `BeforeTool`/`AfterTool` de `settings.json` e extensões rodarem automaticamente pelo plugin OGB do OpenCode durante o fluxo normal de sync.

@@ -9,6 +9,7 @@ import { diagnoseOpenCodeMcpConfig } from "./mcp-projection.js";
 import { runNativeCommand, type NativeCommandResult } from "./native-runner.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { resolveProjectPaths } from "./paths.js";
+import { isLegacyGlobalStartupPluginSpec } from "./setup-ux.js";
 import { writeStateRecord } from "./state-store.js";
 import { OGB_VERSION } from "./types.js";
 
@@ -91,14 +92,15 @@ function configReferencesInstruction(configPath: string, instructionPath: string
   );
 }
 
-function configHasOgbStartupPlugin(configPath: string, homeDir: string): boolean {
+function configOgbStartupPluginState(configPath: string, homeDir: string): { ok: boolean; legacySpecs: string[] } {
   const config = readJsonc(configPath);
-  const plugins = Array.isArray(config?.plugin) ? config.plugin : [];
+  const plugins: unknown[] = Array.isArray(config?.plugin) ? config.plugin : [];
   const expected = pathToFileURL(path.join(globalOpenCodeConfigDir({ homeDir }), "plugins", "ogb-startup-sync.js")).href;
-  return plugins.some((plugin: unknown) =>
-    typeof plugin === "string"
-    && (plugin === expected || /(^|\/|\\)ogb-startup-sync\.js$/.test(plugin) || plugin.includes("ogb-startup-sync.js"))
-  );
+  const stringPlugins = plugins.filter((plugin): plugin is string => typeof plugin === "string");
+  return {
+    ok: stringPlugins.some((plugin) => plugin === expected),
+    legacySpecs: stringPlugins.filter(isLegacyGlobalStartupPluginSpec),
+  };
 }
 
 function addToolCheck(checks: ValidationCheck[], command: string, args: string[], cwd: string, homeDir: string): void {
@@ -187,12 +189,15 @@ function validateHomeGlobalFiles(paths: ReturnType<typeof resolveProjectPaths>, 
     });
   }
 
+  const startupPluginState = configOgbStartupPluginState(configPath, paths.homeDir);
   checks.push({
     name: "Global OGB startup plugin",
-    status: configHasOgbStartupPlugin(configPath, paths.homeDir) ? "pass" : "fail",
-    message: configHasOgbStartupPlugin(configPath, paths.homeDir)
-      ? "Global OpenCode config includes the OGB startup plugin."
-      : "Global OpenCode config is missing the OGB startup plugin. Run ogb reset --yes.",
+    status: startupPluginState.ok && startupPluginState.legacySpecs.length === 0 ? "pass" : "fail",
+    message: startupPluginState.legacySpecs.length > 0
+      ? `Global OpenCode config still includes legacy OGB startup plugin spec(s): ${startupPluginState.legacySpecs.join(", ")}. Run ogb setup-ux --force.`
+      : startupPluginState.ok
+        ? "Global OpenCode config includes the OGB startup plugin."
+        : "Global OpenCode config is missing the OGB startup plugin. Run ogb reset --yes.",
   });
 
   const agentFiles = listMarkdownFiles(path.join(globalRoot, "agents")).map((filePath) => path.basename(filePath, ".md"));

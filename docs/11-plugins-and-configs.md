@@ -32,8 +32,8 @@ Configuracao ativa hoje, sem instalar nada novo:
   desabilitado, MCPs `anki-mcp` e `gemini-md-export`, sem plugins de projeto
   duplicando os globais;
 - config resolvida por `opencode debug config`: plugins globais compativeis +
-  startup sync local `file:plugins/ogb-startup-sync.js`, resolvido pelo
-  OpenCode em tempo de execucao a partir da config global;
+  startup sync local como URL `file:///.../plugins/ogb-startup-sync.js`,
+  resolvido pelo OpenCode em tempo de execucao a partir da config global;
 - TUI global `~/.config/opencode/tui.json`: mouse ligado e sidebar OGB local em
   `./tui-plugins/ogb-sidebar.js`;
 - runtime TUI global em `~/.config/opencode/package.json`: `type: "module"`,

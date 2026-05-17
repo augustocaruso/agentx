@@ -15,7 +15,7 @@ import { resolveProjectPaths } from "./paths.js";
 import { spawnCommandSync } from "./process.js";
 import { resolveRulesyncCommand } from "./rulesync.js";
 import { STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
-import { globalStartupPluginSpec, missingGlobalTuiRuntimeDependencies } from "./setup-ux.js";
+import { globalStartupPluginSpec, isLegacyGlobalStartupPluginSpec, missingGlobalTuiRuntimeDependencies } from "./setup-ux.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import { readSyncState } from "./sync-state.js";
 import { hookTrustKeys, hookTrustRecordMatches, readTrustFile } from "./trust.js";
@@ -202,7 +202,7 @@ function readText(filePath: string): string | undefined {
 
 function configHasPlugin(filePath: string, pattern: RegExp): boolean {
   const config = readJsonc(filePath);
-  const plugins = Array.isArray(config?.plugin) ? config.plugin : [];
+  const plugins: unknown[] = Array.isArray(config?.plugin) ? config.plugin : [];
   return plugins.some((plugin: unknown) => typeof plugin === "string" && pattern.test(plugin));
 }
 
@@ -210,6 +210,12 @@ function configHasPluginSpec(filePath: string, spec: string): boolean {
   const config = readJsonc(filePath);
   const plugins = Array.isArray(config?.plugin) ? config.plugin : [];
   return plugins.some((plugin: unknown) => typeof plugin === "string" && plugin === spec);
+}
+
+function legacyGlobalStartupPluginSpecs(filePath: string): string[] {
+  const config = readJsonc(filePath);
+  const plugins: unknown[] = Array.isArray(config?.plugin) ? config.plugin : [];
+  return plugins.filter((plugin): plugin is string => typeof plugin === "string" && isLegacyGlobalStartupPluginSpec(plugin));
 }
 
 function configuredMcpNames(filePath: string): Set<string> {
@@ -466,6 +472,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   const globalConfigPath = globalOpenCodeConfigPath(paths.homeDir);
   const globalStartupPluginConfigured = configHasPluginSpec(globalConfigPath, globalStartupPluginSpec(globalStartupPluginPath))
     || configHasPluginSpec(globalConfigPath, pathToFileURL(globalStartupPluginPath).href);
+  const legacyGlobalStartupPluginConfig = legacyGlobalStartupPluginSpecs(globalConfigPath);
   const modelRoutingDecisions = Array.isArray(modelRouting?.decisions) ? modelRouting.decisions : [];
   const extensionCompatibility = {
     mapExists: fs.existsSync(paths.extensionMapPath),
@@ -551,6 +558,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   if (state?.lastRulesync?.conflicts?.length) warnings.push(`Rulesync has unresolved conflicts: ${state.lastRulesync.conflicts.join(", ")}`);
   else if (state?.lastRulesync?.status === "error") warnings.push("Last Rulesync run failed. Run ogb sync --rulesync require --dry-run for details.");
   if (paths.homeMode && startupSync.globalPlugin && !globalStartupPluginConfigured) warnings.push("Global OGB startup plugin exists but is not listed in the OpenCode global plugin config. Run ogb setup-ux --reset-global.");
+  if (legacyGlobalStartupPluginConfig.length > 0) warnings.push(`Global OpenCode config still references legacy OGB startup plugin spec(s): ${legacyGlobalStartupPluginConfig.join(", ")}. Run ogb setup-ux --force to replace them with the absolute local plugin URL, then restart OpenCode.`);
   if (globalStartupPluginConfigured) {
     if (!startupSync.globalPlugin) {
       warnings.push("Global OGB startup plugin is missing. Run ogb check to repair it automatically, then restart OpenCode.");

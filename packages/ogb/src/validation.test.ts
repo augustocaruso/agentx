@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { setupUx } from "./setup-ux.js";
+import { globalStartupPluginSpec, setupUx } from "./setup-ux.js";
 import { syncToOpenCode } from "./sync.js";
 import { runValidation } from "./validation.js";
 
@@ -46,6 +46,46 @@ test("runValidation validates home/global OpenCode files without project artifac
     assert.match(releaseCheck?.message ?? "", /fish/);
     assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "opencode.generated.json")), false);
     assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agents", "YOLO.md")), false);
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
+test("runValidation fails the legacy relative global startup plugin spec", () => {
+  const homeDir = tempHome();
+  const configDir = path.join(homeDir, ".config", "opencode");
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  fs.mkdirSync(extensionDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "GEMINI.md"), "Global extension rules\n", "utf8");
+
+  setupUx({
+    homeDir,
+    projectRoot: homeDir,
+    resetGlobal: true,
+    force: true,
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+  });
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true, force: true });
+  fs.writeFileSync(path.join(configDir, "opencode.json"), JSON.stringify({
+    plugin: [
+      globalStartupPluginSpec(path.join(configDir, "plugins", "ogb-startup-sync.js")),
+      "file:plugins/ogb-startup-sync.js",
+    ],
+    instructions: [
+      path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md"),
+    ],
+  }, null, 2), "utf8");
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    const report = runValidation({ projectRoot: homeDir, homeDir, silent: true });
+    const startupCheck = report.checks.find((check) => check.name === "Global OGB startup plugin");
+
+    assert.equal(startupCheck?.status, "fail");
+    assert.match(startupCheck?.message ?? "", /file:plugins\/ogb-startup-sync\.js/);
   } finally {
     process.env.PATH = originalPath;
   }

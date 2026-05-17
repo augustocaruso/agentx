@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { resolveCommand } from "./command-resolution.js";
 import { readLocalRole } from "./local-role.js";
@@ -22,10 +22,11 @@ export const OGB_UX_PLUGINS = OGB_UX_SAFE_PLUGINS;
 export const OGB_TUI_RUNTIME_DEPENDENCIES = { ...UX_PROFILE_PRESET.tuiRuntimeDependencies };
 export const REMOVED_GLOBAL_UX_COMMANDS = [...UX_PROFILE_PRESET.removedGlobalCommands];
 const UX_PROFILE_COMMANDS: Record<string, string> = UX_PROFILE_PRESET.files.commands;
-const GLOBAL_STARTUP_PLUGIN_SPEC = "file:plugins/ogb-startup-sync.js";
+export const LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC = "file:plugins/ogb-startup-sync.js";
 
-export function globalStartupPluginSpec(_pluginPath?: string): string {
-  return GLOBAL_STARTUP_PLUGIN_SPEC;
+export function globalStartupPluginSpec(pluginPath?: string): string {
+  const target = pluginPath ?? path.join(os.homedir(), ".config", "opencode", "plugins", "ogb-startup-sync.js");
+  return pathToFileURL(path.resolve(target)).href;
 }
 
 export const RESEARCH_COMMAND = UX_PROFILE_COMMANDS.research ?? "";
@@ -148,6 +149,14 @@ function isDisabledUxPlugin(plugin: string): boolean {
   return DISABLED_PLUGIN_PACKAGES.has(pluginPackageName(plugin));
 }
 
+export function isLegacyGlobalStartupPluginSpec(plugin: string): boolean {
+  const trimmed = plugin.trim();
+  if (trimmed === LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC) return true;
+  if (trimmed === "plugins/ogb-startup-sync.js" || trimmed === "./plugins/ogb-startup-sync.js") return true;
+  if (trimmed === "plugins\\ogb-startup-sync.js" || trimmed === ".\\plugins\\ogb-startup-sync.js") return true;
+  return /^file:(?!\/\/)/.test(trimmed) && /(?:^|[/\\])ogb-startup-sync\.js$/.test(trimmed);
+}
+
 function isLocalPluginSpec(plugin: string): boolean {
   return plugin.trim().startsWith("file:");
 }
@@ -184,7 +193,9 @@ function cleanDisabledUxConfig(current: Record<string, unknown>): { config: Reco
   let changed = false;
 
   if (Array.isArray(cleaned.plugin)) {
-    const plugins = cleaned.plugin.filter((plugin) => !(typeof plugin === "string" && isDisabledUxPlugin(plugin)));
+    const plugins = cleaned.plugin.filter((plugin) =>
+      !(typeof plugin === "string" && (isDisabledUxPlugin(plugin) || isLegacyGlobalStartupPluginSpec(plugin)))
+    );
     if (plugins.length !== cleaned.plugin.length) changed = true;
     cleaned.plugin = plugins;
   }
@@ -261,6 +272,11 @@ function hasStaleWebsearchCitedConfig(current: Record<string, unknown>): boolean
 function hasDisabledUxPluginConfig(current: Record<string, unknown>): boolean {
   const plugins = Array.isArray(current.plugin) ? current.plugin : [];
   return plugins.some((plugin) => typeof plugin === "string" && isDisabledUxPlugin(plugin));
+}
+
+function hasLegacyGlobalStartupPluginConfig(current: Record<string, unknown>): boolean {
+  const plugins = Array.isArray(current.plugin) ? current.plugin : [];
+  return plugins.some((plugin) => typeof plugin === "string" && isLegacyGlobalStartupPluginSpec(plugin));
 }
 
 function normalizeFallbackEntryForPlugin(entry: unknown): unknown | undefined {
@@ -718,6 +734,9 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   }
   if (hasDisabledUxPluginConfig(legacyConfig)) {
     warnings.push(`${legacyConfigPath} contem plugin(s) OGB desativados; a config global atual fica em ${configPath}.`);
+  }
+  if (hasLegacyGlobalStartupPluginConfig(currentConfig) || hasLegacyGlobalStartupPluginConfig(legacyConfig)) {
+    warnings.push("A config global continha o plugin OGB antigo em file:plugins/ogb-startup-sync.js; setup-ux vai trocar pela URL local absoluta.");
   }
   if (!hasCurrentConfig && hasLegacyConfig) {
     warnings.push(`${legacyConfigPath} foi migrado para ${configPath}, que e o caminho lido pelo OpenCode atual.`);
