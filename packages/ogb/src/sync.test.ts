@@ -49,6 +49,7 @@ test("syncToOpenCode writes bridge-native generated config without Rulesync", ()
   assert.equal(projectConfig.default_agent, "YOLO");
   assert.ok(report.projectedTuiFiles.includes(TUI_SIDEBAR_PLUGIN_PATH));
   assert.ok(report.projectedTuiFiles.includes(TUI_CONFIG_PATH));
+  assert.equal(report.warnings.includes("Rulesync disabled"), false);
   assert.deepEqual(tuiConfig.plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
 });
 

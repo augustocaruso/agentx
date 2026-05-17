@@ -2950,7 +2950,7 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     features: options.rulesyncFeatures,
   });
 
-  if (rulesync.status === "skipped" && rulesync.skippedReason) warnings.push(rulesync.skippedReason);
+  if (rulesync.status === "skipped" && rulesync.skippedReason && rulesync.skippedReason !== "Rulesync disabled") warnings.push(rulesync.skippedReason);
   if (rulesync.status === "partial") warnings.push(rulesync.stderr || "Rulesync partially completed");
   if (rulesync.status === "error") {
     if (rulesync.conflicts.length > 0) warnings.push(`Rulesync conflicts: ${rulesync.conflicts.join(", ")}`);

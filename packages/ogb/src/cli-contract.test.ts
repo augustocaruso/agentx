@@ -47,6 +47,8 @@ test("check exposes an extension-update escape hatch", () => {
   for (const name of ["check", "pass"]) {
     assert.ok(command(name).options.some((option) => option.long === "--no-extension-update"), `expected ogb ${name} to support --no-extension-update`);
     assert.ok(command(name).options.some((option) => option.long === "--no-patches"), `expected ogb ${name} to support --no-patches`);
+    assert.ok(command(name).options.some((option) => option.long === "--rulesync"), `expected ogb ${name} to support --rulesync`);
+    assert.ok(command(name).options.some((option) => option.long === "--no-rulesync"), `expected ogb ${name} to support --no-rulesync`);
   }
 });
 

@@ -414,6 +414,7 @@ type CheckCliOptions = {
   validation?: boolean;
   security?: boolean;
   dashboard?: boolean;
+  rulesync?: unknown;
 };
 
 function addCheckOptions(command: Command): Command {
@@ -429,6 +430,8 @@ function addCheckOptions(command: Command): Command {
     .option("--no-extension-update", "Skip automatic Gemini CLI extension updates before sync")
     .option("--no-patches", "Skip OGB versioned patches during check")
     .option("--no-sync", "Skip sync")
+    .option("--rulesync <mode>", "Rulesync mode used by sync during check", "auto")
+    .option("--no-rulesync", "Disable Rulesync during check")
     .option("--no-validation", "Skip validate")
     .option("--no-security", "Skip security-check")
     .option("--no-dashboard", "Skip dashboard");
@@ -463,6 +466,7 @@ async function runCheckCli(opts: CheckCliOptions, workflow: "check" | "pass", le
       skipValidation: opts.validation === false,
       skipSecurity: opts.security === false,
       skipDashboard: opts.dashboard === false,
+      rulesyncMode: normalizeRulesyncMode(opts.rulesync),
       silent: useUi || opts.progressJson,
       onProgress,
     });
