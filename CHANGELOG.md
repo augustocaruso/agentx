@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.40 - Check global em Windows
+
+- Faz `ogb check` em modo home aplicar o perfil global mínimo do OpenCode antes de validar, corrigindo post-update que falhava por falta do plugin global `ogb-startup-sync.js` e do agente `YOLO.md`.
+- Mantém o reparo de check sem instalar OpenCode, plugins externos ou dependências TUI; `setup-ux` continua sendo o fluxo completo para a UX global rica.
+- Adiciona regressão para garantir que o home-mode materialize `opencode.json`, `YOLO.md`, plugin de startup e config de startup antes dos checks finais.
+- Valida o release em CI real `ubuntu-latest` e `windows-latest`, incluindo smoke de home-mode no Windows.
+
 ## 0.1.39 - Plugin global por URL absoluta
 
 - Corrige o `setup-ux` para configurar o plugin global `ogb-startup-sync.js` como URL absoluta `file:///...`, em vez do spec legado `file:plugins/...` que o OpenCode tentava instalar como pacote.
