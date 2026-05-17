@@ -73,8 +73,13 @@ export function createPlatformAdapter(input: PlatformAdapterInput): PlatformAdap
   const defaultInstallPrefix = platform === "win32"
     ? pathApi.join(appDataDir ?? pathApi.join(homeDir, "AppData", "Roaming"), "npm")
     : pathApi.join(homeDir, ".local");
-  const globalConfigDir = platform !== "win32" && env.XDG_CONFIG_HOME && homeDir === path.resolve(os.homedir())
-    ? path.join(normalizePathInput(env.XDG_CONFIG_HOME), "opencode")
+  const xdgConfigHome = platform !== "win32" && env.XDG_CONFIG_HOME && homeDir === path.resolve(os.homedir())
+    ? normalizePathInput(env.XDG_CONFIG_HOME)
+    : undefined;
+  const globalConfigDir = xdgConfigHome
+    ? path.basename(xdgConfigHome.replace(/\/+$/, "")).toLowerCase() === "opencode"
+      ? xdgConfigHome
+      : path.join(xdgConfigHome, "opencode")
     : pathApi.join(homeDir, ".config", "opencode");
   const bridgeConfigDir = pathApi.join(homeDir, ".config", "opencode-gemini-bridge");
   const generatedDir = pathApi.join(bridgeConfigDir, "generated");

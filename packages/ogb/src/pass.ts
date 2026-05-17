@@ -382,6 +382,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   const blockers: PassBlocker[] = [];
   let setup: SetupOpenCodeReport | undefined;
   let extensionUpdate: ExtensionCommandReport | undefined;
+  let globalSync: SyncReport | undefined;
   let sync: SyncReport | undefined;
   const patchReports: PatchRunReport[] = [];
   let validation: ValidationReport | undefined;
@@ -482,6 +483,16 @@ export function runPass(options: PassOptions = {}): PassReport {
     runPatchPhase("pre-sync");
     emitCheckProgress(options.onProgress, "sync", "running");
     try {
+      if (!paths.homeMode) {
+        globalSync = syncToOpenCode({
+          projectRoot: paths.homeDir,
+          homeDir: paths.homeDir,
+          dryRun: options.dryRun,
+          force: options.force,
+          silent: true,
+          rulesyncMode: "off",
+        });
+      }
       sync = syncToOpenCode({
         projectRoot: paths.projectRoot,
         homeDir: paths.homeDir,
@@ -494,16 +505,18 @@ export function runPass(options: PassOptions = {}): PassReport {
       emitCheckProgress(options.onProgress, "sync", "fail", error instanceof Error ? error.message : String(error));
       throw error;
     }
+    const syncWarnings = [...(globalSync?.warnings ?? []), ...sync.warnings];
     emitCheckProgress(
       options.onProgress,
       "sync",
-      sync.warnings.length > 0 ? "warn" : "pass",
-      sync.warnings.length > 0
-        ? `${sync.warnings.length} warning(s)`
+      syncWarnings.length > 0 ? "warn" : "pass",
+      syncWarnings.length > 0
+        ? `${syncWarnings.length} warning(s)`
         : `${sync.projectedSkills.length} skill(s), ${sync.projectedCommands.length} command(s), ${sync.projectedAgents.length + sync.projectedExtensionAgents.length} agent(s) projected.`,
     );
+    if (globalSync) automated.push("global-sync");
     automated.push("sync");
-    for (const warning of sync.warnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
+    for (const warning of syncWarnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
     runPatchPhase("post-sync");
   }
 
@@ -691,10 +704,11 @@ export function runPass(options: PassOptions = {}): PassReport {
   appendPatchStep("post-extension-update");
   appendPatchStep("pre-sync");
   if (sync) {
+    const syncWarnings = [...(globalSync?.warnings ?? []), ...sync.warnings];
     steps.push({
       name: "sync",
-      status: sync.warnings.length > 0 ? "warn" : "pass",
-      detail: sync.warnings.length > 0 ? `${sync.warnings.length} warning(s)` : undefined,
+      status: syncWarnings.length > 0 ? "warn" : "pass",
+      detail: syncWarnings.length > 0 ? `${syncWarnings.length} warning(s)` : undefined,
     });
   }
   appendPatchStep("post-sync");

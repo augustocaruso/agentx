@@ -17,6 +17,7 @@ import { syncMcpEnvStore } from "./mcp-env-store.js";
 import { projectOpenCodeMcpFromGeminiServers } from "./mcp-projection.js";
 import {
   defaultOpenCodeAgent,
+  normalizeOpenCodeModelId,
   readOgbConfig,
   resolveAgentFallback,
   runtimeOptionsForProvider,
@@ -28,7 +29,7 @@ import { createModelRoutingContext, writeModelRoutingReport, type ModelRoutingDe
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import { ensureProjectConfig } from "./project-config.js";
 import { projectRulesyncProjection, type RulesyncMode, type RulesyncProjectionResult } from "./rulesync.js";
-import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState } from "./sync-state.js";
+import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState, type ManagedFileState } from "./sync-state.js";
 import { ensureTuiSidebar } from "./tui-sidebar.js";
 import { OGB_VERSION, type GeminiMcpServer } from "./types.js";
 import { sha256File, sha256Text } from "./file-hash.js";
@@ -552,7 +553,7 @@ function parseMarkdownAgent(text: string, fallbackDescription: string): { descri
   return {
     description: parsed.description,
     body: parsed.prompt,
-    model,
+    model: normalizeOpenCodeModelId(model),
     temperature: Number.isFinite(temperature) ? temperature : undefined,
     maxSteps: Number.isInteger(maxSteps) ? maxSteps : undefined,
   };
@@ -796,6 +797,8 @@ function writeGlobalExtensionMap(options: {
   agents: GlobalExtensionAgentMapItem[];
   projectedCommands: string[];
   projectedAgents: string[];
+  removedCommands: string[];
+  removedAgents: string[];
   modelFallbacks: GeminiExtensionProjectionMap["modelFallbacks"];
   warnings: string[];
   dryRun?: boolean;
@@ -818,8 +821,8 @@ function writeGlobalExtensionMap(options: {
     projectedCommands: options.projectedCommands,
     projectedAgents: options.projectedAgents,
     modelFallbacks: options.modelFallbacks,
-    removedCommands: [],
-    removedAgents: [],
+    removedCommands: options.removedCommands,
+    removedAgents: options.removedAgents,
     warnings: options.warnings,
   };
   const content = `${JSON.stringify(map, null, 2)}\n`;
@@ -842,6 +845,8 @@ function writeManagedGlobalText(options: {
   relPath: string;
   content: string;
   label: string;
+  kind?: ManagedFileState["kind"];
+  origin?: string;
   backupSession: BackupSession;
   dryRun?: boolean;
   force?: boolean;
@@ -856,6 +861,9 @@ function writeManagedGlobalText(options: {
       path: reportPath,
       sha256: desiredHash,
       source: "ogb",
+      kind: options.kind,
+      projection: options.kind ? "opencode" : undefined,
+      origin: options.origin,
     });
     return { promoted: reportPath };
   }
@@ -875,6 +883,9 @@ function writeManagedGlobalText(options: {
     path: reportPath,
     sha256: desiredHash,
     source: "ogb",
+    kind: options.kind,
+    projection: options.kind ? "opencode" : undefined,
+    origin: options.origin,
   });
   return { promoted: reportPath };
 }
@@ -1235,9 +1246,10 @@ function projectGlobalGeminiCommands(options: {
   usedCommandRelPaths?: Set<string>;
   dryRun?: boolean;
   force?: boolean;
-}): { promoted: string[]; warnings: string[] } {
+}): { promoted: string[]; warnings: string[]; keepPaths: Set<string> } {
   const warnings: string[] = [];
   const promoted: string[] = [];
+  const keepPaths = new Set<string>();
   const usedCommandRelPaths = options.usedCommandRelPaths ?? new Set<string>();
   const commandsRoot = path.join(options.homeDir, ".gemini", "commands");
   const files = listFilesRecursive(commandsRoot)
@@ -1246,6 +1258,7 @@ function projectGlobalGeminiCommands(options: {
 
   for (const sourcePath of files) {
     const relPath = uniqueGlobalCommandRelPath(commandRelFromSource(commandsRoot, sourcePath), usedCommandRelPaths);
+    keepPaths.add(globalOpenCodeRelPath(relPath));
     const sourceRelPath = toPosix(path.relative(commandsRoot, sourcePath));
     const fallbackDescription = `Gemini global command: ${sourceRelPath}`;
     const text = fs.readFileSync(sourcePath, "utf8");
@@ -1267,6 +1280,8 @@ function projectGlobalGeminiCommands(options: {
         marker: GLOBAL_COMMAND_MARKER,
       }),
       label: "Global command",
+      kind: "command",
+      origin: sourcePath,
       backupSession: options.backupSession,
       dryRun: options.dryRun,
       force: options.force,
@@ -1275,7 +1290,7 @@ function projectGlobalGeminiCommands(options: {
     if (write.warning) warnings.push(write.warning);
   }
 
-  return { promoted, warnings };
+  return { promoted, warnings, keepPaths };
 }
 
 function projectGlobalGeminiExtensionCommands(options: {
@@ -1286,13 +1301,14 @@ function projectGlobalGeminiExtensionCommands(options: {
   usedCommandRelPaths?: Set<string>;
   dryRun?: boolean;
   force?: boolean;
-}): { promoted: string[]; warnings: string[]; mapCommands: GlobalExtensionCommandMapItem[] } {
+}): { promoted: string[]; warnings: string[]; mapCommands: GlobalExtensionCommandMapItem[]; keepPaths: Set<string> } {
   const warnings: string[] = [];
   const promoted: string[] = [];
   const mapCommands: GlobalExtensionCommandMapItem[] = [];
+  const keepPaths = new Set<string>();
   const usedCommandRelPaths = options.usedCommandRelPaths ?? new Set<string>();
   const extensionsRoot = path.join(options.homeDir, ".gemini", "extensions");
-  if (!dirExists(extensionsRoot)) return { promoted, warnings, mapCommands };
+  if (!dirExists(extensionsRoot)) return { promoted, warnings, mapCommands, keepPaths };
 
   for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
     const extensionDir = path.join(extensionsRoot, extensionName);
@@ -1306,6 +1322,7 @@ function projectGlobalGeminiExtensionCommands(options: {
     for (const sourcePath of files) {
       const naturalRelPath = commandRelFromSource(commandsRoot, sourcePath);
       const relPath = uniqueGlobalCommandRelPath(naturalRelPath, usedCommandRelPaths, extensionName);
+      keepPaths.add(globalOpenCodeRelPath(relPath));
       const sourceRelPath = toPosix(path.relative(extensionDir, sourcePath));
       const parsed = parseGeminiCommandToml(fs.readFileSync(sourcePath, "utf8"));
       const description = parsed.description ?? `Gemini extension command from ${extensionName}`;
@@ -1325,6 +1342,8 @@ function projectGlobalGeminiExtensionCommands(options: {
           extensionDir,
         }),
         label: "Global extension command",
+        kind: "command",
+        origin: sourcePath,
         backupSession: options.backupSession,
         dryRun: options.dryRun,
         force: options.force,
@@ -1343,7 +1362,7 @@ function projectGlobalGeminiExtensionCommands(options: {
     }
   }
 
-  return { promoted, warnings, mapCommands };
+  return { promoted, warnings, mapCommands, keepPaths };
 }
 
 function projectGlobalGeminiAgents(options: {
@@ -1354,9 +1373,10 @@ function projectGlobalGeminiAgents(options: {
   usedAgentRelPaths?: Set<string>;
   dryRun?: boolean;
   force?: boolean;
-}): { promoted: string[]; warnings: string[] } {
+}): { promoted: string[]; warnings: string[]; keepPaths: Set<string> } {
   const warnings: string[] = [];
   const promoted: string[] = [];
+  const keepPaths = new Set<string>();
   const usedAgentRelPaths = options.usedAgentRelPaths ?? new Set<string>();
   const agentsRoot = path.join(options.homeDir, ".gemini", "agents");
   const files = listFilesRecursive(agentsRoot)
@@ -1365,6 +1385,7 @@ function projectGlobalGeminiAgents(options: {
 
   for (const sourcePath of files) {
     const relPath = uniqueGlobalAgentRelPath(agentRelFromSource(agentsRoot, sourcePath), usedAgentRelPaths);
+    keepPaths.add(globalOpenCodeRelPath(relPath));
     const sourceRelPath = toPosix(path.relative(agentsRoot, sourcePath));
     const parsed = parseMarkdownAgent(fs.readFileSync(sourcePath, "utf8"), `Gemini global agent: ${sourceRelPath}`);
     const write = writeManagedGlobalText({
@@ -1382,6 +1403,8 @@ function projectGlobalGeminiAgents(options: {
         maxSteps: parsed.maxSteps,
       }),
       label: "Global agent",
+      kind: "agent",
+      origin: sourcePath,
       backupSession: options.backupSession,
       dryRun: options.dryRun,
       force: options.force,
@@ -1390,7 +1413,7 @@ function projectGlobalGeminiAgents(options: {
     if (write.warning) warnings.push(write.warning);
   }
 
-  return { promoted, warnings };
+  return { promoted, warnings, keepPaths };
 }
 
 function projectGlobalGeminiExtensionAgents(options: {
@@ -1404,14 +1427,15 @@ function projectGlobalGeminiExtensionAgents(options: {
   usedAgentRelPaths?: Set<string>;
   dryRun?: boolean;
   force?: boolean;
-}): { promoted: string[]; warnings: string[]; mapAgents: GlobalExtensionAgentMapItem[] } {
+}): { promoted: string[]; warnings: string[]; mapAgents: GlobalExtensionAgentMapItem[]; keepPaths: Set<string> } {
   const warnings: string[] = [];
   const promoted: string[] = [];
   const mapAgents: GlobalExtensionAgentMapItem[] = [];
+  const keepPaths = new Set<string>();
   const usedAgentRelPaths = options.usedAgentRelPaths ?? new Set<string>();
   const extensionsRoot = path.join(options.homeDir, ".gemini", "extensions");
   const extensionAgentBashPermission = defaultOpenCodeAgent(options.config).toLowerCase() === "yolo" ? "allow" : "ask";
-  if (!dirExists(extensionsRoot)) return { promoted, warnings, mapAgents };
+  if (!dirExists(extensionsRoot)) return { promoted, warnings, mapAgents, keepPaths };
 
   for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
     const extensionDir = path.join(extensionsRoot, extensionName);
@@ -1424,6 +1448,7 @@ function projectGlobalGeminiExtensionAgents(options: {
 
     for (const sourcePath of files) {
       const relPath = uniqueGlobalAgentRelPath(agentRelFromSource(agentsRoot, sourcePath), usedAgentRelPaths, extensionName);
+      keepPaths.add(globalOpenCodeRelPath(relPath));
       const sourceRelPath = toPosix(path.relative(extensionDir, sourcePath));
       const parsed = parseMarkdownAgent(fs.readFileSync(sourcePath, "utf8"), `Gemini extension agent from ${extensionName}`);
       const agentName = globalAgentNameFromRelPath(relPath);
@@ -1465,6 +1490,8 @@ function projectGlobalGeminiExtensionAgents(options: {
           routing: routingDecision,
         }),
         label: "Global extension agent",
+        kind: "agent",
+        origin: sourcePath,
         backupSession: options.backupSession,
         dryRun: options.dryRun,
         force: options.force,
@@ -1484,7 +1511,7 @@ function projectGlobalGeminiExtensionAgents(options: {
     }
   }
 
-  return { promoted, warnings, mapAgents };
+  return { promoted, warnings, mapAgents, keepPaths };
 }
 
 function listGeminiGlobalSkillDirs(homeDir: string): Array<{ skillName: string; sourceDir: string }> {
@@ -1905,7 +1932,7 @@ function removeStaleManagedFiles(options: {
   pathPrefix: string;
   keepPaths: Set<string>;
   backupSession: BackupSession;
-  kind: "agent" | "workflow";
+  kind: "agent" | "command" | "workflow";
   label: string;
   force?: boolean;
 }): { removed: string[]; warnings: string[] } {
@@ -1913,7 +1940,7 @@ function removeStaleManagedFiles(options: {
   const warnings: string[] = [];
   for (const file of [...options.state.managedFiles]) {
     if (file.source !== "ogb") continue;
-    if (file.kind !== options.kind) continue;
+    if (file.kind !== undefined && file.kind !== options.kind) continue;
     if (!file.path.startsWith(options.pathPrefix)) continue;
     if (options.keepPaths.has(file.path)) continue;
 
@@ -2331,10 +2358,35 @@ function projectExtensionSkills(options: { projectRoot: string; homeDir: string;
   const keepSkillFiles = new Set<string>();
   const used = new Set<string>();
   const state = readSyncState(options.projectRoot) ?? emptySyncState(OGB_VERSION);
+  const globalState = readSyncState(options.homeDir, options.homeDir) ?? emptySyncState(OGB_VERSION);
+  let globalStateTouched = false;
 
   for (const skill of extensionSkills) {
     const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
     used.add(targetName);
+    const sourceBaseDir = path.dirname(path.dirname(skill.sourceDir));
+    const globalReportDir = globalOpenCodeRelPath(`skills/${safeGlobalSegment(targetName)}`);
+    const globalReportSkillPath = `${globalReportDir}/SKILL.md`;
+    const hasManagedGlobalProjection = Boolean(managedHashFor(globalState, globalReportSkillPath, "ogb"));
+
+    if (hasManagedGlobalProjection) {
+      const copy = copyManagedGlobalSkill({
+        state: globalState,
+        homeDir: options.homeDir,
+        sourceDir: skill.sourceDir,
+        sourceBaseDir,
+        targetName,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (copy.warning) warnings.push(copy.warning);
+      if (copy.promoted) {
+        globalStateTouched = true;
+        continue;
+      }
+    }
+
     const relPath = `.opencode/skills/${targetName}`;
     keepSkillFiles.add(`${relPath}/SKILL.md`);
 
@@ -2348,7 +2400,7 @@ function projectExtensionSkills(options: { projectRoot: string; homeDir: string;
       targetRoot: options.projectRoot,
       reportDir: relPath,
       sourceDir: skill.sourceDir,
-      sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
+      sourceBaseDir,
       label: "Skill",
       projection: "opencode",
       origin: skill.sourceDir,
@@ -2373,6 +2425,7 @@ function projectExtensionSkills(options: { projectRoot: string; homeDir: string;
       });
   warnings.push(...stale.warnings);
 
+  if (!options.dryRun && globalStateTouched) writeSyncState(globalState, options.homeDir, options.homeDir);
   if (!options.dryRun) writeSyncState(state, options.projectRoot);
   return { promoted, removed: stale.removed, warnings };
 }
@@ -2586,6 +2639,44 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
   extensionProjectionWarnings.push(...projectedExtensionAgents.warnings);
   warnings.push(...projectedExtensionAgents.warnings);
 
+  const keepGlobalCommandPaths = new Set([
+    ...projectedCommands.keepPaths,
+    ...projectedExtensionCommands.keepPaths,
+  ]);
+  const removedGlobalCommands = options.dryRun
+    ? { removed: [], warnings: [] }
+    : removeStaleManagedFiles({
+        state,
+        root: paths.homeDir,
+        pathPrefix: `${GLOBAL_OPENCODE_PREFIX}/commands/`,
+        keepPaths: keepGlobalCommandPaths,
+        backupSession,
+        kind: "command",
+        label: "Global command",
+        force: options.force,
+      });
+  extensionProjectionWarnings.push(...removedGlobalCommands.warnings);
+  warnings.push(...removedGlobalCommands.warnings);
+
+  const keepGlobalAgentPaths = new Set([
+    ...projectedAgents.keepPaths,
+    ...projectedExtensionAgents.keepPaths,
+  ]);
+  const removedGlobalAgents = options.dryRun
+    ? { removed: [], warnings: [] }
+    : removeStaleManagedFiles({
+        state,
+        root: paths.homeDir,
+        pathPrefix: `${GLOBAL_OPENCODE_PREFIX}/agents/`,
+        keepPaths: keepGlobalAgentPaths,
+        backupSession,
+        kind: "agent",
+        label: "Global agent",
+        force: options.force,
+      });
+  extensionProjectionWarnings.push(...removedGlobalAgents.warnings);
+  warnings.push(...removedGlobalAgents.warnings);
+
   const projectedSkills = projectGlobalGeminiSkills({
     homeDir: paths.homeDir,
     state,
@@ -2638,6 +2729,8 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     agents: projectedExtensionAgents.mapAgents,
     projectedCommands: projectedExtensionCommands.promoted,
     projectedAgents: projectedExtensionAgents.promoted,
+    removedCommands: removedGlobalCommands.removed,
+    removedAgents: removedGlobalAgents.removed,
     modelFallbacks,
     warnings: extensionProjectionWarnings,
     dryRun: options.dryRun,
@@ -2676,10 +2769,10 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     generatedConfigPath: paths.expandedGeminiPath,
     projectedAgents: projectedAgents.promoted,
     projectedExtensionAgents: projectedExtensionAgents.promoted,
-    removedAgents: [],
+    removedAgents: removedGlobalAgents.removed,
     projectedCommands: [...projectedCommands.promoted, ...projectedExtensionCommands.promoted],
     projectedExtensionCommands: projectedExtensionCommands.promoted,
-    removedExtensionCommands: [],
+    removedExtensionCommands: removedGlobalCommands.removed,
     projectedSkills: projectedSkills.promoted,
     removedSkills: projectedSkills.removed,
     projectedAntigravitySkills: projectedAntigravitySkills.promoted,
@@ -2708,7 +2801,9 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     if (projectedExtensionCommands.promoted.length > 0) console.log(`${action} ${projectedExtensionCommands.promoted.length} global Gemini extension command(s)`);
     if (projectedAgents.promoted.length > 0) console.log(`${action} ${projectedAgents.promoted.length} global Gemini agent(s)`);
     if (projectedExtensionAgents.promoted.length > 0) console.log(`${action} ${projectedExtensionAgents.promoted.length} global Gemini extension agent(s)`);
+    if (removedGlobalAgents.removed.length > 0) console.log(`Removed ${removedGlobalAgents.removed.length} stale global Gemini agent(s)`);
     if (modelFallbacks.length > 0) console.log(`${action} ${modelFallbacks.length} global Gemini extension model fallback(s)`);
+    if (removedGlobalCommands.removed.length > 0) console.log(`Removed ${removedGlobalCommands.removed.length} stale global Gemini command(s)`);
     if (projectedSkills.promoted.length > 0) console.log(`${action} ${projectedSkills.promoted.length} global Gemini skill(s)`);
     if (projectedSkills.removed.length > 0) console.log(`Removed ${projectedSkills.removed.length} stale global Gemini skill(s)`);
     if (projectedAntigravitySkills.promoted.length > 0) console.log(`${action} ${projectedAntigravitySkills.promoted.length} global Antigravity skill(s)`);

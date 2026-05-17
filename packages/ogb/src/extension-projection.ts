@@ -5,6 +5,7 @@ import { BUILT_IN_COMMANDS } from "./built-ins.js";
 import { sha256File, sha256Text } from "./file-hash.js";
 import {
   defaultOpenCodeAgent,
+  normalizeOpenCodeModelId,
   readOgbConfig,
   resolveAgentFallback,
   runtimeOptionsForProvider,
@@ -271,7 +272,7 @@ function parseGeminiAgentMarkdown(text: string): { description?: string; tempera
   const description = parseQuotedValue(frontmatter.match(/^\s*description\s*:\s*([^\n]+)/m)?.[1]);
   const temperatureRaw = frontmatter.match(/^\s*temperature\s*:\s*([0-9.]+)/m)?.[1];
   const maxTurnsRaw = frontmatter.match(/^\s*max_turns\s*:\s*([0-9]+)/m)?.[1];
-  const model = parseQuotedValue(frontmatter.match(/^\s*model\s*:\s*([^\n]+)/m)?.[1]);
+  const model = normalizeOpenCodeModelId(parseQuotedValue(frontmatter.match(/^\s*model\s*:\s*([^\n]+)/m)?.[1]));
   const temperature = temperatureRaw === undefined ? undefined : Number(temperatureRaw);
   const maxSteps = maxTurnsRaw === undefined ? undefined : Number(maxTurnsRaw);
   return {

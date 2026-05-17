@@ -140,6 +140,45 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands")), false);
 });
 
+test("syncToOpenCode normalizes bare Gemini model ids when projecting extension agents", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  fs.mkdirSync(path.join(extensionDir, "agents"), { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench" }));
+  fs.writeFileSync(path.join(extensionDir, "agents", "gemini-vault-repair.md"), "---\ndescription: Repair vault.\nmodel: gemini-3-flash-preview\n---\n# Repair\n");
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projectAgent = fs.readFileSync(path.join(projectRoot, ".opencode", "agents", "gemini-vault-repair.md"), "utf8");
+  assert.match(projectAgent, /model: "google\/gemini-3-flash-preview"/);
+  assert.doesNotMatch(projectAgent, /model: "gemini-3-flash-preview"/);
+
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+  const globalAgent = fs.readFileSync(path.join(homeDir, ".config", "opencode", "agents", "gemini-vault-repair.md"), "utf8");
+  assert.match(globalAgent, /model: "google\/gemini-3-flash-preview"/);
+  assert.doesNotMatch(globalAgent, /model: "gemini-3-flash-preview"/);
+});
+
+test("syncToOpenCode removes stale global extension agents when the Gemini source disappears", () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  const agentsDir = path.join(extensionDir, "agents");
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench" }));
+  const sourceAgent = path.join(agentsDir, "med-catalog-curator.md");
+  fs.writeFileSync(sourceAgent, "---\ndescription: Catalog.\n---\n# Catalog\n");
+
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+  const targetAgent = path.join(homeDir, ".config", "opencode", "agents", "med-catalog-curator.md");
+  assert.equal(fs.existsSync(targetAgent), true);
+
+  fs.rmSync(sourceAgent, { force: true });
+  const report = syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+
+  assert.equal(fs.existsSync(targetAgent), false);
+  assert.ok(report.removedAgents.includes(".config/opencode/agents/med-catalog-curator.md"));
+});
+
 test("syncToOpenCode replaces stale absolute global instruction paths", () => {
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
   const configDir = path.join(homeDir, ".config", "opencode");
@@ -474,6 +513,58 @@ test("syncToOpenCode removes stale managed project extension skills", () => {
   assert.ok(report.removedSkills.includes(".opencode/skills/review-notes"));
   assert.equal(fs.existsSync(projected), false);
   assert.equal(state.managedFiles.some((file: { path: string }) => file.path === ".opencode/skills/review-notes/SKILL.md"), false);
+});
+
+test("syncToOpenCode refreshes managed global extension skills instead of duplicating them in the project", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  const skillDir = path.join(extensionDir, "skills", "obsidian-ops");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench" }));
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: obsidian-ops\n---\n# New global skill\n", "utf8");
+
+  const oldGlobalSkill = "---\nname: obsidian-ops\n---\n# Old global skill\n";
+  const globalSkillPath = path.join(homeDir, ".config", "opencode", "skills", "obsidian-ops", "SKILL.md");
+  fs.mkdirSync(path.dirname(globalSkillPath), { recursive: true });
+  fs.writeFileSync(globalSkillPath, oldGlobalSkill, "utf8");
+  const globalStatePath = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-sync-state.json");
+  fs.mkdirSync(path.dirname(globalStatePath), { recursive: true });
+  fs.writeFileSync(globalStatePath, JSON.stringify({
+    version: OGB_VERSION,
+    managedFiles: [{
+      path: ".config/opencode/skills/obsidian-ops/SKILL.md",
+      sha256: sha256Text(oldGlobalSkill),
+      source: "ogb",
+      kind: "skill",
+      projection: "opencode",
+      origin: skillDir,
+    }],
+  }, null, 2));
+
+  const oldProjectSkill = "---\nname: obsidian-ops\n---\n# Old project skill\n";
+  const projectSkillPath = path.join(projectRoot, ".opencode", "skills", "obsidian-ops", "SKILL.md");
+  fs.mkdirSync(path.dirname(projectSkillPath), { recursive: true });
+  fs.writeFileSync(projectSkillPath, oldProjectSkill, "utf8");
+  const projectStatePath = path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json");
+  fs.mkdirSync(path.dirname(projectStatePath), { recursive: true });
+  fs.writeFileSync(projectStatePath, JSON.stringify({
+    version: OGB_VERSION,
+    managedFiles: [{
+      path: ".opencode/skills/obsidian-ops/SKILL.md",
+      sha256: sha256Text(oldProjectSkill),
+      source: "ogb",
+      kind: "skill",
+      projection: "opencode",
+      origin: skillDir,
+    }],
+  }, null, 2));
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+
+  assert.equal(fs.readFileSync(globalSkillPath, "utf8"), "---\nname: obsidian-ops\n---\n# New global skill\n");
+  assert.equal(fs.existsSync(projectSkillPath), false);
+  assert.ok(report.removedSkills.includes(".opencode/skills/obsidian-ops"));
 });
 
 test("syncToOpenCode preserves stale project extension skills edited by hand", () => {

@@ -129,3 +129,14 @@ test("platform adapter honors XDG config on the current POSIX home only", () => 
 
   assert.equal(adapter.globalConfigDir, "/tmp/xdg-config/opencode");
 });
+
+test("platform adapter does not append duplicate opencode segment to XDG config", () => {
+  const homeDir = os.homedir();
+  const adapter = createPlatformAdapter({
+    platform: "darwin",
+    homeDir,
+    env: { XDG_CONFIG_HOME: path.join(homeDir, ".config", "opencode") },
+  });
+
+  assert.equal(adapter.globalConfigDir, path.join(homeDir, ".config", "opencode"));
+});

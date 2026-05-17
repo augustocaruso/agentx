@@ -50,6 +50,11 @@ plugins:
   ]), ["opencode-pty@0.3.4"]);
 });
 
+test("global AGENTS.md preset uses platform-neutral external terminal guidance", () => {
+  assert.doesNotMatch(GLOBAL_AGENTS_MD, /macOS Terminal/);
+  assert.match(GLOBAL_AGENTS_MD, /PowerShell or Windows Terminal/);
+});
+
 test("setupUx writes global OpenCode UX profile and project fallback profile", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");

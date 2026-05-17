@@ -85,6 +85,13 @@ export function defaultOpenCodeAgent(config: OgbConfig | undefined, fallback = "
   return typeof raw === "string" && raw.trim() ? raw.trim() : fallback;
 }
 
+export function normalizeOpenCodeModelId(model: string | undefined): string | undefined {
+  const trimmed = model?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.includes("/")) return trimmed;
+  return /^gemini[-.]/i.test(trimmed) ? `google/${trimmed}` : trimmed;
+}
+
 export interface ResolvedAgentFallback {
   agentName: string;
   extensionName: string;
@@ -123,12 +130,12 @@ function isRuntimeObject(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeModelReference(value: ModelReference | undefined): { model?: string; options: ModelRuntimeOptions } {
-  if (typeof value === "string") return { model: value.trim() || undefined, options: {} };
+  if (typeof value === "string") return { model: normalizeOpenCodeModelId(value), options: {} };
   if (!isRuntimeObject(value)) return { options: {} };
   const model = typeof value.model === "string" && value.model.trim()
-    ? value.model.trim()
+    ? normalizeOpenCodeModelId(value.model)
     : typeof value.id === "string" && value.id.trim()
-      ? value.id.trim()
+      ? normalizeOpenCodeModelId(value.id)
       : undefined;
   return { model, options: normalizeRuntimeOptions(value) };
 }
@@ -161,10 +168,10 @@ export function runtimeOptionsForProvider(value: ModelRuntimeOptions): Omit<Mode
 }
 
 export function normalizeFallbackEntry(entry: ModelFallbackEntry): ModelFallbackEntry | undefined {
-  if (typeof entry === "string") return entry.trim() ? entry.trim() : undefined;
+  if (typeof entry === "string") return normalizeOpenCodeModelId(entry);
   if (!isRuntimeObject(entry) || typeof entry.model !== "string" || !entry.model.trim()) return undefined;
   return {
-    model: entry.model.trim(),
+    model: normalizeOpenCodeModelId(entry.model) ?? entry.model.trim(),
     ...(typeof entry.reason === "string" && entry.reason.trim() ? { reason: entry.reason.trim() } : {}),
     ...normalizeRuntimeOptions(entry),
   };
@@ -200,8 +207,8 @@ export function resolveAgentFallback(options: {
   return {
     agentName: options.agentName,
     extensionName: options.extensionName,
-    importedModel: options.importedModel,
-    model: modelRef.model ?? options.importedModel,
+    importedModel: normalizeOpenCodeModelId(options.importedModel),
+    model: modelRef.model ?? normalizeOpenCodeModelId(options.importedModel),
     ...runtimeOptions,
     fallbackModels,
     source,

@@ -82,7 +82,9 @@ function normalizeRelPath(relPath: string): string {
 
 function safeRelPath(relPath: string): boolean {
   const normalized = normalizeRelPath(relPath);
-  return normalized === "opencode.jsonc" || normalized.startsWith(".opencode/");
+  return normalized === "opencode.jsonc"
+    || normalized === ".config/opencode/opencode"
+    || normalized.startsWith(".opencode/");
 }
 
 function addCandidate(map: Map<string, Candidate>, relPath: string, reason: string): void {
@@ -105,6 +107,10 @@ function homeProjectConfigLooksManaged(filePath: string): boolean {
   if (!parsed || typeof parsed !== "object") return false;
   const instructions = Array.isArray(parsed.instructions) ? parsed.instructions : [];
   if (instructions.includes(".opencode/generated/GEMINI.expanded.md")) return true;
+  if (instructions.some((instruction: unknown) =>
+    typeof instruction === "string"
+    && instruction.replace(/\\/g, "/").includes(".config/opencode-gemini-bridge/generated/GEMINI.expanded.md")
+  )) return true;
   const plugins = Array.isArray(parsed.plugin) ? parsed.plugin : [];
   return plugins.some((plugin: unknown) => typeof plugin === "string" && plugin.includes("ogb-startup-sync"));
 }
@@ -116,6 +122,11 @@ function tuiConfigLooksManaged(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function nestedGlobalOpenCodeConfigLooksManaged(dirPath: string): boolean {
+  return homeProjectConfigLooksManaged(path.join(dirPath, "opencode.json"))
+    || homeProjectConfigLooksManaged(path.join(dirPath, "opencode.jsonc"));
 }
 
 function managedPathsFromOldState(homeDir: string, warnings: string[]): string[] {
@@ -152,6 +163,11 @@ function collectCandidates(homeDir: string, warnings: string[]): Candidate[] {
   const tuiConfig = path.join(homeDir, ".opencode", "tui.jsonc");
   if (tuiConfigLooksManaged(tuiConfig)) {
     addCandidate(candidates, ".opencode/tui.jsonc", "config TUI OGB de projeto criado na home");
+  }
+
+  const nestedGlobalConfig = path.join(homeDir, ".config", "opencode", "opencode");
+  if (nestedGlobalOpenCodeConfigLooksManaged(nestedGlobalConfig)) {
+    addCandidate(candidates, ".config/opencode/opencode", "perfil OpenCode global aninhado por XDG_CONFIG_HOME duplicado");
   }
 
   return [...candidates.values()].sort((a, b) => a.relPath.localeCompare(b.relPath));

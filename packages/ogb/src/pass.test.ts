@@ -10,6 +10,7 @@ import type { OgbPatch } from "./patches.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
 import { STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
 import { globalStartupPluginSpec } from "./setup-ux.js";
+import { syncToOpenCode } from "./sync.js";
 import { TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 
 function tempRoot(): string {
@@ -392,6 +393,45 @@ process.exit(9);
     else process.env.GEMINI_BIN = oldGeminiBin;
     process.exitCode = oldExitCode;
   }
+});
+
+test("runPass repairs global OpenCode projections before project sync", () => {
+  const homeDir = tempRoot();
+  const projectRoot = tempRoot();
+  const extensionAgents = path.join(homeDir, ".gemini", "extensions", "medical-pack", "agents");
+  const oldExitCode = process.exitCode;
+  fs.mkdirSync(extensionAgents, { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, "GEMINI.md"), "Project rules\n", "utf8");
+  fs.writeFileSync(path.join(extensionAgents, "keeper.md"), "---\ndescription: Keeper\nmodel: gemini-3-flash-preview\n---\nKeep.\n", "utf8");
+  fs.writeFileSync(path.join(extensionAgents, "stale.md"), "---\ndescription: Stale\nmodel: gemini-3-flash-preview\n---\nStale.\n", "utf8");
+
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+  fs.rmSync(path.join(extensionAgents, "stale.md"));
+  const keeperTarget = path.join(homeDir, ".config", "opencode", "agents", "keeper.md");
+  fs.writeFileSync(
+    keeperTarget,
+    fs.readFileSync(keeperTarget, "utf8").replace("google/gemini-3-flash-preview", "gemini-3-flash-preview"),
+    "utf8",
+  );
+
+  const report = runPass({
+    projectRoot,
+    homeDir,
+    force: true,
+    skipSetup: true,
+    skipExtensionUpdate: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+    silent: true,
+    setExitCode: false,
+    rulesyncMode: "off",
+  });
+
+  assert.equal(report.automated.includes("global-sync"), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "agents", "stale.md")), false);
+  assert.match(fs.readFileSync(keeperTarget, "utf8"), /model: "google\/gemini-3-flash-preview"/);
+  process.exitCode = oldExitCode;
 });
 
 test("formatPassReport prints a compact human report", () => {

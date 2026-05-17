@@ -58,6 +58,22 @@ test("cleanupHomeProjectArtifacts backs up and removes old home project files", 
   assert.equal(fs.existsSync(staleBackup), false);
 });
 
+test("cleanupHomeProjectArtifacts removes nested global OpenCode config left by duplicate XDG paths", () => {
+  const homeDir = tempHome();
+  const nestedRoot = path.join(homeDir, ".config", "opencode", "opencode");
+  writeFile(path.join(nestedRoot, "opencode.json"), JSON.stringify({
+    instructions: [path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")],
+  }, null, 2));
+  writeFile(path.join(nestedRoot, "skills", "obsidian-ops", "SKILL.md"), "# Obsidian ops\n");
+
+  const report = cleanupHomeProjectArtifacts({ homeDir });
+
+  assert.ok(report.actions.some((action) => action.relPath === ".config/opencode/opencode" && action.status === "removed"));
+  assert.equal(fs.existsSync(nestedRoot), false);
+  assert.ok(report.backupDir);
+  assert.equal(fs.existsSync(path.join(report.backupDir!, ".config", "opencode", "opencode", "opencode.json")), true);
+});
+
 test("cleanupHomeProjectArtifacts dry-run leaves files in place", () => {
   const homeDir = tempHome();
   writeFile(path.join(homeDir, "opencode.jsonc"), JSON.stringify({

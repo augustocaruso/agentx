@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.37 - Reparo global pos-sync
+
+- Faz o `ogb check --force` rodar um sync global antes do sync de projeto, limpando projeções antigas em `~/.config/opencode`.
+- Normaliza modelos Gemini sem provider para `google/...` em agentes projetados, tanto globais quanto de projeto.
+- Remove agentes globais órfãos, deduplica skills gerenciadas entre global/projeto e limpa a árvore duplicada `.config/opencode/opencode`.
+- Atualiza o `AGENTS.md` global distribuído para orientação de terminal neutra entre macOS/Linux e Windows.
+
 ## 0.1.36 - Instalador global duravel
 
 - Corrige o bootstrap POSIX para instalar o OGB a partir de um tarball empacotado, nao de um diretorio temporario.
