@@ -171,7 +171,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.deepEqual(globalTuiConfig.plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
   const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
   assert.equal(typeof startupConfig.command, "string");
-  assert.deepEqual(startupConfig.baseArgs, ["--project", homeDir]);
+  assert.deepEqual(startupConfig.baseArgs, ["--project", process.platform === "win32" ? "{OGB_HOME}" : homeDir]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
   assert.equal(startupConfig.autoUpdate, false);
   assert.deepEqual(startupConfig.updateArgs, ["check-update", "--no-write"]);

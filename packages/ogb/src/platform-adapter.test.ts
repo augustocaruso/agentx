@@ -43,12 +43,12 @@ test("platform adapter contract returns POSIX shell config target", () => {
   assert.equal(adapter.platform, "darwin");
   assert.equal(adapter.scriptKind, "posix-shell");
   assert.equal(adapter.pathSeparator, ":");
-  assert.equal(adapter.defaultInstallPrefix, path.join(homeDir, ".local"));
-  assert.equal(adapter.npmGlobalDir, path.join(homeDir, ".local", "bin"));
+  assert.equal(adapter.defaultInstallPrefix, path.posix.join(homeDir, ".local"));
+  assert.equal(adapter.npmGlobalDir, path.posix.join(homeDir, ".local", "bin"));
   assert.equal(adapter.legacyGlobalConfigDir, undefined);
   assert.deepEqual(adapter.commandVariants("opencode"), ["opencode"]);
-  assert.ok(adapter.homeCommandCandidates("opencode").includes(path.join(homeDir, ".local", "bin", "opencode")));
-  assert.equal(adapter.persistEnv("OPENCODE_ENABLE_EXA", "1").path, path.join(homeDir, ".config", "zsh", ".zshrc"));
+  assert.ok(adapter.homeCommandCandidates("opencode").includes(path.posix.join(homeDir, ".local", "bin", "opencode")));
+  assert.equal(adapter.persistEnv("OPENCODE_ENABLE_EXA", "1").path, path.posix.join(homeDir, ".config", "zsh", ".zshrc"));
 });
 
 test("platform adapter persists Linux env to profile and bash rc without macOS zsh config", () => {
@@ -56,13 +56,13 @@ test("platform adapter persists Linux env to profile and bash rc without macOS z
   const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/bin/bash" } });
 
   assert.equal(adapter.platform, "linux");
-  assert.equal(adapter.persistEnv("OPENCODE_ENABLE_EXA", "1").path, path.join(homeDir, ".profile"));
+  assert.equal(adapter.persistEnv("OPENCODE_ENABLE_EXA", "1").path, path.posix.join(homeDir, ".profile"));
   assert.deepEqual(adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").map((candidate) => candidate.path), [
-    path.join(homeDir, ".profile"),
-    path.join(homeDir, ".bashrc"),
+    path.posix.join(homeDir, ".profile"),
+    path.posix.join(homeDir, ".bashrc"),
   ]);
   assert.equal(adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").some((candidate) =>
-    candidate.path?.includes(path.join(".config", "zsh", ".zshrc"))
+    candidate.path?.includes(path.posix.join(".config", "zsh", ".zshrc"))
   ), false);
 });
 
@@ -71,8 +71,8 @@ test("platform adapter includes zsh rc as an additional Linux env target when zs
   const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/usr/bin/zsh" } });
 
   assert.deepEqual(adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").map((candidate) => candidate.path), [
-    path.join(homeDir, ".profile"),
-    path.join(homeDir, ".zshrc"),
+    path.posix.join(homeDir, ".profile"),
+    path.posix.join(homeDir, ".zshrc"),
   ]);
 });
 
@@ -82,8 +82,8 @@ test("platform adapter includes fish config as an additional Linux env target wh
   const candidates = adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1");
 
   assert.deepEqual(candidates.map((candidate) => candidate.path), [
-    path.join(homeDir, ".profile"),
-    path.join(homeDir, ".config", "fish", "config.fish"),
+    path.posix.join(homeDir, ".profile"),
+    path.posix.join(homeDir, ".config", "fish", "config.fish"),
   ]);
   assert.deepEqual(candidates.map((candidate) => candidate.target), [
     "posix-shell-config",
@@ -91,7 +91,7 @@ test("platform adapter includes fish config as an additional Linux env target wh
   ]);
 });
 
-test("platform adapter contract preserves POSIX fixture paths while simulating Windows", () => {
+test("platform adapter contract preserves POSIX fixture paths while simulating Windows", { skip: process.platform === "win32" ? "POSIX fixture path simulation is covered on POSIX runners" : false }, () => {
   const homeDir = path.posix.join("/tmp", "ogb-home");
   const adapter = createPlatformAdapter({ platform: "win32", homeDir, env: {} });
 
@@ -130,7 +130,7 @@ test("platform adapter honors XDG config on the current POSIX home only", { skip
   assert.equal(adapter.globalConfigDir, "/tmp/xdg-config/opencode");
 });
 
-test("platform adapter does not append duplicate opencode segment to XDG config", () => {
+test("platform adapter does not append duplicate opencode segment to XDG config", { skip: process.platform === "win32" ? "XDG current-home behavior is POSIX-only" : false }, () => {
   const homeDir = os.homedir();
   const adapter = createPlatformAdapter({
     platform: "darwin",

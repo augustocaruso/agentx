@@ -331,7 +331,7 @@ test("startup plugin expands runtime home placeholders before spawning", async (
     await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "pass");
 
     const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
-    assert.deepEqual(status.args, [runnerPath, "--project", homeDir, "startup-sync"]);
+    assert.deepEqual(status.args.map((arg: string) => path.normalize(arg)), [runnerPath, "--project", homeDir, "startup-sync"]);
     assert.match(status.stdoutTail, /RUNNER_ARGS=/);
   } finally {
     restoreHome();

@@ -137,7 +137,7 @@ test("runReset cancellation leaves home project artifacts and global config unch
   assert.equal(readJson(path.join(homeDir, ".config", "opencode", "opencode.json")).custom, true);
 });
 
-test("runReset cleans home project artifacts and recreates global config", async () => {
+test("runReset cleans home project artifacts and recreates global config", { skip: process.platform === "win32" ? "darwin env persistence is covered on POSIX runners" : false }, async () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   fs.mkdirSync(homeDir, { recursive: true });
@@ -220,7 +220,7 @@ test("runReset cleans home project artifacts and recreates global config", async
   assert.equal(report.doctor?.warnings.some((warning) => warning.includes("Last OpenCode startup sync failed")), false);
 });
 
-test("runReset persists Linux Exa env to profile and bash rc without creating macOS zsh config", async () => {
+test("runReset persists Linux Exa env to profile and bash rc without creating macOS zsh config", { skip: process.platform === "win32" ? "Linux env persistence is covered on Linux runners" : false }, async () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   fs.mkdirSync(homeDir, { recursive: true });
@@ -245,7 +245,7 @@ test("runReset persists Linux Exa env to profile and bash rc without creating ma
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "zsh", ".zshrc")), false);
 });
 
-test("runReset persists Linux Exa env to fish config with fish syntax", async () => {
+test("runReset persists Linux Exa env to fish config with fish syntax", { skip: process.platform === "win32" ? "Linux env persistence is covered on Linux runners" : false }, async () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   fs.mkdirSync(homeDir, { recursive: true });

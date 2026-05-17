@@ -51,7 +51,9 @@ test("createBackupSession sanitizes files outside known roots", () => {
   const session = createBackupSession({ bridgeConfigDir, operation: "external", timestamp: "stamp" });
   const backup = session.backupExisting(target);
 
-  assert.ok(backup?.includes(path.join("external", root.replace(/^[/\\]+/, "").split(/[\\/]+/).join(path.sep), "elsewhere", "notes file.md")));
+  const portableBackup = backup?.replace(/\\/g, "/") ?? "";
+  assert.ok(portableBackup.includes("/external/"));
+  assert.ok(portableBackup.endsWith("/elsewhere/notes file.md"));
   assert.equal(fs.readFileSync(backup!, "utf8"), "notes\n");
 });
 

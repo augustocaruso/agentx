@@ -112,7 +112,9 @@ function splitCommandArgs(raw) {
   let current = "";
   let quote = "";
   let escaping = false;
-  for (const char of String(raw || "")) {
+  const source = String(raw || "");
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
     if (escaping) {
       current += char;
       escaping = false;
