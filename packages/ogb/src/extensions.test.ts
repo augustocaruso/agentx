@@ -21,6 +21,11 @@ function writeExecutable(root: string, content: string): string {
   const filePath = path.join(root, "fake-gemini.js");
   fs.writeFileSync(filePath, `#!/usr/bin/env node\n${content}`, "utf8");
   fs.chmodSync(filePath, 0o755);
+  if (process.platform === "win32") {
+    const cmdPath = path.join(root, "fake-gemini.cmd");
+    fs.writeFileSync(cmdPath, `@echo off\r\n"${process.execPath}" "${filePath}" %*\r\n`, "utf8");
+    return cmdPath;
+  }
   return filePath;
 }
 

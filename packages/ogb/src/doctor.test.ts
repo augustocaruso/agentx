@@ -26,8 +26,8 @@ test("runDoctor prints one warning line for duplicate skill names", () => {
 
   assert.equal(report.counts.skills.warning, 2);
   assert.equal(duplicateWarnings.length, 1);
-  assert.match(duplicateWarnings[0], /\.opencode\/skills\/gemini-importer/);
-  assert.match(duplicateWarnings[0], /\.opencode\/skill\/gemini-importer/);
+  assert.match(duplicateWarnings[0], /\.opencode[/\\]skills[/\\]gemini-importer/);
+  assert.match(duplicateWarnings[0], /\.opencode[/\\]skill[/\\]gemini-importer/);
 });
 
 test("runDoctor ignores identical project/global OpenCode skill copies", () => {

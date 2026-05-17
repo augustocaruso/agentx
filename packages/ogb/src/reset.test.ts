@@ -72,7 +72,7 @@ test("runReset accepts an accidentally quoted home project path", async () => {
   assert.ok(report.check);
   assert.equal(report.homeDir, path.resolve(homeDir));
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated")), false);
-  assert.deepEqual(startupConfig.baseArgs, ["--project", path.resolve(homeDir)]);
+  assert.deepEqual(startupConfig.baseArgs, ["--project", process.platform === "win32" ? "{OGB_HOME}" : path.resolve(homeDir)]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
 });

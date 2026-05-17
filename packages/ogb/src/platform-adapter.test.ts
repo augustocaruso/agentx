@@ -37,7 +37,7 @@ test("platform adapter contract returns Windows paths, shell, env persistence, a
 });
 
 test("platform adapter contract returns POSIX shell config target", () => {
-  const homeDir = path.join("/tmp", "ogb-home");
+  const homeDir = path.posix.join("/tmp", "ogb-home");
   const adapter = createPlatformAdapter({ platform: "darwin", homeDir, env: {} });
 
   assert.equal(adapter.platform, "darwin");
@@ -52,7 +52,7 @@ test("platform adapter contract returns POSIX shell config target", () => {
 });
 
 test("platform adapter persists Linux env to profile and bash rc without macOS zsh config", () => {
-  const homeDir = path.join("/tmp", "ogb-linux-home");
+  const homeDir = path.posix.join("/tmp", "ogb-linux-home");
   const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/bin/bash" } });
 
   assert.equal(adapter.platform, "linux");
@@ -67,7 +67,7 @@ test("platform adapter persists Linux env to profile and bash rc without macOS z
 });
 
 test("platform adapter includes zsh rc as an additional Linux env target when zsh is the shell", () => {
-  const homeDir = path.join("/tmp", "ogb-linux-zsh-home");
+  const homeDir = path.posix.join("/tmp", "ogb-linux-zsh-home");
   const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/usr/bin/zsh" } });
 
   assert.deepEqual(adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1").map((candidate) => candidate.path), [
@@ -77,7 +77,7 @@ test("platform adapter includes zsh rc as an additional Linux env target when zs
 });
 
 test("platform adapter includes fish config as an additional Linux env target when fish is the shell", () => {
-  const homeDir = path.join("/tmp", "ogb-linux-fish-home");
+  const homeDir = path.posix.join("/tmp", "ogb-linux-fish-home");
   const adapter = createPlatformAdapter({ platform: "linux", homeDir, env: { SHELL: "/usr/bin/fish" } });
   const candidates = adapter.persistEnvCandidates("OPENCODE_ENABLE_EXA", "1");
 
@@ -92,7 +92,7 @@ test("platform adapter includes fish config as an additional Linux env target wh
 });
 
 test("platform adapter contract preserves POSIX fixture paths while simulating Windows", () => {
-  const homeDir = path.join("/tmp", "ogb-home");
+  const homeDir = path.posix.join("/tmp", "ogb-home");
   const adapter = createPlatformAdapter({ platform: "win32", homeDir, env: {} });
 
   assert.equal(adapter.homeDir, homeDir);
@@ -119,7 +119,7 @@ test("platform adapter escapes PowerShell env values without touching internal p
   ]);
 });
 
-test("platform adapter honors XDG config on the current POSIX home only", () => {
+test("platform adapter honors XDG config on the current POSIX home only", { skip: process.platform === "win32" ? "XDG current-home behavior is POSIX-only" : false }, () => {
   const homeDir = os.homedir();
   const adapter = createPlatformAdapter({
     platform: "darwin",

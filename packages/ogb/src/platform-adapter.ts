@@ -64,7 +64,11 @@ function powershellSingleQuoted(value: string): string {
 export function createPlatformAdapter(input: PlatformAdapterInput): PlatformAdapter {
   const platform = normalizePlatform(input.platform);
   const normalizedHomeDir = normalizePathInput(input.homeDir);
-  const pathApi = useWin32Path(platform, normalizedHomeDir) ? path.win32 : path;
+  const pathApi = useWin32Path(platform, normalizedHomeDir)
+    ? path.win32
+    : platform === "win32"
+      ? path
+      : path.posix;
   const homeDir = pathApi.resolve(normalizedHomeDir);
   const env = input.env ?? process.env;
   const appDataDir = platform === "win32"

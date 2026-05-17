@@ -26,6 +26,19 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void
   assert.equal(predicate(), true);
 }
 
+function overrideProcessHome(homeDir: string): () => void {
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir;
+  return () => {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousUserProfile;
+  };
+}
+
 test("setupOpenCode installs startup plugin, config, and project OpenCode config", () => {
   const projectRoot = tempProject();
   const report = setupOpenCode({
@@ -230,9 +243,8 @@ test("startup plugin uses global generated lock and status when cwd is home", as
     lockTtlMs: 10 * 60_000,
   }, null, 2) + "\n");
 
-  const previousHome = process.env.HOME;
+  const restoreHome = overrideProcessHome(homeDir);
   const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
-  process.env.HOME = homeDir;
   process.env.OGB_STARTUP_DELAY_MS = "600000";
   try {
     const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}`);
@@ -270,8 +282,7 @@ test("startup plugin uses global generated lock and status when cwd is home", as
     assert.equal(fs.existsSync(oldHomeLockPath), false);
     assert.equal(logs.some((entry) => JSON.stringify(entry).includes("Running ogb startup sync")), true);
   } finally {
-    if (previousHome === undefined) delete process.env.HOME;
-    else process.env.HOME = previousHome;
+    restoreHome();
     if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
     else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
   }
@@ -300,9 +311,8 @@ test("startup plugin expands runtime home placeholders before spawning", async (
     lockTtlMs: 10 * 60_000,
   }, null, 2) + "\n");
 
-  const previousHome = process.env.HOME;
+  const restoreHome = overrideProcessHome(homeDir);
   const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
-  process.env.HOME = homeDir;
   process.env.OGB_STARTUP_DELAY_MS = "600000";
   try {
     const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}-runtime-home`);
@@ -324,8 +334,7 @@ test("startup plugin expands runtime home placeholders before spawning", async (
     assert.deepEqual(status.args, [runnerPath, "--project", homeDir, "startup-sync"]);
     assert.match(status.stdoutTail, /RUNNER_ARGS=/);
   } finally {
-    if (previousHome === undefined) delete process.env.HOME;
-    else process.env.HOME = previousHome;
+    restoreHome();
     if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
     else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
   }

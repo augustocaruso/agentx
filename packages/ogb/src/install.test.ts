@@ -14,6 +14,55 @@ function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-install-"));
 }
 
+function writeFakeOpenCode(binDir: string, expectedPlugins: string[]): string {
+  if (process.platform === "win32") {
+    const scriptPath = path.join(binDir, "fake-opencode.js");
+    const cmdPath = path.join(binDir, "opencode.cmd");
+    fs.writeFileSync(scriptPath, `
+const expectedPlugins = ${JSON.stringify(expectedPlugins)};
+const args = process.argv.slice(2);
+if (args[0] === "plugin") {
+  console.log("Plugin package ready");
+  console.log("Detected server target");
+  process.exit(0);
+}
+if (args[0] === "debug") {
+  for (const plugin of expectedPlugins) console.log("- " + plugin);
+  process.exit(0);
+}
+if (args[0] === "--print-logs") {
+  console.log("Available: ChatGPT Pro/Plus, OAuth with Google (Gemini CLI)");
+  process.exit(0);
+}
+process.exit(0);
+`, "utf8");
+    fs.writeFileSync(cmdPath, `@echo off\r\n"${process.execPath}" "${scriptPath}" %*\r\n`, "utf8");
+    return cmdPath;
+  }
+
+  const opencodePath = path.join(binDir, "opencode");
+  fs.writeFileSync(opencodePath, [
+    "#!/bin/sh",
+    "if [ \"$1\" = \"plugin\" ]; then",
+    "  echo 'Plugin package ready'",
+    "  echo 'Detected server target'",
+    "  exit 0",
+    "fi",
+    "if [ \"$1\" = \"debug\" ]; then",
+    ...expectedPlugins.map((plugin) => `  echo '- ${plugin.replace(/'/g, "'\\''")}'`),
+    "  exit 0",
+    "fi",
+    "if [ \"$1\" = \"--print-logs\" ]; then",
+    "  echo 'Available: ChatGPT Pro/Plus, OAuth with Google (Gemini CLI)'",
+    "  exit 0",
+    "fi",
+    "exit 0",
+    "",
+  ].join("\n"), "utf8");
+  fs.chmodSync(opencodePath, 0o755);
+  return opencodePath;
+}
+
 test("runInstall previews setup without running the final check", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
@@ -99,7 +148,7 @@ test("runInstall keeps progress messages compact when OpenCode plugin commands a
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const projectRoot = path.join(root, "project");
-  const opencodePath = path.join(homeDir, ".opencode", "bin", "opencode");
+  const binDir = path.join(homeDir, ".opencode", "bin");
   const startupPluginPath = path.join(homeDir, ".config", "opencode", "plugins", "ogb-startup-sync.js");
   const expectedPlugins = [
     ...OGB_UX_SAFE_PLUGINS,
@@ -107,26 +156,8 @@ test("runInstall keeps progress messages compact when OpenCode plugin commands a
   ];
   const events: RitualProgressEvent[] = [];
   fs.mkdirSync(projectRoot, { recursive: true });
-  fs.mkdirSync(path.dirname(opencodePath), { recursive: true });
-  fs.writeFileSync(opencodePath, [
-    "#!/bin/sh",
-    "if [ \"$1\" = \"plugin\" ]; then",
-    "  echo 'Plugin package ready'",
-    "  echo 'Detected server target'",
-    "  exit 0",
-    "fi",
-    "if [ \"$1\" = \"debug\" ]; then",
-    ...expectedPlugins.map((plugin) => `  echo '- ${plugin.replace(/'/g, "'\\''")}'`),
-    "  exit 0",
-    "fi",
-    "if [ \"$1\" = \"--print-logs\" ]; then",
-    "  echo 'Available: ChatGPT Pro/Plus, OAuth with Google (Gemini CLI)'",
-    "  exit 0",
-    "fi",
-    "exit 0",
-    "",
-  ].join("\n"), "utf8");
-  fs.chmodSync(opencodePath, 0o755);
+  fs.mkdirSync(binDir, { recursive: true });
+  const opencodePath = writeFakeOpenCode(binDir, expectedPlugins);
 
   const report = runInstall({
     projectRoot,

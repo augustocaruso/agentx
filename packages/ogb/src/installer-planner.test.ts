@@ -4,8 +4,8 @@ import test from "node:test";
 import { buildInstallerPlan } from "./installer-planner.js";
 
 test("planner contract builds a Mac install plan without executing", () => {
-  const projectRoot = path.join("/tmp", "project");
-  const homeDir = path.join("/tmp", "home");
+  const projectRoot = path.posix.join("/tmp", "project");
+  const homeDir = path.posix.join("/tmp", "home");
   const plan = buildInstallerPlan({
     intent: "install",
     projectRoot,
@@ -54,7 +54,7 @@ test("planner contract builds a Windows install plan and exposes adapter details
 });
 
 test("planner contract detects home/global and normalizes quoted paths before comparison", () => {
-  const homeDir = path.join("/tmp", "ogb home");
+  const homeDir = path.posix.join("/tmp", "ogb home");
   const plan = buildInstallerPlan({
     intent: "reset",
     projectRoot: `'"${homeDir}"'`,
@@ -70,8 +70,8 @@ test("planner contract detects home/global and normalizes quoted paths before co
 });
 
 test("planner contract separates project mode from home/global mode", () => {
-  const homeDir = path.join("/tmp", "home");
-  const projectRoot = path.join(homeDir, "work", "project");
+  const homeDir = path.posix.join("/tmp", "home");
+  const projectRoot = path.posix.join(homeDir, "work", "project");
   const plan = buildInstallerPlan({
     intent: "check",
     projectRoot,
@@ -85,11 +85,12 @@ test("planner contract separates project mode from home/global mode", () => {
 });
 
 test("planner contract builds update and check delegation commands", () => {
-  const projectRoot = path.join("/tmp", "project");
+  const projectRoot = path.posix.join("/tmp", "project");
   const update = buildInstallerPlan({
     intent: "update",
     projectRoot,
     homeDir: "/tmp/home",
+    platform: "darwin",
     release: "v1.2.3",
     prefix: "/tmp/prefix",
   });
@@ -97,6 +98,7 @@ test("planner contract builds update and check delegation commands", () => {
     intent: "check",
     projectRoot,
     homeDir: "/tmp/home",
+    platform: "darwin",
     dryRun: true,
   });
 

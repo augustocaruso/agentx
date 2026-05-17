@@ -363,7 +363,7 @@ test("runAutoUpdate dry-run builds an update command without installing OpenCode
   assert.ok(report.selfUpdate);
   assert.equal(report.selfUpdate.plan.intent, "update");
   assert.match(report.selfUpdate.command.join(" "), /v0\.0\.39/);
-  assert.match(report.selfUpdate.command.join(" "), /no-(opencode|openCode)/i);
+  assert.match(report.selfUpdate.command.join(" "), /no-?opencode/i);
   assert.equal(report.selfUpdate.postUpdate?.status, "preview");
 });
 

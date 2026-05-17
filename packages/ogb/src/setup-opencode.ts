@@ -119,7 +119,12 @@ function splitCommandArgs(raw) {
       continue;
     }
     if (char === "\\") {
-      escaping = true;
+      const next = raw[index + 1];
+      if (next && (next === "\\" || next === quote || (!quote && (next === "\"" || next === "'" || /\s/.test(next))))) {
+        escaping = true;
+        continue;
+      }
+      current += char;
       continue;
     }
     if (quote) {

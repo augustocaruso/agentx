@@ -1247,7 +1247,7 @@ test("syncToOpenCode stores sensitive local MCP env literals and projects env re
     OPENAPI_MCP_HEADERS: `{"Authorization":"Bearer ${fakeNotionToken}","Notion-Version":"2022-06-28"}`,
   });
   const storeStat = fs.statSync(mcpEnvStorePath({ homeDir }));
-  assert.equal(storeStat.mode & 0o777, 0o600);
+  if (process.platform !== "win32") assert.equal(storeStat.mode & 0o777, 0o600);
 });
 
 test("syncToOpenCode repairs global OpenCode MCP entries written with Gemini shape", () => {

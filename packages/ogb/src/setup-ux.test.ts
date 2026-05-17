@@ -27,6 +27,10 @@ function readJson(filePath: string): any {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function pathEndsWith(filePath: string, relPath: string): boolean {
+  return filePath.replace(/\\/g, "/").endsWith(relPath);
+}
+
 function setupUx(options: SetupUxOptions = {}) {
   return rawSetupUx({ installTuiDependencies: false, ...options });
 }
@@ -71,9 +75,9 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   });
 
   assert.equal(report.writes.some((write) => write.path.endsWith("opencode.json") && write.status === "created"), true);
-  assert.equal(report.writes.some((write) => write.path.endsWith("agents/YOLO.md") && write.status === "created"), true);
-  assert.equal(report.writes.some((write) => write.path.endsWith("agents/YOLO-worker.md") && write.status === "created"), true);
-  assert.equal(report.writes.some((write) => write.path.endsWith(".opencode/ogb.config.jsonc") && write.status === "created"), true);
+  assert.equal(report.writes.some((write) => pathEndsWith(write.path, "agents/YOLO.md") && write.status === "created"), true);
+  assert.equal(report.writes.some((write) => pathEndsWith(write.path, "agents/YOLO-worker.md") && write.status === "created"), true);
+  assert.equal(report.writes.some((write) => pathEndsWith(write.path, ".opencode/ogb.config.jsonc") && write.status === "created"), true);
 
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.deepEqual(globalConfig.plugin, expectedGlobalPlugins(configDir));
@@ -225,12 +229,12 @@ test("setupUx writes runtime-expanded Windows ogb shim path for startup sync", (
   });
 
   const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
-  assert.equal(startupConfig.command, "{OGB_APPDATA}/npm/ogb.cmd");
+  assert.equal(startupConfig.command.replace(/\\/g, "/"), "{OGB_APPDATA}/npm/ogb.cmd");
   assert.deepEqual(startupConfig.baseArgs, ["--project", "{OGB_HOME}"]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
 });
 
-test("setupUx prefers the installed ogb command for POSIX startup sync", () => {
+test("setupUx prefers the installed ogb command for POSIX startup sync", { skip: process.platform === "win32" ? "POSIX command lookup is covered on POSIX runners" : false }, () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const configDir = path.join(root, "config", "opencode");
@@ -275,8 +279,8 @@ test("setupUx removes the retired global dev-server command and overwrites globa
   });
 
   assert.equal(fs.existsSync(path.join(configDir, "commands", "dev-server.md")), false);
-  assert.equal(report.writes.some((write) => write.path.endsWith("commands/dev-server.md") && write.status === "removed"), true);
-  assert.equal(report.writes.some((write) => write.path.endsWith("commands/dev-server.md") && Boolean(write.backup)), true);
+  assert.equal(report.writes.some((write) => pathEndsWith(write.path, "commands/dev-server.md") && write.status === "removed"), true);
+  assert.equal(report.writes.some((write) => pathEndsWith(write.path, "commands/dev-server.md") && Boolean(write.backup)), true);
   assert.equal(fs.readFileSync(path.join(configDir, "AGENTS.md"), "utf8"), GLOBAL_AGENTS_MD);
 });
 
@@ -519,7 +523,7 @@ test("setupUx treats an accidentally quoted home path as global-only", () => {
 
   assert.equal(report.ogbConfigPath, path.join(homeDir, ".config", "opencode-gemini-bridge", "ogb.config.jsonc"));
   assert.equal(report.projectRoot, path.resolve(homeDir));
-  assert.deepEqual(startupConfig.baseArgs, ["--project", path.resolve(homeDir)]);
+  assert.deepEqual(startupConfig.baseArgs, ["--project", process.platform === "win32" ? "{OGB_HOME}" : path.resolve(homeDir)]);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "ogb.config.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated")), false);
 });

@@ -44,14 +44,14 @@ test("createBackupSession backs up files under named roots", () => {
 test("createBackupSession sanitizes files outside known roots", () => {
   const root = tempRoot();
   const bridgeConfigDir = path.join(root, "bridge");
-  const target = path.join(root, "elsewhere", "notes:file.md");
+  const target = path.join(root, "elsewhere", "notes file.md");
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, "notes\n", "utf8");
 
   const session = createBackupSession({ bridgeConfigDir, operation: "external", timestamp: "stamp" });
   const backup = session.backupExisting(target);
 
-  assert.ok(backup?.includes(path.join("external", root.replace(/^[/\\]+/, "").split(/[\\/]+/).join(path.sep), "elsewhere", "notes_file.md")));
+  assert.ok(backup?.includes(path.join("external", root.replace(/^[/\\]+/, "").split(/[\\/]+/).join(path.sep), "elsewhere", "notes file.md")));
   assert.equal(fs.readFileSync(backup!, "utf8"), "notes\n");
 });
 

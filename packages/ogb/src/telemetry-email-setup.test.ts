@@ -122,7 +122,7 @@ test("CLI telemetry setup-email dry-run prepares local worker without printing s
     "--json",
   ], {
     cwd: process.cwd(),
-    env: { ...process.env, HOME: homeDir },
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
     encoding: "utf8",
   });
 
