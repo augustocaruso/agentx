@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.57 - Sintaxe PowerShell do reparo ReadOnly
+
+- Corrige a interpolacao PowerShell `${Operation}:` nos instaladores Windows para manter o parser do CI Windows/Linux limpo.
+- Esta e a versao de release publicada para substituir as tags `v0.1.53` a `v0.1.56`, que falharam antes de fechar todos os checks.
+
 ## 0.1.56 - Release Windows ReadOnly com CI separado
 
 - Mantem a regressao home-mode do bug Windows no job Windows e evita que o release pack Linux falhe tentando simular `path.win32` em POSIX.

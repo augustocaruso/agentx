@@ -204,7 +204,7 @@ function Repair-ReadOnlyDirectory($Dir, $Operation) {
   $Item = Get-Item -LiteralPath $Dir -Force
   if (($Item.Attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
     attrib -R $Dir
-    Write-Host "Cleared read-only attribute from OpenCode config directory during $Operation: $Dir"
+    Write-Host "Cleared read-only attribute from OpenCode config directory during ${Operation}: $Dir"
   }
 }
 
