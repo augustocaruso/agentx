@@ -15,6 +15,7 @@ import { recoverStaleStartupStatus } from "./startup-status.js";
 import { ensureGlobalTuiSidebar, TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar.js";
 import { OGB_VERSION } from "./types.js";
 import { UX_PROFILE_PRESET } from "./ux-profile.generated.js";
+import { clearWindowsReadOnlyDirectoryAttribute } from "./windows-attributes.js";
 
 export const OGB_UX_SAFE_PLUGINS = [...UX_PROFILE_PRESET.safePlugins];
 export const OGB_UX_DISABLED_PLUGINS = [...UX_PROFILE_PRESET.disabledPlugins];
@@ -722,6 +723,15 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const commands: SetupUxCommand[] = [];
   const notices: string[] = [];
   const warnings: string[] = [];
+  if (!options.dryRun) {
+    const repairedAttributes = clearWindowsReadOnlyDirectoryAttribute(root, {
+      cwd: homeDir,
+      env: adapter.env,
+      platform: adapter.platform,
+    });
+    if (repairedAttributes.status === "cleared") notices.push(repairedAttributes.message);
+    else if (repairedAttributes.status === "failed") warnings.push(repairedAttributes.message);
+  }
   const currentConfig = readJsonc(configPath);
   const legacyConfig = legacyConfigPath && adapter.resolvePath(legacyConfigPath) !== adapter.resolvePath(configPath)
     ? readJsonc(legacyConfigPath)

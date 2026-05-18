@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.53 - Check nao espera o OpenCode quebrado no Windows
+
+- Quando `opencode debug config` falha com `EEXIST: file already exists, mkdir ...\\.config\\opencode` e esse alvo ja e um diretorio valido, o OGB agora pula imediatamente o probe do OpenCode em vez de tentar um segundo probe com guard.
+- Fecha o caso real em que o segundo probe travava ate `spawnSync C:\\WINDOWS\\system32\\cmd.exe ETIMEDOUT`, mantendo `ogb validate/check/update` em `FAIL` apesar dos arquivos gerenciados ja estarem validados.
+- O bootstrap, instalador Windows, setup e validação agora limpam automaticamente o atributo Windows `ReadOnly` de `~\\.config\\opencode`, que fazia o Bun do OpenCode morrer com `EEXIST` mesmo quando a pasta ja existia corretamente.
+- Atualiza as regressoes para garantir que o guard nao seja invocado nesse caminho conhecido.
+
 ## 0.1.52 - Fallback real para EEXIST do OpenCode no Windows
 
 - Quando `opencode debug config` continua falhando com `EEXIST: file already exists, mkdir ...\\.config\\opencode` mesmo depois do guard com `OPENCODE_CONFIG_DIR` e `XDG_*`, o OGB agora pula apenas esse probe quebrado e usa a validação direta dos arquivos gerenciados.

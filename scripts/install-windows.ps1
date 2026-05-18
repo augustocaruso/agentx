@@ -197,6 +197,17 @@ function Repair-DirectoryBlocker($Dir, $Operation) {
   Write-Host "Repaired file blocking OpenCode config directory: $Dir (backup: $BackupPath)"
 }
 
+function Repair-ReadOnlyDirectory($Dir, $Operation) {
+  if (-not (Test-Path -LiteralPath $Dir -PathType Container)) {
+    return
+  }
+  $Item = Get-Item -LiteralPath $Dir -Force
+  if (($Item.Attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
+    attrib -R $Dir
+    Write-Host "Cleared read-only attribute from OpenCode config directory during $Operation: $Dir"
+  }
+}
+
 function Remove-UserPath($Dir) {
   if (-not $Dir) {
     return
@@ -391,6 +402,7 @@ if ((-not $Prefix) -or $Prefix.Trim().StartsWith("-")) {
 Repair-BrokenForceInstall
 Repair-BrokenOgbShims $Prefix
 Repair-DirectoryBlocker (Join-Path $HOME ".config\opencode") "windows-installer"
+Repair-ReadOnlyDirectory (Join-Path $HOME ".config\opencode") "windows-installer"
 
 New-Item -ItemType Directory -Force (Join-Path $HOME ".config\opencode") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $HOME ".agents\skills") | Out-Null

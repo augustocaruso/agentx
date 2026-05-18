@@ -96,7 +96,7 @@ process.exit(1);
   }
 });
 
-test("runValidation retries OpenCode debug config with a Windows mkdir guard when the config dir already exists", () => {
+test("runValidation skips OpenCode debug config when the Windows mkdir EEXIST target already exists", () => {
   const homeDir = tempHome();
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-validation-project-"));
   const binDir = path.join(homeDir, "bin");
@@ -113,13 +113,9 @@ if (args[0] === "--version") {
   process.exit(0);
 }
 if (args[0] === "debug" && args[1] === "config") {
-  if (!process.env.XDG_CONFIG_HOME || process.env.OPENCODE_CONFIG_DIR !== blockedDir) {
-    console.error("EEXIST: file already exists, mkdir '" + displayDir + "'");
-    console.error('path: "' + displayDir.replace(/\\\\/g, "\\\\\\\\") + '", syscall: "mkdir", errno: -17, code: "EEXIST"');
-    process.exit(2);
-  }
-  console.log(JSON.stringify({ agent: {}, command: {} }));
-  process.exit(0);
+  console.error("EEXIST: file already exists, mkdir '" + displayDir + "'");
+  console.error('path: "' + displayDir.replace(/\\\\/g, "\\\\\\\\") + '", syscall: "mkdir", errno: -17, code: "EEXIST"');
+  process.exit(2);
 }
 console.error("unexpected opencode args: " + args.join(" "));
 process.exit(1);
@@ -135,11 +131,10 @@ process.exit(1);
   process.env.OGB_FAKE_DISPLAY_OPENCODE_DIR = "C:\\Users\\leo\\.config\\opencode";
   try {
     const report = runValidation({ projectRoot, homeDir, silent: true });
-    const guardCheck = report.checks.find((check) => check.name === "OpenCode debug config mkdir guard");
+    const skipCheck = report.checks.find((check) => check.name === "OpenCode resolved config" && check.status === "skip");
     const debugFailure = report.checks.find((check) => check.name === "OpenCode resolved config" && check.status === "fail");
 
-    assert.equal(guardCheck?.status, "pass");
-    assert.match(guardCheck?.message ?? "", /OPENCODE_CONFIG_DIR/);
+    assert.match(skipCheck?.message ?? "", /Windows Bun mkdir EEXIST/);
     assert.equal(debugFailure, undefined);
   } finally {
     process.env.PATH = originalPath;
@@ -150,11 +145,12 @@ process.exit(1);
   }
 });
 
-test("runValidation does not fail when OpenCode keeps hitting the Windows mkdir EEXIST bug after the guard", () => {
+test("runValidation skips the OpenCode debug probe immediately for the Windows mkdir EEXIST bug in home mode", () => {
   const homeDir = tempHome();
   const binDir = path.join(homeDir, "bin");
   const fakeOpencode = path.join(binDir, "fake-opencode.cjs");
   const configDir = path.join(homeDir, ".config", "opencode");
+  const guardInvokedPath = path.join(homeDir, "guard-invoked");
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
   fs.mkdirSync(extensionDir, { recursive: true });
   fs.writeFileSync(path.join(extensionDir, "GEMINI.md"), "Global extension rules\n", "utf8");
@@ -173,13 +169,20 @@ test("runValidation does not fail when OpenCode keeps hitting the Windows mkdir 
   fs.mkdirSync(configDir, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
   fs.writeFileSync(fakeOpencode, `
+const fs = require("node:fs");
 const args = process.argv.slice(2);
 const displayDir = process.env.OGB_FAKE_DISPLAY_OPENCODE_DIR || "C:\\\\Users\\\\leo\\\\.config\\\\opencode";
+const guardInvokedPath = process.env.OGB_FAKE_GUARD_INVOKED;
 if (args[0] === "--version") {
   console.log("opencode fake");
   process.exit(0);
 }
 if (args[0] === "debug" && args[1] === "config") {
+  if (process.env.XDG_CONFIG_HOME || process.env.OPENCODE_CONFIG_DIR) {
+    fs.writeFileSync(guardInvokedPath, "guard invoked\\n", "utf8");
+    console.error("spawnSync C:\\\\WINDOWS\\\\system32\\\\cmd.exe ETIMEDOUT");
+    process.exit(1);
+  }
   console.error("EEXIST: file already exists, mkdir '" + displayDir + "'");
   console.error('path: "' + displayDir.replace(/\\\\/g, "\\\\\\\\") + '", syscall: "mkdir", errno: -17, code: "EEXIST"');
   console.error("Bun v1.3.13 (Windows x64 baseline)");
@@ -193,8 +196,10 @@ process.exit(1);
 
   const originalPath = process.env.PATH;
   const originalDisplay = process.env.OGB_FAKE_DISPLAY_OPENCODE_DIR;
+  const originalGuardInvoked = process.env.OGB_FAKE_GUARD_INVOKED;
   process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ""}`;
   process.env.OGB_FAKE_DISPLAY_OPENCODE_DIR = "C:\\Users\\leo\\.config\\opencode";
+  process.env.OGB_FAKE_GUARD_INVOKED = guardInvokedPath;
   try {
     const report = runValidation({ projectRoot: homeDir, homeDir, silent: true });
     const fallbackCheck = report.checks.find((check) => check.name === "OpenCode resolved config");
@@ -204,10 +209,13 @@ process.exit(1);
     assert.equal(fallbackCheck?.status, "skip");
     assert.match(fallbackCheck?.message ?? "", /Windows Bun mkdir EEXIST/);
     assert.equal(debugFailure, undefined);
+    assert.equal(fs.existsSync(guardInvokedPath), false);
   } finally {
     process.env.PATH = originalPath;
     if (originalDisplay === undefined) delete process.env.OGB_FAKE_DISPLAY_OPENCODE_DIR;
     else process.env.OGB_FAKE_DISPLAY_OPENCODE_DIR = originalDisplay;
+    if (originalGuardInvoked === undefined) delete process.env.OGB_FAKE_GUARD_INVOKED;
+    else process.env.OGB_FAKE_GUARD_INVOKED = originalGuardInvoked;
   }
 });
 

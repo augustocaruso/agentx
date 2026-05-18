@@ -14,6 +14,7 @@ import { resolveProjectPaths } from "./paths.js";
 import { isLegacyGlobalStartupPluginSpec } from "./setup-ux.js";
 import { writeStateRecord } from "./state-store.js";
 import { OGB_VERSION } from "./types.js";
+import { clearWindowsReadOnlyDirectoryAttribute } from "./windows-attributes.js";
 
 export interface ValidationOptions {
   projectRoot?: string;
@@ -118,7 +119,26 @@ function existingDirectory(targetPath: string): boolean {
 }
 
 function repairGlobalOpenCodeConfigDir(paths: ReturnType<typeof resolveProjectPaths>, checks: ValidationCheck[]): void {
-  repairDirectoryBlocker(globalOpenCodeConfigDir({ homeDir: paths.homeDir }), paths, checks, "Global OpenCode config directory");
+  const configDir = globalOpenCodeConfigDir({ homeDir: paths.homeDir });
+  const repairedBlocker = repairDirectoryBlocker(configDir, paths, checks, "Global OpenCode config directory");
+  if (repairedBlocker) return;
+
+  const repairedAttributes = clearWindowsReadOnlyDirectoryAttribute(configDir, { cwd: paths.homeDir });
+  if (repairedAttributes.status === "cleared") {
+    checks.push({
+      name: "Global OpenCode config directory attributes",
+      status: "pass",
+      message: repairedAttributes.message,
+      details: { path: configDir },
+    });
+  } else if (repairedAttributes.status === "failed") {
+    checks.push({
+      name: "Global OpenCode config directory attributes",
+      status: "warn",
+      message: repairedAttributes.message,
+      details: { path: configDir, output: repairedAttributes.output },
+    });
+  }
 }
 
 function isInsideOrEqual(root: string, candidate: string): boolean {
@@ -160,17 +180,6 @@ function openCodeConfigDirFromMkdirError(result: NativeCommandResult, homeDir: s
     const normalized = candidate.replace(/\\/g, "/").replace(/\/+$/, "");
     return normalized.endsWith("/.config/opencode") && isInsideOrEqual(homeDir, candidate);
   });
-}
-
-function openCodeDebugConfigMkdirGuardEnv(configDir: string): Record<string, string> {
-  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-opencode-debug-"));
-  return {
-    OPENCODE_CONFIG_DIR: configDir,
-    XDG_CONFIG_HOME: path.join(runtimeRoot, "config"),
-    XDG_DATA_HOME: path.join(runtimeRoot, "data"),
-    XDG_CACHE_HOME: path.join(runtimeRoot, "cache"),
-    XDG_STATE_HOME: path.join(runtimeRoot, "state"),
-  };
 }
 
 function resolveConfigPathReference(configPath: string, reference: string, homeDir: string): string {
@@ -327,46 +336,16 @@ function validateOpenCodeDebugConfig(paths: ReturnType<typeof resolveProjectPath
     if (blockedConfigDir && repairDirectoryBlocker(blockedConfigDir, paths, checks, "OpenCode config directory from debug error")) {
       result = run(opencode, ["debug", "config"], projectRoot, 45000, { OGB_STARTUP_SYNC: "0" });
     } else if (blockedConfigDir && existingDirectory(blockedConfigDir)) {
-      const guardEnv = openCodeDebugConfigMkdirGuardEnv(blockedConfigDir);
-      const guarded = run(opencode, ["debug", "config"], projectRoot, 45000, {
-        OGB_STARTUP_SYNC: "0",
-        ...guardEnv,
+      checks.push({
+        name: "OpenCode resolved config",
+        status: "skip",
+        message: "Skipped opencode debug config after the known Windows Bun mkdir EEXIST bug; OGB already validated the managed OpenCode files directly.",
+        details: {
+          configDir: blockedConfigDir,
+          originalError: nativeResultText(result),
+        },
       });
-      if (!guarded.error && guarded.status === 0) {
-        checks.push({
-          name: "OpenCode debug config mkdir guard",
-          status: "pass",
-          message: `OpenCode debug config succeeded with OPENCODE_CONFIG_DIR=${blockedConfigDir}.`,
-          details: {
-            configDir: blockedConfigDir,
-            xdgConfigHome: guardEnv.XDG_CONFIG_HOME,
-          },
-        });
-        result = guarded;
-      } else if (openCodeMkdirErrorMentionsGlobalConfig(guarded)) {
-        checks.push({
-          name: "OpenCode resolved config",
-          status: "skip",
-          message: "Skipped opencode debug config after the known Windows Bun mkdir EEXIST bug; OGB already validated the managed OpenCode files directly.",
-          details: {
-            configDir: blockedConfigDir,
-            xdgConfigHome: guardEnv.XDG_CONFIG_HOME,
-            originalError: nativeResultText(result),
-            guardedError: nativeResultText(guarded),
-          },
-        });
-        return;
-      } else {
-        checks.push({
-          name: "OpenCode debug config mkdir guard",
-          status: "warn",
-          message: `OpenCode still failed after OPENCODE_CONFIG_DIR mkdir guard: ${guarded.error ?? (guarded.stderr || "opencode debug config failed").trim()}`,
-          details: {
-            configDir: blockedConfigDir,
-            xdgConfigHome: guardEnv.XDG_CONFIG_HOME,
-          },
-        });
-      }
+      return;
     }
   }
   if (result.error || result.status !== 0) {
@@ -521,6 +500,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["bootstrap-windows.ps1 installer", scripts.windowsBootstrap, "install-windows.ps1"],
     ["bootstrap-windows.ps1 path arg normalization", scripts.windowsBootstrap, "Normalize-PathArgument"],
     ["bootstrap-windows.ps1 repairs blocked OpenCode config dir", scripts.windowsBootstrap, "Repair-DirectoryBlocker (Join-Path $HOME \".config\\opencode\") \"bootstrap\""],
+    ["bootstrap-windows.ps1 clears read-only OpenCode config dir", scripts.windowsBootstrap, "Repair-ReadOnlyDirectory (Join-Path $HOME \".config\\opencode\") \"bootstrap\""],
     ["install-posix.sh repairs blocked OpenCode config dir", scripts.posixInstaller, "repair_directory_blocker \"$HOME/.config/opencode\" \"posix-installer\""],
     ["install-posix.sh delegates install", scripts.posixInstaller, "install --rulesync"],
     ["install-posix.sh ritual message", scripts.posixInstaller, "Running OGB install ritual"],
@@ -550,6 +530,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["uninstall-linux.sh shared POSIX uninstaller", scripts.linuxUninstaller, "uninstall-posix.sh"],
     ["install-windows.ps1 path arg normalization", scripts.windowsInstaller, "Normalize-PathArgument"],
     ["install-windows.ps1 repairs blocked OpenCode config dir", scripts.windowsInstaller, "Repair-DirectoryBlocker (Join-Path $HOME \".config\\opencode\") \"windows-installer\""],
+    ["install-windows.ps1 clears read-only OpenCode config dir", scripts.windowsInstaller, "Repair-ReadOnlyDirectory (Join-Path $HOME \".config\\opencode\") \"windows-installer\""],
     ["install-windows.ps1 delegates install", scripts.windowsInstaller, "\"install\", \"--rulesync\""],
     ["install-windows.ps1 ritual message", scripts.windowsInstaller, "Running OGB install ritual"],
     ["install-windows.ps1 no ux flag", scripts.windowsInstaller, "--no-ux"],
@@ -587,7 +568,9 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "Resolve-NpmCommand",
     "$PSNativeCommandUseErrorActionPreference = $false",
     "Repair-DirectoryBlocker",
+    "Repair-ReadOnlyDirectory",
     "Repaired file blocking OpenCode config directory",
+    "Cleared read-only attribute from OpenCode config directory",
     "Invoke-NativeCommand",
     "$ErrorActionPreference = \"Continue\"",
     "2>&1",

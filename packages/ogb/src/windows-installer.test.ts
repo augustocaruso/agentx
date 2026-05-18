@@ -23,9 +23,12 @@ test("Windows bootstrap repairs a file blocking the OpenCode config dir before i
   const text = scriptText("bootstrap-windows.ps1");
 
   assert.match(text, /function Repair-DirectoryBlocker/);
+  assert.match(text, /function Repair-ReadOnlyDirectory/);
   assert.match(text, /Move-Item -LiteralPath \$Dir -Destination \$BackupPath -Force/);
   assert.match(text, /Repair-DirectoryBlocker \(Join-Path \$HOME "\.config\\opencode"\) "bootstrap"/);
+  assert.match(text, /Repair-ReadOnlyDirectory \(Join-Path \$HOME "\.config\\opencode"\) "bootstrap"/);
   assert.ok(text.indexOf('Repair-DirectoryBlocker (Join-Path $HOME ".config\\opencode") "bootstrap"') < text.indexOf("Invoke-WebRequest -Uri $ReleaseUrl"));
+  assert.ok(text.indexOf('Repair-ReadOnlyDirectory (Join-Path $HOME ".config\\opencode") "bootstrap"') < text.indexOf("Invoke-WebRequest -Uri $ReleaseUrl"));
 });
 
 test("Windows installer normalizes quoted project path before GetFullPath", () => {
@@ -41,10 +44,16 @@ test("Windows installer repairs a file blocking the OpenCode config dir before m
   const text = scriptText("install-windows.ps1");
 
   assert.match(text, /function Repair-DirectoryBlocker/);
+  assert.match(text, /function Repair-ReadOnlyDirectory/);
   assert.match(text, /Move-Item -LiteralPath \$Dir -Destination \$BackupPath -Force/);
   assert.match(text, /Repair-DirectoryBlocker \(Join-Path \$HOME "\.config\\opencode"\) "windows-installer"/);
+  assert.match(text, /Repair-ReadOnlyDirectory \(Join-Path \$HOME "\.config\\opencode"\) "windows-installer"/);
   assert.ok(
     text.indexOf('Repair-DirectoryBlocker (Join-Path $HOME ".config\\opencode") "windows-installer"')
+    < text.indexOf('New-Item -ItemType Directory -Force (Join-Path $HOME ".config\\opencode")'),
+  );
+  assert.ok(
+    text.indexOf('Repair-ReadOnlyDirectory (Join-Path $HOME ".config\\opencode") "windows-installer"')
     < text.indexOf('New-Item -ItemType Directory -Force (Join-Path $HOME ".config\\opencode")'),
   );
 });

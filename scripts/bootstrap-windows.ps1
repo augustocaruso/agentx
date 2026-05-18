@@ -55,9 +55,21 @@ function Repair-DirectoryBlocker($Dir, $Operation) {
   Write-Host "Repaired file blocking OpenCode config directory: $Dir (backup: $BackupPath)"
 }
 
+function Repair-ReadOnlyDirectory($Dir, $Operation) {
+  if (-not (Test-Path -LiteralPath $Dir -PathType Container)) {
+    return
+  }
+  $Item = Get-Item -LiteralPath $Dir -Force
+  if (($Item.Attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
+    attrib -R $Dir
+    Write-Host "Cleared read-only attribute from OpenCode config directory during $Operation: $Dir"
+  }
+}
+
 $Project = Normalize-PathArgument $Project
 $Prefix = Normalize-PathArgument $Prefix
 Repair-DirectoryBlocker (Join-Path $HOME ".config\opencode") "bootstrap"
+Repair-ReadOnlyDirectory (Join-Path $HOME ".config\opencode") "bootstrap"
 
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ogb-bootstrap-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $TempDir | Out-Null
