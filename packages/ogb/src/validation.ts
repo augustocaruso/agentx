@@ -564,6 +564,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
   const text = fs.readFileSync(scriptPath, "utf8");
   const required = [
     "Require-Command \"node\"",
+    "$script:NodeCommand = Require-Node22",
     "Require-Command \"npm\"",
     "Resolve-NpmCommand",
     "$PSNativeCommandUseErrorActionPreference = $false",
@@ -592,6 +593,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "%USERPROFILE%\\.ai\\opencode-pack\\opencode-gemini-bridge-cli\\dist\\cli.js",
     "ogb.cmd",
     "\"install\", \"--rulesync\"",
+    "& $script:NodeCommand $CliTarget @InstallArgs",
     "--no-ux",
     "--no-install-opencode",
     "--no-check",

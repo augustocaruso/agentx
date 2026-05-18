@@ -119,8 +119,11 @@ test("installers fail early when Node is older than 22", () => {
 test("windows installer contract delegates the ritual to ogb install", () => {
   const text = script("install-windows.ps1");
 
+  assert.match(text, /\$script:NodeCommand = Require-Node22/);
   assert.match(text, /\$InstallArgs = @\("--project", \$Project, "install", "--rulesync", \$Rulesync, "--windows"\)/);
   assert.match(text, /Running OGB install ritual/);
+  assert.match(text, /& \$script:NodeCommand \$CliTarget @InstallArgs/);
+  assert.doesNotMatch(text, /& \$OgbBin @InstallArgs/);
   assert.match(text, /%USERPROFILE%\\\.ai\\opencode-pack\\opencode-gemini-bridge-cli\\dist\\cli\.js/);
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);

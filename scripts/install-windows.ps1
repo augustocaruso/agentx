@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
+$script:NodeCommand = $null
 $script:NpmCommand = $null
 
 function Require-Command($Name) {
@@ -377,7 +378,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 $CliDir = Join-Path (Join-Path $RepoRoot "packages") "ogb"
 
-Require-Node22 | Out-Null
+$script:NodeCommand = Require-Node22
 Require-Command "npm" | Out-Null
 $script:NpmCommand = Resolve-NpmCommand
 
@@ -468,7 +469,7 @@ if ($NoSetup -and (-not $RunHomeSync)) {
 }
 
 Write-Host "Running OGB install ritual for $Project..."
-& $OgbBin @InstallArgs
+& $script:NodeCommand $CliTarget @InstallArgs
 $InstallStatus = $LASTEXITCODE
 if ($InstallStatus -eq 1) {
   Write-Host "OGB install completed with warnings; continuing bootstrap."
