@@ -145,7 +145,7 @@ process.exit(1);
   }
 });
 
-test("runValidation skips the OpenCode debug probe immediately for the Windows mkdir EEXIST bug in home mode", () => {
+test("runValidation skips the OpenCode debug probe immediately for the Windows mkdir EEXIST bug in home mode", { skip: process.platform !== "win32" }, () => {
   const homeDir = tempHome();
   const binDir = path.join(homeDir, "bin");
   const fakeOpencode = path.join(binDir, "fake-opencode.cjs");

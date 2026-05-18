@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.56 - Release Windows ReadOnly com CI separado
+
+- Mantem a regressao home-mode do bug Windows no job Windows e evita que o release pack Linux falhe tentando simular `path.win32` em POSIX.
+- Esta e a versao de release publicada para substituir as tags `v0.1.53`, `v0.1.54` e `v0.1.55`, que falharam antes de gerar artefatos.
+
 ## 0.1.55 - Release do reparo Windows ReadOnly
 
 - Publica o reparo do `EEXIST`/`ReadOnly` com a regressao home-mode ajustada para CI Linux, macOS e Windows.
