@@ -74,6 +74,29 @@ test("cleanupHomeProjectArtifacts removes nested global OpenCode config left by 
   assert.equal(fs.existsSync(path.join(report.backupDir!, ".config", "opencode", "opencode", "opencode.json")), true);
 });
 
+test("cleanupHomeProjectArtifacts removes old home .opencode symlink directories without deleting their target", (t) => {
+  const homeDir = tempHome();
+  const globalAgents = path.join(homeDir, ".config", "opencode", "agents");
+  const legacyAgents = path.join(homeDir, ".opencode", "agents");
+  writeFile(path.join(globalAgents, "YOLO.md"), "global agent\n");
+  fs.mkdirSync(path.dirname(legacyAgents), { recursive: true });
+  try {
+    fs.symlinkSync(globalAgents, legacyAgents, "dir");
+  } catch (error) {
+    t.skip(`symlink creation is not available in this test environment: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  const report = cleanupHomeProjectArtifacts({ homeDir });
+  const action = report.actions.find((item) => item.relPath === ".opencode/agents");
+
+  assert.equal(action?.status, "removed");
+  assert.equal(fs.existsSync(legacyAgents), false);
+  assert.equal(fs.existsSync(path.join(globalAgents, "YOLO.md")), true);
+  assert.ok(action?.backup?.endsWith(".symlink.txt"));
+  assert.equal(fs.readFileSync(action.backup, "utf8").trim(), globalAgents);
+});
+
 test("cleanupHomeProjectArtifacts dry-run leaves files in place", () => {
   const homeDir = tempHome();
   writeFile(path.join(homeDir, "opencode.jsonc"), JSON.stringify({

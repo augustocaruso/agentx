@@ -102,6 +102,42 @@ function readJsonc(filePath: string): any {
   }
 }
 
+function lstatIfExists(filePath: string): fs.Stats | undefined {
+  try {
+    return fs.lstatSync(filePath);
+  } catch {
+    return undefined;
+  }
+}
+
+function backupSymlinkTarget(options: {
+  backupSession: ReturnType<typeof createBackupSession>;
+  filePath: string;
+  homeDir: string;
+  dryRun?: boolean;
+}): string | undefined {
+  let target: string;
+  try {
+    target = fs.readlinkSync(options.filePath);
+  } catch {
+    return undefined;
+  }
+
+  const backup = `${options.backupSession.plannedPath(options.filePath)}.symlink.txt`;
+  options.backupSession.backups.push({
+    operation: options.backupSession.operation,
+    source: options.filePath,
+    backup,
+    relPath: normalizeRelPath(path.relative(options.homeDir, options.filePath)),
+    dryRun: Boolean(options.dryRun),
+  });
+  if (!options.dryRun) {
+    fs.mkdirSync(path.dirname(backup), { recursive: true });
+    fs.writeFileSync(backup, `${target}\n`, "utf8");
+  }
+  return backup;
+}
+
 function homeProjectConfigLooksManaged(filePath: string): boolean {
   const parsed = readJsonc(filePath);
   if (!parsed || typeof parsed !== "object") return false;
@@ -175,10 +211,12 @@ function collectCandidates(homeDir: string, warnings: string[]): Candidate[] {
 
 function pruneIfEmpty(dir: string): void {
   try {
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return;
+    const stat = lstatIfExists(dir);
+    if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) return;
     for (const entry of fs.readdirSync(dir)) {
       const child = path.join(dir, entry);
-      if (fs.statSync(child).isDirectory()) pruneIfEmpty(child);
+      const childStat = lstatIfExists(child);
+      if (childStat?.isDirectory() && !childStat.isSymbolicLink()) pruneIfEmpty(child);
     }
 
     const entries = fs.readdirSync(dir);
@@ -224,16 +262,21 @@ export function cleanupHomeProjectArtifacts(options: HomeCleanupOptions = {}): H
 
   for (const candidate of candidates) {
     const filePath = path.join(homeDir, ...candidate.relPath.split("/"));
-    if (!fs.existsSync(filePath)) continue;
+    const stat = lstatIfExists(filePath);
+    if (!stat) continue;
     if (options.dryRun) {
-      const backup = backupSession.backupExisting(filePath);
+      const backup = stat.isSymbolicLink()
+        ? backupSymlinkTarget({ backupSession, filePath, homeDir, dryRun: true })
+        : backupSession.backupExisting(filePath);
       actions.push({ path: filePath, relPath: candidate.relPath, status: "preview", backup, reason: candidate.reason });
       continue;
     }
 
     try {
-      const backup = backupSession.backupExisting(filePath);
-      fs.rmSync(filePath, { recursive: true, force: true });
+      const backup = stat.isSymbolicLink()
+        ? backupSymlinkTarget({ backupSession, filePath, homeDir })
+        : backupSession.backupExisting(filePath);
+      fs.rmSync(filePath, stat.isSymbolicLink() ? { force: true } : { recursive: true, force: true });
       usedBackup = usedBackup || Boolean(backup);
       actions.push({ path: filePath, relPath: candidate.relPath, status: "removed", backup, reason: candidate.reason });
     } catch (error) {

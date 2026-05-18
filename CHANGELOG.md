@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.62 - Cleanup real de symlinks antigos na home
+
+- Corrige o cleanup de home-mode para usar `lstat` e remover symlinks antigos em `~/.opencode/agents` e `~/.opencode/skills` mesmo quando o `stat` do Windows falha com `UNKNOWN`.
+- Remove apenas o link antigo, preservando o alvo global em `~/.config/opencode`, e grava o alvo do symlink em backup `.symlink.txt`.
+- Adiciona regressao cobrindo symlink de `.opencode/agents` apontando para a arvore global.
+
 ## 0.1.61 - Limpeza de agentes Antigravity vazados no OpenCode
 
 - Remove automaticamente copias nativas do Antigravity que versoes anteriores podiam deixar em `~/.config/opencode/agents` quando `~/.gemini/antigravity/agents` era um symlink para o OpenCode.
