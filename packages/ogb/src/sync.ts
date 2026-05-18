@@ -186,16 +186,16 @@ function safeSkillTargetName(name: string, used: Set<string>, extensionName: str
 
 function listGeminiExtensionSkillDirs(homeDir: string): Array<{ extensionName: string; skillName: string; sourceDir: string }> {
   const extensionsRoot = path.join(homeDir, ".gemini", "extensions");
-  if (!fs.existsSync(extensionsRoot)) return [];
+  if (!dirExists(extensionsRoot)) return [];
 
   const out: Array<{ extensionName: string; skillName: string; sourceDir: string }> = [];
   for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
     const skillsRoot = path.join(extensionsRoot, extensionName, "skills");
-    if (!fs.existsSync(skillsRoot)) continue;
+    if (!dirExists(skillsRoot)) continue;
     for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       if (!entry.isDirectory()) continue;
       const sourceDir = path.join(skillsRoot, entry.name);
-      if (!fs.existsSync(path.join(sourceDir, "SKILL.md"))) continue;
+      if (!fileExists(path.join(sourceDir, "SKILL.md"))) continue;
       out.push({ extensionName, skillName: entry.name, sourceDir });
     }
   }
@@ -304,6 +304,14 @@ function dirExists(dirPath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function projectionFailureWarning(label: string, source: string, error: unknown): string {
+  return `${label} projection failed: ${source}: ${errorMessage(error)}`;
 }
 
 function globalGeminiContextInputs(homeDir: string): string[] {
@@ -1258,37 +1266,41 @@ function projectGlobalGeminiCommands(options: {
     .sort();
 
   for (const sourcePath of files) {
-    const relPath = uniqueGlobalCommandRelPath(commandRelFromSource(commandsRoot, sourcePath), usedCommandRelPaths);
-    keepPaths.add(globalOpenCodeRelPath(relPath));
     const sourceRelPath = toPosix(path.relative(commandsRoot, sourcePath));
-    const fallbackDescription = `Gemini global command: ${sourceRelPath}`;
-    const text = fs.readFileSync(sourcePath, "utf8");
-    const parsed = sourcePath.endsWith(".toml")
-      ? parseGeminiCommandToml(text)
-      : { ...parseMarkdownCommand(text, fallbackDescription), warnings: [] };
-    const description = parsed.description ?? fallbackDescription;
-    for (const warning of parsed.warnings) warnings.push(`Command parse warning: ${sourceRelPath}: ${warning}`);
+    try {
+      const relPath = uniqueGlobalCommandRelPath(commandRelFromSource(commandsRoot, sourcePath), usedCommandRelPaths);
+      keepPaths.add(globalOpenCodeRelPath(relPath));
+      const fallbackDescription = `Gemini global command: ${sourceRelPath}`;
+      const text = fs.readFileSync(sourcePath, "utf8");
+      const parsed = sourcePath.endsWith(".toml")
+        ? parseGeminiCommandToml(text)
+        : { ...parseMarkdownCommand(text, fallbackDescription), warnings: [] };
+      const description = parsed.description ?? fallbackDescription;
+      for (const warning of parsed.warnings) warnings.push(`Command parse warning: ${sourceRelPath}: ${warning}`);
 
-    const write = writeManagedGlobalText({
-      state: options.state,
-      globalRoot: options.globalRoot,
-      relPath,
-      content: globalCommandMarkdown({
-        description,
-        prompt: parsed.prompt,
-        sourcePath,
-        sourceRelPath,
-        marker: GLOBAL_COMMAND_MARKER,
-      }),
-      label: "Global command",
-      kind: "command",
-      origin: sourcePath,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (write.promoted) promoted.push(write.promoted);
-    if (write.warning) warnings.push(write.warning);
+      const write = writeManagedGlobalText({
+        state: options.state,
+        globalRoot: options.globalRoot,
+        relPath,
+        content: globalCommandMarkdown({
+          description,
+          prompt: parsed.prompt,
+          sourcePath,
+          sourceRelPath,
+          marker: GLOBAL_COMMAND_MARKER,
+        }),
+        label: "Global command",
+        kind: "command",
+        origin: sourcePath,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(write.promoted);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Global command", sourceRelPath, error));
+    }
   }
 
   return { promoted, warnings, keepPaths };
@@ -1321,45 +1333,58 @@ function projectGlobalGeminiExtensionCommands(options: {
       .sort();
 
     for (const sourcePath of files) {
+      const sourceRelPath = toPosix(path.relative(extensionDir, sourcePath));
       const naturalRelPath = commandRelFromSource(commandsRoot, sourcePath);
       const relPath = uniqueGlobalCommandRelPath(naturalRelPath, usedCommandRelPaths, extensionName);
       keepPaths.add(globalOpenCodeRelPath(relPath));
-      const sourceRelPath = toPosix(path.relative(extensionDir, sourcePath));
-      const parsed = parseGeminiCommandToml(fs.readFileSync(sourcePath, "utf8"));
-      const description = parsed.description ?? `Gemini extension command from ${extensionName}`;
-      for (const warning of parsed.warnings) warnings.push(`Extension command parse warning: ${extensionName}/${sourceRelPath}: ${warning}`);
+      try {
+        const parsed = parseGeminiCommandToml(fs.readFileSync(sourcePath, "utf8"));
+        const description = parsed.description ?? `Gemini extension command from ${extensionName}`;
+        for (const warning of parsed.warnings) warnings.push(`Extension command parse warning: ${extensionName}/${sourceRelPath}: ${warning}`);
 
-      const write = writeManagedGlobalText({
-        state: options.state,
-        globalRoot: options.globalRoot,
-        relPath,
-        content: globalCommandMarkdown({
-          description,
-          prompt: parsed.prompt,
-          sourcePath,
-          sourceRelPath,
-          marker: GLOBAL_EXTENSION_COMMAND_MARKER,
+        const write = writeManagedGlobalText({
+          state: options.state,
+          globalRoot: options.globalRoot,
+          relPath,
+          content: globalCommandMarkdown({
+            description,
+            prompt: parsed.prompt,
+            sourcePath,
+            sourceRelPath,
+            marker: GLOBAL_EXTENSION_COMMAND_MARKER,
+            extensionName,
+            extensionDir,
+          }),
+          label: "Global extension command",
+          kind: "command",
+          origin: sourcePath,
+          backupSession: options.backupSession,
+          dryRun: options.dryRun,
+          force: options.force,
+        });
+        if (write.promoted) promoted.push(write.promoted);
+        if (write.warning) warnings.push(write.warning);
+        mapCommands.push({
           extensionName,
-          extensionDir,
-        }),
-        label: "Global extension command",
-        kind: "command",
-        origin: sourcePath,
-        backupSession: options.backupSession,
-        dryRun: options.dryRun,
-        force: options.force,
-      });
-      if (write.promoted) promoted.push(write.promoted);
-      if (write.warning) warnings.push(write.warning);
-      mapCommands.push({
-        extensionName,
-        name: globalCommandNameFromRelPath(relPath),
-        source: sourceRelPath,
-        target: write.promoted ?? globalOpenCodeRelPath(relPath),
-        description,
-        status: write.warning ? "conflict" : parsed.warnings.length > 0 ? "parse_warning" : "projected",
-        message: write.warning ?? (parsed.warnings.length > 0 ? parsed.warnings.join("; ") : undefined),
-      });
+          name: globalCommandNameFromRelPath(relPath),
+          source: sourceRelPath,
+          target: write.promoted ?? globalOpenCodeRelPath(relPath),
+          description,
+          status: write.warning ? "conflict" : parsed.warnings.length > 0 ? "parse_warning" : "projected",
+          message: write.warning ?? (parsed.warnings.length > 0 ? parsed.warnings.join("; ") : undefined),
+        });
+      } catch (error) {
+        const message = projectionFailureWarning("Global extension command", `${extensionName}/${sourceRelPath}`, error);
+        warnings.push(message);
+        mapCommands.push({
+          extensionName,
+          name: globalCommandNameFromRelPath(relPath),
+          source: sourceRelPath,
+          target: globalOpenCodeRelPath(relPath),
+          status: "conflict",
+          message,
+        });
+      }
     }
   }
 
@@ -1385,33 +1410,37 @@ function projectGlobalGeminiAgents(options: {
     .sort();
 
   for (const sourcePath of files) {
-    const relPath = uniqueGlobalAgentRelPath(agentRelFromSource(agentsRoot, sourcePath), usedAgentRelPaths);
-    keepPaths.add(globalOpenCodeRelPath(relPath));
     const sourceRelPath = toPosix(path.relative(agentsRoot, sourcePath));
-    const parsed = parseMarkdownAgent(fs.readFileSync(sourcePath, "utf8"), `Gemini global agent: ${sourceRelPath}`);
-    const write = writeManagedGlobalText({
-      state: options.state,
-      globalRoot: options.globalRoot,
-      relPath,
-      content: globalAgentMarkdown({
-        description: parsed.description,
-        body: parsed.body,
-        sourcePath,
-        sourceRelPath,
-        marker: GLOBAL_AGENT_MARKER,
-        model: parsed.model,
-        temperature: parsed.temperature,
-        maxSteps: parsed.maxSteps,
-      }),
-      label: "Global agent",
-      kind: "agent",
-      origin: sourcePath,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (write.promoted) promoted.push(write.promoted);
-    if (write.warning) warnings.push(write.warning);
+    try {
+      const relPath = uniqueGlobalAgentRelPath(agentRelFromSource(agentsRoot, sourcePath), usedAgentRelPaths);
+      keepPaths.add(globalOpenCodeRelPath(relPath));
+      const parsed = parseMarkdownAgent(fs.readFileSync(sourcePath, "utf8"), `Gemini global agent: ${sourceRelPath}`);
+      const write = writeManagedGlobalText({
+        state: options.state,
+        globalRoot: options.globalRoot,
+        relPath,
+        content: globalAgentMarkdown({
+          description: parsed.description,
+          body: parsed.body,
+          sourcePath,
+          sourceRelPath,
+          marker: GLOBAL_AGENT_MARKER,
+          model: parsed.model,
+          temperature: parsed.temperature,
+          maxSteps: parsed.maxSteps,
+        }),
+        label: "Global agent",
+        kind: "agent",
+        origin: sourcePath,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(write.promoted);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Global agent", sourceRelPath, error));
+    }
   }
 
   return { promoted, warnings, keepPaths };
@@ -1448,67 +1477,81 @@ function projectGlobalGeminiExtensionAgents(options: {
       .sort();
 
     for (const sourcePath of files) {
+      const sourceRelPath = toPosix(path.relative(extensionDir, sourcePath));
       const relPath = uniqueGlobalAgentRelPath(agentRelFromSource(agentsRoot, sourcePath), usedAgentRelPaths, extensionName);
       keepPaths.add(globalOpenCodeRelPath(relPath));
-      const sourceRelPath = toPosix(path.relative(extensionDir, sourcePath));
-      const parsed = parseMarkdownAgent(fs.readFileSync(sourcePath, "utf8"), `Gemini extension agent from ${extensionName}`);
       const agentName = globalAgentNameFromRelPath(relPath);
-      const fallback = resolveAgentFallback({
-        config: options.config,
-        extensionName,
-        agentName,
-        importedModel: parsed.model,
-      });
-      const hasRoutingSurface = fallbackHasRoutingSurface(fallback);
-      const routingDecision = hasRoutingSurface ? options.routing.decide(fallback) : undefined;
-      if (fallback.source !== "none" && (fallback.fallbackModels.length > 0 || fallback.model || hasRuntimeOptions(fallback, { includeVariant: true }))) {
-        options.modelFallbacks.push({
-          agent: agentName,
-          extension: extensionName,
-          model: fallback.model,
-          ...runtimeOptionObject(fallback, { includeVariant: true }),
-          fallback_models: fallback.fallbackModels,
-          source: fallback.source,
+      try {
+        const parsed = parseMarkdownAgent(fs.readFileSync(sourcePath, "utf8"), `Gemini extension agent from ${extensionName}`);
+        const fallback = resolveAgentFallback({
+          config: options.config,
+          extensionName,
+          agentName,
+          importedModel: parsed.model,
+        });
+        const hasRoutingSurface = fallbackHasRoutingSurface(fallback);
+        const routingDecision = hasRoutingSurface ? options.routing.decide(fallback) : undefined;
+        if (fallback.source !== "none" && (fallback.fallbackModels.length > 0 || fallback.model || hasRuntimeOptions(fallback, { includeVariant: true }))) {
+          options.modelFallbacks.push({
+            agent: agentName,
+            extension: extensionName,
+            model: fallback.model,
+            ...runtimeOptionObject(fallback, { includeVariant: true }),
+            fallback_models: fallback.fallbackModels,
+            source: fallback.source,
+          });
+        }
+        const write = writeManagedGlobalText({
+          state: options.state,
+          globalRoot: options.globalRoot,
+          relPath,
+          content: globalAgentMarkdown({
+            description: parsed.description,
+            body: parsed.body,
+            sourcePath,
+            sourceRelPath,
+            marker: GLOBAL_EXTENSION_AGENT_MARKER,
+            extensionName,
+            extensionDir,
+            bashPermission: extensionAgentBashPermission,
+            model: parsed.model,
+            temperature: parsed.temperature,
+            maxSteps: parsed.maxSteps,
+            fallback: hasRoutingSurface ? fallback : undefined,
+            routing: routingDecision,
+          }),
+          label: "Global extension agent",
+          kind: "agent",
+          origin: sourcePath,
+          backupSession: options.backupSession,
+          dryRun: options.dryRun,
+          force: options.force,
+        });
+        if (write.promoted) promoted.push(write.promoted);
+        if (write.warning) warnings.push(write.warning);
+        mapAgents.push({
+          extensionName,
+          name: agentName,
+          source: sourceRelPath,
+          target: write.promoted ?? globalOpenCodeRelPath(relPath),
+          projected: !write.warning,
+          reason: write.warning,
+          status: write.warning ? "conflict" : "projected",
+          modelFallback: hasRoutingSurface ? fallback : undefined,
+        });
+      } catch (error) {
+        const message = projectionFailureWarning("Global extension agent", `${extensionName}/${sourceRelPath}`, error);
+        warnings.push(message);
+        mapAgents.push({
+          extensionName,
+          name: agentName,
+          source: sourceRelPath,
+          target: globalOpenCodeRelPath(relPath),
+          projected: false,
+          reason: message,
+          status: "conflict",
         });
       }
-      const write = writeManagedGlobalText({
-        state: options.state,
-        globalRoot: options.globalRoot,
-        relPath,
-        content: globalAgentMarkdown({
-          description: parsed.description,
-          body: parsed.body,
-          sourcePath,
-          sourceRelPath,
-          marker: GLOBAL_EXTENSION_AGENT_MARKER,
-          extensionName,
-          extensionDir,
-          bashPermission: extensionAgentBashPermission,
-          model: parsed.model,
-          temperature: parsed.temperature,
-          maxSteps: parsed.maxSteps,
-          fallback: hasRoutingSurface ? fallback : undefined,
-          routing: routingDecision,
-        }),
-        label: "Global extension agent",
-        kind: "agent",
-        origin: sourcePath,
-        backupSession: options.backupSession,
-        dryRun: options.dryRun,
-        force: options.force,
-      });
-      if (write.promoted) promoted.push(write.promoted);
-      if (write.warning) warnings.push(write.warning);
-      mapAgents.push({
-        extensionName,
-        name: agentName,
-        source: sourceRelPath,
-        target: write.promoted ?? globalOpenCodeRelPath(relPath),
-        projected: !write.warning,
-        reason: write.warning,
-        status: write.warning ? "conflict" : "projected",
-        modelFallback: hasRoutingSurface ? fallback : undefined,
-      });
     }
   }
 
@@ -2053,36 +2096,44 @@ function projectGlobalGeminiSkills(options: {
     const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
     used.add(targetName);
     keepSkillFiles.add(`${globalOpenCodeRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
-    const copy = copyManagedGlobalSkill({
-      state: options.state,
-      homeDir: options.homeDir,
-      sourceDir: skill.sourceDir,
-      sourceBaseDir: skill.sourceDir,
-      targetName,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (copy.promoted) promoted.push(copy.promoted);
-    if (copy.warning) warnings.push(copy.warning);
+    try {
+      const copy = copyManagedGlobalSkill({
+        state: options.state,
+        homeDir: options.homeDir,
+        sourceDir: skill.sourceDir,
+        sourceBaseDir: skill.sourceDir,
+        targetName,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (copy.promoted) promoted.push(copy.promoted);
+      if (copy.warning) warnings.push(copy.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Global skill", skill.skillName, error));
+    }
   }
 
   for (const skill of listGeminiExtensionSkillDirs(options.homeDir)) {
     const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
     used.add(targetName);
     keepSkillFiles.add(`${globalOpenCodeRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
-    const copy = copyManagedGlobalSkill({
-      state: options.state,
-      homeDir: options.homeDir,
-      sourceDir: skill.sourceDir,
-      sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
-      targetName,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (copy.promoted) promoted.push(copy.promoted);
-    if (copy.warning) warnings.push(copy.warning);
+    try {
+      const copy = copyManagedGlobalSkill({
+        state: options.state,
+        homeDir: options.homeDir,
+        sourceDir: skill.sourceDir,
+        sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
+        targetName,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (copy.promoted) promoted.push(copy.promoted);
+      if (copy.warning) warnings.push(copy.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Global extension skill", `${skill.extensionName}/${skill.skillName}`, error));
+    }
   }
 
   const stale = options.dryRun
@@ -2118,36 +2169,44 @@ function projectGlobalAntigravitySkills(options: {
     const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
     used.add(targetName);
     keepSkillFiles.add(`${globalAntigravityRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
-    const copy = copyManagedAntigravitySkill({
-      state: options.state,
-      homeDir: options.homeDir,
-      sourceDir: skill.sourceDir,
-      sourceBaseDir: skill.sourceDir,
-      targetName,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (copy.promoted) promoted.push(copy.promoted);
-    if (copy.warning) warnings.push(copy.warning);
+    try {
+      const copy = copyManagedAntigravitySkill({
+        state: options.state,
+        homeDir: options.homeDir,
+        sourceDir: skill.sourceDir,
+        sourceBaseDir: skill.sourceDir,
+        targetName,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (copy.promoted) promoted.push(copy.promoted);
+      if (copy.warning) warnings.push(copy.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Antigravity skill", skill.skillName, error));
+    }
   }
 
   for (const skill of listGeminiExtensionSkillDirs(options.homeDir)) {
     const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
     used.add(targetName);
     keepSkillFiles.add(`${globalAntigravityRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
-    const copy = copyManagedAntigravitySkill({
-      state: options.state,
-      homeDir: options.homeDir,
-      sourceDir: skill.sourceDir,
-      sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
-      targetName,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (copy.promoted) promoted.push(copy.promoted);
-    if (copy.warning) warnings.push(copy.warning);
+    try {
+      const copy = copyManagedAntigravitySkill({
+        state: options.state,
+        homeDir: options.homeDir,
+        sourceDir: skill.sourceDir,
+        sourceBaseDir: path.dirname(path.dirname(skill.sourceDir)),
+        targetName,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (copy.promoted) promoted.push(copy.promoted);
+      if (copy.warning) warnings.push(copy.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Antigravity extension skill", `${skill.extensionName}/${skill.skillName}`, error));
+    }
   }
 
   const stale = options.dryRun
@@ -2191,24 +2250,28 @@ function projectGlobalAntigravityAgents(options: {
     const safeName = safeGlobalSegment(targetName);
     keepPaths.add(globalAntigravityRelPath(`agents/${safeName}`));
     keepPaths.add(globalAntigravityRelPath(`agent_prompts/${safeName}.md`));
-    const parsed = parseMarkdownAgent(fs.readFileSync(agent.sourcePath, "utf8"), `Gemini global agent: ${agent.sourceRelPath}`);
-    const write = writeManagedAntigravityAgent({
-      state: options.state,
-      homeDir: options.homeDir,
-      targetName,
-      description: parsed.description,
-      body: parsed.body,
-      sourcePath: agent.sourcePath,
-      sourceRelPath: agent.sourceRelPath,
-      model: parsed.model,
-      temperature: parsed.temperature,
-      maxSteps: parsed.maxSteps,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (write.promoted) promoted.push(write.promoted);
-    if (write.warning) warnings.push(write.warning);
+    try {
+      const parsed = parseMarkdownAgent(fs.readFileSync(agent.sourcePath, "utf8"), `Gemini global agent: ${agent.sourceRelPath}`);
+      const write = writeManagedAntigravityAgent({
+        state: options.state,
+        homeDir: options.homeDir,
+        targetName,
+        description: parsed.description,
+        body: parsed.body,
+        sourcePath: agent.sourcePath,
+        sourceRelPath: agent.sourceRelPath,
+        model: parsed.model,
+        temperature: parsed.temperature,
+        maxSteps: parsed.maxSteps,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(write.promoted);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Antigravity agent", agent.sourceRelPath, error));
+    }
   }
 
   for (const agent of listGeminiExtensionAgentFiles(options.homeDir)) {
@@ -2217,26 +2280,30 @@ function projectGlobalAntigravityAgents(options: {
     const safeName = safeGlobalSegment(targetName);
     keepPaths.add(globalAntigravityRelPath(`agents/${safeName}`));
     keepPaths.add(globalAntigravityRelPath(`agent_prompts/${safeName}.md`));
-    const parsed = parseMarkdownAgent(fs.readFileSync(agent.sourcePath, "utf8"), `Gemini extension agent from ${agent.extensionName}`);
-    const write = writeManagedAntigravityAgent({
-      state: options.state,
-      homeDir: options.homeDir,
-      targetName,
-      description: parsed.description,
-      body: parsed.body,
-      sourcePath: agent.sourcePath,
-      sourceRelPath: agent.sourceRelPath,
-      extensionName: agent.extensionName,
-      extensionDir: agent.extensionDir,
-      model: parsed.model,
-      temperature: parsed.temperature,
-      maxSteps: parsed.maxSteps,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (write.promoted) promoted.push(write.promoted);
-    if (write.warning) warnings.push(write.warning);
+    try {
+      const parsed = parseMarkdownAgent(fs.readFileSync(agent.sourcePath, "utf8"), `Gemini extension agent from ${agent.extensionName}`);
+      const write = writeManagedAntigravityAgent({
+        state: options.state,
+        homeDir: options.homeDir,
+        targetName,
+        description: parsed.description,
+        body: parsed.body,
+        sourcePath: agent.sourcePath,
+        sourceRelPath: agent.sourceRelPath,
+        extensionName: agent.extensionName,
+        extensionDir: agent.extensionDir,
+        model: parsed.model,
+        temperature: parsed.temperature,
+        maxSteps: parsed.maxSteps,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(write.promoted);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Antigravity extension agent", `${agent.extensionName}/${agent.sourceRelPath}`, error));
+    }
   }
 
   const staleAgents = options.dryRun
@@ -2285,20 +2352,24 @@ function projectGlobalAntigravityWorkflows(options: {
     used.add(targetName);
     const reportPath = globalAntigravityRelPath(`global_workflows/${safeGlobalSegment(targetName)}.md`);
     keepPaths.add(reportPath);
-    const write = writeManagedAntigravityText({
-      state: options.state,
-      homeDir: options.homeDir,
-      reportPath,
-      content: `${fs.readFileSync(workflow.sourcePath, "utf8").trimEnd()}\n`,
-      kind: "workflow",
-      label: "Antigravity workflow",
-      origin: workflow.sourcePath,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (write.promoted) promoted.push(write.promoted);
-    if (write.warning) warnings.push(write.warning);
+    try {
+      const write = writeManagedAntigravityText({
+        state: options.state,
+        homeDir: options.homeDir,
+        reportPath,
+        content: `${fs.readFileSync(workflow.sourcePath, "utf8").trimEnd()}\n`,
+        kind: "workflow",
+        label: "Antigravity workflow",
+        origin: workflow.sourcePath,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(write.promoted);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Antigravity workflow", workflow.sourceRelPath, error));
+    }
   }
 
   for (const workflow of listGeminiExtensionWorkflowFiles(options.homeDir)) {
@@ -2306,20 +2377,24 @@ function projectGlobalAntigravityWorkflows(options: {
     used.add(targetName);
     const reportPath = globalAntigravityRelPath(`global_workflows/${safeGlobalSegment(targetName)}.md`);
     keepPaths.add(reportPath);
-    const write = writeManagedAntigravityText({
-      state: options.state,
-      homeDir: options.homeDir,
-      reportPath,
-      content: `${resolveExtensionPlaceholders(fs.readFileSync(workflow.sourcePath, "utf8"), workflow.extensionDir).trimEnd()}\n`,
-      kind: "workflow",
-      label: "Antigravity workflow",
-      origin: workflow.sourcePath,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (write.promoted) promoted.push(write.promoted);
-    if (write.warning) warnings.push(write.warning);
+    try {
+      const write = writeManagedAntigravityText({
+        state: options.state,
+        homeDir: options.homeDir,
+        reportPath,
+        content: `${resolveExtensionPlaceholders(fs.readFileSync(workflow.sourcePath, "utf8"), workflow.extensionDir).trimEnd()}\n`,
+        kind: "workflow",
+        label: "Antigravity workflow",
+        origin: workflow.sourcePath,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(write.promoted);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Antigravity extension workflow", `${workflow.extensionName}/${workflow.sourceRelPath}`, error));
+    }
   }
 
   const stale = options.dryRun
@@ -2371,20 +2446,24 @@ function projectExtensionSkills(options: { projectRoot: string; homeDir: string;
     const hasManagedGlobalProjection = Boolean(managedHashFor(globalState, globalReportSkillPath, "ogb"));
 
     if (hasManagedGlobalProjection) {
-      const copy = copyManagedGlobalSkill({
-        state: globalState,
-        homeDir: options.homeDir,
-        sourceDir: skill.sourceDir,
-        sourceBaseDir,
-        targetName,
-        backupSession: options.backupSession,
-        dryRun: options.dryRun,
-        force: options.force,
-      });
-      if (copy.warning) warnings.push(copy.warning);
-      if (copy.promoted) {
-        globalStateTouched = true;
-        continue;
+      try {
+        const copy = copyManagedGlobalSkill({
+          state: globalState,
+          homeDir: options.homeDir,
+          sourceDir: skill.sourceDir,
+          sourceBaseDir,
+          targetName,
+          backupSession: options.backupSession,
+          dryRun: options.dryRun,
+          force: options.force,
+        });
+        if (copy.warning) warnings.push(copy.warning);
+        if (copy.promoted) {
+          globalStateTouched = true;
+          continue;
+        }
+      } catch (error) {
+        warnings.push(projectionFailureWarning("Global extension skill", `${skill.extensionName}/${skill.skillName}`, error));
       }
     }
 
@@ -2396,21 +2475,25 @@ function projectExtensionSkills(options: { projectRoot: string; homeDir: string;
       continue;
     }
 
-    const copy = copyManagedSkillDir({
-      state,
-      targetRoot: options.projectRoot,
-      reportDir: relPath,
-      sourceDir: skill.sourceDir,
-      sourceBaseDir,
-      label: "Skill",
-      projection: "opencode",
-      origin: skill.sourceDir,
-      backupSession: options.backupSession,
-      dryRun: options.dryRun,
-      force: options.force,
-    });
-    if (copy.promoted) promoted.push(copy.promoted);
-    if (copy.warning) warnings.push(copy.warning);
+    try {
+      const copy = copyManagedSkillDir({
+        state,
+        targetRoot: options.projectRoot,
+        reportDir: relPath,
+        sourceDir: skill.sourceDir,
+        sourceBaseDir,
+        label: "Skill",
+        projection: "opencode",
+        origin: skill.sourceDir,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (copy.promoted) promoted.push(copy.promoted);
+      if (copy.warning) warnings.push(copy.warning);
+    } catch (error) {
+      warnings.push(projectionFailureWarning("Project extension skill", `${skill.extensionName}/${skill.skillName}`, error));
+    }
   }
 
   const stale = options.dryRun

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.41 - Update resiliente a projeções antigas
+
+- Faz o inventário ignorar raízes globais inválidas, como `skills`/`agents` antigos deixados como arquivo em vez de diretório, sem derrubar `ogb update`.
+- Faz falhas pontuais ao projetar comandos, agentes, skills e workflows virarem warnings por recurso, mantendo o sync do restante do ambiente.
+- Adiciona regressão de home-mode para garantir que uma skill global bloqueada não transforme o post-update inteiro em `FAIL`.
+
 ## 0.1.40 - Check global em Windows
 
 - Faz `ogb check` em modo home aplicar o perfil global mínimo do OpenCode antes de validar, corrigindo post-update que falhava por falta do plugin global `ogb-startup-sync.js` e do agente `YOLO.md`.

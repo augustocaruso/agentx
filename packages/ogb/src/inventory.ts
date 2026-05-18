@@ -33,6 +33,14 @@ function exists(p: string): boolean {
   return fs.existsSync(p);
 }
 
+function dirExists(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function readJsonc(filePath: string): any {
   try {
     return parseJsonc(fs.readFileSync(filePath, "utf8"));
@@ -42,7 +50,7 @@ function readJsonc(filePath: string): any {
 }
 
 function listDirs(root: string): string[] {
-  if (!exists(root)) return [];
+  if (!dirExists(root)) return [];
   return fs.readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(root, entry.name))
@@ -50,7 +58,7 @@ function listDirs(root: string): string[] {
 }
 
 function listFilesWithExtensions(root: string, extensions: string[], recursive = false): string[] {
-  if (!exists(root)) return [];
+  if (!dirExists(root)) return [];
   const out: string[] = [];
   for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     const fullPath = path.join(root, entry.name);
