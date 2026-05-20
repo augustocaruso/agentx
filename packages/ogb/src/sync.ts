@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { applyEdits, modify as modifyJsonc, parse as parseJsonc, type ParseError } from "jsonc-parser";
+import { convertGeminiCommandToAntigravitySkill } from "./antigravity-plugin-converter.js";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES, REMOVED_BUILT_IN_COMMAND_NAMES, type BuiltInTextFile } from "./built-ins.js";
 import {
@@ -201,6 +202,51 @@ function listGeminiExtensionSkillDirs(homeDir: string): Array<{ extensionName: s
     }
   }
   return out;
+}
+
+function listGeminiGlobalCommandFiles(homeDir: string): Array<{ sourcePath: string; sourceRelPath: string }> {
+  const commandsRoot = path.join(homeDir, ".gemini", "commands");
+  return listFilesRecursive(commandsRoot)
+    .filter((filePath) => /\.(md|toml)$/i.test(filePath))
+    .map((sourcePath) => {
+      const sourceRelPath = toPosix(path.relative(commandsRoot, sourcePath));
+      return {
+        sourcePath,
+        sourceRelPath,
+      };
+    })
+    .sort((a, b) => a.sourceRelPath.localeCompare(b.sourceRelPath));
+}
+
+function listGeminiExtensionCommandFiles(homeDir: string): Array<{
+  extensionName: string;
+  extensionDir: string;
+  sourcePath: string;
+  sourceRelPath: string;
+}> {
+  const extensionsRoot = path.join(homeDir, ".gemini", "extensions");
+  if (!dirExists(extensionsRoot)) return [];
+
+  const out: Array<{
+    extensionName: string;
+    extensionDir: string;
+    sourcePath: string;
+    sourceRelPath: string;
+  }> = [];
+  for (const extensionName of fs.readdirSync(extensionsRoot).sort()) {
+    const extensionDir = path.join(extensionsRoot, extensionName);
+    const commandsRoot = path.join(extensionDir, "commands");
+    for (const sourcePath of listFilesRecursive(commandsRoot).filter((filePath) => filePath.endsWith(".toml")).sort()) {
+      const sourceRelPath = toPosix(path.relative(extensionDir, sourcePath));
+      out.push({
+        extensionName,
+        extensionDir,
+        sourcePath,
+        sourceRelPath,
+      });
+    }
+  }
+  return out.sort((a, b) => `${a.extensionName}/${a.sourceRelPath}`.localeCompare(`${b.extensionName}/${b.sourceRelPath}`));
 }
 
 function isTextProjectionFile(filePath: string): boolean {
@@ -2047,7 +2093,7 @@ function writeManagedAntigravityText(options: {
   homeDir: string;
   reportPath: string;
   content: string;
-  kind: "agent" | "workflow";
+  kind: "agent" | "skill" | "workflow";
   label: string;
   origin: string;
   backupSession: BackupSession;
@@ -2353,6 +2399,7 @@ function projectGlobalAntigravitySkills(options: {
   const promotedAgents: string[] = [];
   const keepSkillFiles = new Set<string>();
   const used = new Set<string>();
+  let commandConversionFailed = false;
 
   for (const skill of listGeminiGlobalSkillDirs(options.homeDir)) {
     const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
@@ -2406,8 +2453,76 @@ function projectGlobalAntigravitySkills(options: {
     }
   }
 
+  for (const command of listGeminiGlobalCommandFiles(options.homeDir)) {
+    try {
+      const converted = convertGeminiCommandToAntigravitySkill({
+        sourcePath: command.sourcePath,
+        sourceRelPath: command.sourceRelPath,
+      });
+      const targetName = safeSkillTargetName(converted.slug, used, "gemini-command");
+      used.add(targetName);
+      const skillDir = globalAntigravityRelPath(`skills/${safeGlobalSegment(targetName)}`);
+      const reportPath = `${skillDir}/SKILL.md`;
+      keepSkillFiles.add(reportPath);
+      for (const warning of converted.warnings) warnings.push(`Antigravity command skill parse warning: ${command.sourceRelPath}: ${warning}`);
+      const write = writeManagedAntigravityText({
+        state: options.state,
+        homeDir: options.homeDir,
+        reportPath,
+        content: converted.markdown,
+        kind: "skill",
+        label: "Antigravity command skill",
+        origin: command.sourcePath,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(skillDir);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      commandConversionFailed = true;
+      warnings.push(projectionFailureWarning("Antigravity command skill", command.sourceRelPath, error));
+    }
+  }
+
+  for (const command of listGeminiExtensionCommandFiles(options.homeDir)) {
+    try {
+      const converted = convertGeminiCommandToAntigravitySkill({
+        sourcePath: command.sourcePath,
+        sourceRelPath: command.sourceRelPath,
+        extensionName: command.extensionName,
+        extensionDir: command.extensionDir,
+      });
+      const targetName = safeSkillTargetName(converted.slug, used, command.extensionName);
+      used.add(targetName);
+      const skillDir = globalAntigravityRelPath(`skills/${safeGlobalSegment(targetName)}`);
+      const reportPath = `${skillDir}/SKILL.md`;
+      keepSkillFiles.add(reportPath);
+      for (const warning of converted.warnings) warnings.push(`Antigravity extension command skill parse warning: ${command.extensionName}/${command.sourceRelPath}: ${warning}`);
+      const write = writeManagedAntigravityText({
+        state: options.state,
+        homeDir: options.homeDir,
+        reportPath,
+        content: converted.markdown,
+        kind: "skill",
+        label: "Antigravity extension command skill",
+        origin: command.sourcePath,
+        backupSession: options.backupSession,
+        dryRun: options.dryRun,
+        force: options.force,
+      });
+      if (write.promoted) promoted.push(skillDir);
+      if (write.warning) warnings.push(write.warning);
+    } catch (error) {
+      commandConversionFailed = true;
+      warnings.push(projectionFailureWarning("Antigravity extension command skill", `${command.extensionName}/${command.sourceRelPath}`, error));
+    }
+  }
+
   const stale = options.dryRun
     ? { removed: [], removedDetails: [], warnings: [] }
+    : commandConversionFailed
+      ? { removed: [], removedDetails: [], warnings: ["Skipped stale Antigravity skill cleanup because the shared command converter failed."] }
     : removeStaleManagedSkillDirs({
         state: options.state,
         root: options.homeDir,

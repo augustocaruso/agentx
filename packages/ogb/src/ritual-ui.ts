@@ -136,6 +136,11 @@ function countChangedWrites(report: InstallReport | ResetReport): number | undef
   return writes.filter((write) => write.status !== "unchanged").length;
 }
 
+function formatDurationMs(durationMs: number): string {
+  if (durationMs < 1000) return `${Math.max(0, Math.round(durationMs))}ms`;
+  return `${(durationMs / 1000).toFixed(1).replace(/\.0$/, "")}s`;
+}
+
 const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 const MAX_DISPLAY_LINE_LENGTH = 280;
 const MIN_RITUAL_UI_COLUMNS = 80;
@@ -287,6 +292,9 @@ function installModel(report: InstallReport): RitualViewModel {
 function checkModel(report: PassReport): RitualViewModel {
   const tone = toneFromOutcome(report.outcome);
   const syncNotes = report.sync?.notes ?? [];
+  const timingMetrics: RitualMetric[] = [];
+  if (report.timing) timingMetrics.push({ label: "duration", value: formatDurationMs(report.timing.durationMs) });
+  if (report.sync?.rulesyncDurationMs !== undefined) timingMetrics.push({ label: "rulesync", value: formatDurationMs(report.sync.rulesyncDurationMs) });
   return {
     title: titleForKind("check"),
     subtitle: report.projectRoot,
@@ -294,6 +302,7 @@ function checkModel(report: PassReport): RitualViewModel {
     tone,
     metrics: [
       { label: "automated", value: String(report.automated.length) },
+      ...timingMetrics,
       { label: "skills", value: String(report.sync?.skills ?? 0) },
       { label: "commands", value: String((report.sync?.builtInCommands ?? 0) + (report.sync?.extensionCommands ?? 0)) },
       { label: "agents", value: String((report.sync?.builtInAgents ?? 0) + (report.sync?.extensionAgents ?? 0)) },
@@ -351,7 +360,8 @@ function resetModel(report: ResetReport): RitualViewModel {
 
 function updateModel(report: SelfUpdateReport): RitualViewModel {
   const postUpdateTone = toneFromOutcome(report.postUpdate?.status);
-  const tone = report.status === "applied" && postUpdateTone === "warn"
+  const postUpdateNeedsAttention = report.status === "applied" && (postUpdateTone === "warn" || postUpdateTone === "fail");
+  const tone = postUpdateNeedsAttention
     ? "warn"
     : toneFromOutcome(report.status);
   const releaseFlagIndex = report.plan.delegation.args.indexOf("--release");
@@ -375,10 +385,10 @@ function updateModel(report: SelfUpdateReport): RitualViewModel {
       { label: "download + bootstrap", status: tone, detail: bootstrapDetail },
       ...(report.postUpdate ? [{ label: "post-update check", status: postUpdateTone, detail: report.postUpdate.message }] : []),
     ],
-    callouts: report.status === "error" ? postUpdateCallouts(report) : [],
+    callouts: report.status === "error" || postUpdateNeedsAttention ? postUpdateCallouts(report) : [],
     next: report.status === "preview"
       ? ["Run ogb update without --dry-run to apply this release."]
-      : report.status === "applied"
+      : report.status === "applied" && !postUpdateNeedsAttention
         ? ["Restart OpenCode so the new plugin/sidebar code is loaded.", "Then run ogb check if you want a fresh human-readable pass."]
         : postUpdateNext(report),
     files: report.postUpdate?.files ?? [],

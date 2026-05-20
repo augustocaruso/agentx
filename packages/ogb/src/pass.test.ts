@@ -140,6 +140,35 @@ test("runPass removes progress steps disabled by check flags", () => {
   process.exitCode = oldExitCode;
 });
 
+test("runPass emits check timing with non-negative durations", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+
+  const report = runPass({
+    projectRoot,
+    homeDir: projectRoot,
+    dryRun: true,
+    skipSetup: true,
+    skipExtensionUpdate: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+    silent: true,
+    setExitCode: false,
+    rulesyncMode: "off",
+  });
+
+  assert.ok(report.timing);
+  assert.ok(report.timing.durationMs >= 0);
+  assert.ok(report.timing.steps.length > 0);
+  assert.equal(report.timing.steps.every((step) => step.durationMs >= 0), true);
+  assert.equal(report.timing.steps.some((step) => step.name === "sync"), true);
+  assert.equal(report.timing.steps.some((step) => step.name === "project-sync"), true);
+  assert.equal(report.timing.steps.some((step) => step.name === "doctor"), true);
+  assert.equal(report.timing.steps.some((step) => step.name === "patches:pre-sync"), true);
+  process.exitCode = oldExitCode;
+});
+
 test("runPass repairs stale global TUI sidebar without install force", () => {
   const homeDir = tempRoot();
   const oldExitCode = process.exitCode;
@@ -512,11 +541,23 @@ test("formatPassReport prints a compact human report", () => {
       externalIntegrationFiles: 1,
       rulesyncStatus: "applied",
       rulesyncPromoted: 0,
+      rulesyncDurationMs: 42,
+      rulesyncFeatures: [
+        { feature: "mcp", status: "success", durationMs: 12 },
+        { feature: "commands", status: "error", durationMs: 30 },
+      ],
       notes: ["Antigravity skill skipped: defuddle (Windows blocked this optional projection: untrusted mount point)."],
     },
     doctor: { warnings: 1, errors: 0 },
     validation: { outcome: "warn" },
     dashboard: { outcome: "warn" },
+    timing: {
+      durationMs: 1234,
+      steps: [
+        { name: "setup-opencode", durationMs: 10 },
+        { name: "sync", durationMs: 42 },
+      ],
+    },
     files: {
       pass: "/tmp/project/.opencode/generated/ogb-pass.json",
       doctor: "/tmp/project/.opencode/generated/ogb-doctor.json",
@@ -527,7 +568,9 @@ test("formatPassReport prints a compact human report", () => {
   const text = formatPassReport(report);
 
   assert.match(text, /^OGB check WARN/m);
+  assert.match(text, /^Duration  1\.2s/m);
   assert.match(text, /Checks\n  OK    setup-opencode/);
+  assert.match(text, /rulesync: applied, 42ms; mcp 12ms, commands error 30ms/);
   assert.match(text, /Needs Attention/);
   assert.match(text, /Auto fallback esta ligado, mas o plugin externo nao carregou\./);
   assert.match(text, /Notes\n- Antigravity skill skipped: defuddle/);

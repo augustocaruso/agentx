@@ -666,6 +666,36 @@ test("syncToOpenCode projects Gemini skills to global Antigravity skills", () =>
   ));
 });
 
+test("syncToOpenCode projects Gemini commands to Antigravity launcher skills", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const globalCommandDir = path.join(homeDir, ".gemini", "commands");
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  const extensionCommandDir = path.join(extensionDir, "commands", "mednotes");
+  fs.mkdirSync(globalCommandDir, { recursive: true });
+  fs.mkdirSync(extensionCommandDir, { recursive: true });
+  fs.writeFileSync(path.join(globalCommandDir, "research.toml"), "description = \"Research notes\"\nprompt = \"Research {{args}}\"\n", "utf8");
+  fs.writeFileSync(path.join(extensionCommandDir, "fix-wiki.toml"), `description = "Fix wiki"\nprompt = """Run ${"${extensionPath}"}${"${/}"}scripts${"${/}"}fix.py for {{args}}"""\n`, "utf8");
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const globalSkill = path.join(homeDir, ".gemini", "antigravity", "skills", "research", "SKILL.md");
+  const extensionSkill = path.join(homeDir, ".gemini", "antigravity", "skills", "mednotes-fix-wiki", "SKILL.md");
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const extensionText = fs.readFileSync(extensionSkill, "utf8");
+
+  assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/research"));
+  assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/mednotes-fix-wiki"));
+  assert.match(fs.readFileSync(globalSkill, "utf8"), /# \/research/);
+  assert.match(extensionText, /# \/mednotes:fix-wiki/);
+  assert.match(extensionText, /\$ARGUMENTS/);
+  assert.match(extensionText, new RegExp(path.join(extensionDir, "scripts", "fix.py").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
+    file.path === ".gemini/antigravity/skills/mednotes-fix-wiki/SKILL.md"
+    && file.kind === "skill"
+    && file.projection === "antigravity"
+  ));
+});
+
 test("syncToOpenCode skips Antigravity skills blocked by Windows untrusted mounts", () => {
   const projectRoot = tempProject();
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));

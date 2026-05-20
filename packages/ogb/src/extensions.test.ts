@@ -29,6 +29,13 @@ function writeExecutable(root: string, content: string): string {
   return filePath;
 }
 
+function writeInstalledExtension(homeDir: string, name = "test-pack"): string {
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", name);
+  fs.mkdirSync(extensionPath, { recursive: true });
+  fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name, version: "0.0.1" }), "utf8");
+  return extensionPath;
+}
+
 test("buildInstallExtensionArgs defaults remote git sources to auto-update", () => {
   assert.deepEqual(
     buildInstallExtensionArgs({
@@ -103,6 +110,7 @@ test("listInstalledGeminiExtensions reports extension path and current version",
 
 test("updateGeminiExtensions auto-consent captures output and feeds yes input", () => {
   const root = tempDir();
+  writeInstalledExtension(root);
   const fakeGemini = writeExecutable(root, `
 const fs = require("node:fs");
 const input = fs.readFileSync(0, "utf8");
@@ -111,7 +119,7 @@ console.error("stderr ok");
 if (!input.includes("y")) process.exit(7);
 `);
 
-  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true });
+  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, projectRoot: root, homeDir: root });
 
   assert.equal(report.status, "applied");
   assert.deepEqual(report.command, [fakeGemini, "extensions", "update", "--all"]);
@@ -220,13 +228,14 @@ fs.writeFileSync(${JSON.stringify(marker)}, "ran");
 
 test("updateGeminiExtensions reports captured failure details", () => {
   const root = tempDir();
+  writeInstalledExtension(root);
   const fakeGemini = writeExecutable(root, `
 console.log("stdout details");
 console.error("stderr details");
 process.exit(9);
 `);
 
-  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true });
+  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, projectRoot: root, homeDir: root });
 
   assert.equal(report.status, "error");
   assert.equal(report.exitCode, 9);
@@ -236,11 +245,12 @@ process.exit(9);
 
 test("updateGeminiExtensions times out unexpected prompts", () => {
   const root = tempDir();
+  writeInstalledExtension(root);
   const fakeGemini = writeExecutable(root, `
 setTimeout(() => {}, 10_000);
 `);
 
-  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, timeoutMs: 20 });
+  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, timeoutMs: 20, projectRoot: root, homeDir: root });
 
   assert.equal(report.status, "error");
   assert.equal(report.timedOut, true);

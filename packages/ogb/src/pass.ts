@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { runDashboard, type DashboardReport } from "./dashboard.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { updateGeminiExtensions, type ExtensionCommandReport } from "./extensions.js";
@@ -66,6 +67,8 @@ export interface PassSyncSummary {
   externalIntegrationFiles: number;
   rulesyncStatus: SyncReport["rulesync"]["status"];
   rulesyncPromoted: number;
+  rulesyncDurationMs?: number;
+  rulesyncFeatures?: NonNullable<SyncReport["rulesync"]["timing"]>["features"];
   notes: string[];
 }
 
@@ -105,6 +108,10 @@ export interface PassReport {
   patches?: PassPatchSummary;
   dashboard?: {
     outcome: DashboardReport["outcome"];
+  };
+  timing?: {
+    durationMs: number;
+    steps: Array<{ name: string; durationMs: number }>;
   };
   files: {
     pass: string;
@@ -246,6 +253,27 @@ function plural(count: number, singular: string, pluralText = `${singular}s`): s
   return `${count} ${count === 1 ? singular : pluralText}`;
 }
 
+function durationMsSince(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1000) return `${durationMs}ms`;
+  return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
+}
+
+function rulesyncTimingDetail(sync: PassSyncSummary): string {
+  const features = sync.rulesyncFeatures ?? [];
+  const parts = [
+    sync.rulesyncPromoted > 0 ? `${sync.rulesyncPromoted} promoted` : undefined,
+    sync.rulesyncDurationMs !== undefined ? formatDuration(sync.rulesyncDurationMs) : undefined,
+    features.length > 0
+      ? features.map((feature) => `${feature.feature}${feature.status === "error" ? " error" : ""} ${formatDuration(feature.durationMs)}`).join(", ")
+      : undefined,
+  ].filter(Boolean);
+  return parts.length > 0 ? `, ${parts.join("; ")}` : "";
+}
+
 function syncSummaryLine(sync: PassSyncSummary): string {
   const parts = [
     plural(sync.builtInAgents, "agent"),
@@ -284,6 +312,7 @@ export function formatPassReport(report: PassReport): string {
   const lines = [
     `OGB check ${statusText(report.outcome)}`,
     `Project   ${report.projectRoot}`,
+    ...(report.timing ? [`Duration  ${formatDuration(report.timing.durationMs)}`] : []),
     "",
     "Checks",
     ...report.steps.map((step) => `  ${statusText(step.status).padEnd(5)} ${step.name}${stepStatusDetail(step)}`),
@@ -294,7 +323,7 @@ export function formatPassReport(report: PassReport): string {
       "",
       "Sync",
       `  ${syncSummaryLine(report.sync)}`,
-      `  rulesync: ${report.sync.rulesyncStatus}${report.sync.rulesyncPromoted > 0 ? `, ${report.sync.rulesyncPromoted} promoted` : ""}`,
+      `  rulesync: ${report.sync.rulesyncStatus}${rulesyncTimingDetail(report.sync)}`,
     );
   }
 
@@ -346,6 +375,8 @@ function buildSyncSummary(sync: SyncReport | undefined): PassSyncSummary | undef
     externalIntegrationFiles: sync.projectedExternalIntegrationFiles.length,
     rulesyncStatus: sync.rulesync.status,
     rulesyncPromoted: sync.rulesync.promoted.length,
+    rulesyncDurationMs: sync.rulesync.timing?.durationMs,
+    rulesyncFeatures: sync.rulesync.timing?.features,
     notes: sync.notes,
   };
 }
@@ -381,6 +412,11 @@ function patchReportHasVisibleResults(report: PatchRunReport): boolean {
 }
 
 export function runPass(options: PassOptions = {}): PassReport {
+  const passStartedAt = performance.now();
+  const timingSteps: Array<{ name: string; durationMs: number }> = [];
+  const recordTiming = (name: string, startedAt: number) => {
+    timingSteps.push({ name, durationMs: durationMsSince(startedAt) });
+  };
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   const plan = buildInstallerPlan({
     intent: "check",
@@ -407,6 +443,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   let globalStartupRepaired = false;
 
   if (!options.skipSetup) {
+    const setupStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "setup", "running");
     try {
       if (paths.homeMode) {
@@ -448,19 +485,26 @@ export function runPass(options: PassOptions = {}): PassReport {
     );
     automated.push(paths.homeMode ? "setup-ux" : "setup-opencode");
     for (const warning of setupWarnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
+    recordTiming(paths.homeMode ? "setup-ux" : "setup-opencode", setupStartedAt);
   }
 
   function runPatchPhase(phase: PatchPhase): PatchRunReport | undefined {
     if (options.skipPatches) return undefined;
-    const report = runPatchesForPhase({
-      phase,
-      projectRoot: paths.projectRoot,
-      homeDir: paths.homeDir,
-      dryRun: options.dryRun,
-      force: options.force,
-      registry: options.patchRegistry,
-      onProgress: options.onProgress,
-    });
+    const patchStartedAt = performance.now();
+    let report: PatchRunReport;
+    try {
+      report = runPatchesForPhase({
+        phase,
+        projectRoot: paths.projectRoot,
+        homeDir: paths.homeDir,
+        dryRun: options.dryRun,
+        force: options.force,
+        registry: options.patchRegistry,
+        onProgress: options.onProgress,
+      });
+    } finally {
+      recordTiming(`patches:${phase}`, patchStartedAt);
+    }
     patchReports.push(report);
     if (patchReportHasVisibleResults(report)) automated.push(`patches:${phase}`);
     recordPatchBlockers(report);
@@ -484,6 +528,7 @@ export function runPass(options: PassOptions = {}): PassReport {
 
   if (!options.skipSync && !options.skipExtensionUpdate) {
     runPatchPhase("pre-extension-update");
+    const extensionUpdateStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "extensionUpdate", "running");
     extensionUpdate = updateGeminiExtensions({
       all: true,
@@ -510,14 +555,17 @@ export function runPass(options: PassOptions = {}): PassReport {
     if (extensionUpdate.status === "error" || extensionUpdate.status === "blocked") {
       blockers.push(blocker("extension-update", "warn", message, extensionUpdateAction()));
     }
+    recordTiming("extension-update", extensionUpdateStartedAt);
     runPatchPhase("post-extension-update");
   }
 
   if (!options.skipSync) {
     runPatchPhase("pre-sync");
+    const syncStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "sync", "running");
     try {
       if (!paths.homeMode) {
+        const globalSyncStartedAt = performance.now();
         globalSync = syncToOpenCode({
           projectRoot: paths.homeDir,
           homeDir: paths.homeDir,
@@ -526,7 +574,9 @@ export function runPass(options: PassOptions = {}): PassReport {
           silent: true,
           rulesyncMode: "off",
         });
+        recordTiming("global-sync", globalSyncStartedAt);
       }
+      const projectSyncStartedAt = performance.now();
       sync = syncToOpenCode({
         projectRoot: paths.projectRoot,
         homeDir: paths.homeDir,
@@ -535,9 +585,12 @@ export function runPass(options: PassOptions = {}): PassReport {
         silent: true,
         rulesyncMode: options.rulesyncMode,
       });
+      recordTiming("project-sync", projectSyncStartedAt);
     } catch (error) {
       emitCheckProgress(options.onProgress, "sync", "fail", error instanceof Error ? error.message : String(error));
       throw error;
+    } finally {
+      recordTiming("sync", syncStartedAt);
     }
     const syncWarnings = [...(globalSync?.warnings ?? []), ...sync.warnings];
     emitCheckProgress(
@@ -555,6 +608,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   }
 
   runPatchPhase("pre-doctor");
+  const doctorStartedAt = performance.now();
   emitCheckProgress(options.onProgress, "doctor", "running");
   let doctor: DoctorReport;
   try {
@@ -607,10 +661,12 @@ export function runPass(options: PassOptions = {}): PassReport {
         : doctor.warnings.length > 0
           ? `${doctor.warnings.length} warning(s)`
           : "Doctor is clean.",
-    );
+      );
   }
+  recordTiming("doctor", doctorStartedAt);
 
   let acceptedHooks: string[] = [];
+  const hookReviewStartedAt = options.acceptHooks ? performance.now() : undefined;
   if (options.acceptHooks) {
     emitCheckProgress(options.onProgress, "hookReview", "running");
     try {
@@ -636,8 +692,10 @@ export function runPass(options: PassOptions = {}): PassReport {
     );
     automated.push("doctor-after-hook-acceptance");
   }
+  if (hookReviewStartedAt !== undefined) recordTiming("hook-review", hookReviewStartedAt);
 
   if (!options.skipValidation) {
+    const validationStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "validate", "running");
     try {
       validation = runValidation({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true, windows: options.windows });
@@ -652,9 +710,11 @@ export function runPass(options: PassOptions = {}): PassReport {
       validation.outcome === "pass" ? "Validation is clean." : firstValidationIssue(validation, validation.outcome) ?? `Validation outcome: ${validation.outcome}.`,
     );
     automated.push("validate");
+    recordTiming("validate", validationStartedAt);
   }
 
   if (!options.skipSecurity) {
+    const securityStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "security", "running");
     try {
       security = runSecurityCheck({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true });
@@ -669,9 +729,11 @@ export function runPass(options: PassOptions = {}): PassReport {
       security.outcome === "pass" ? "Security guardrails are clean." : firstSecurityIssue(security, security.outcome) ?? `Security outcome: ${security.outcome}.`,
     );
     automated.push("security-check");
+    recordTiming("security-check", securityStartedAt);
   }
 
   if (!options.skipDashboard) {
+    const dashboardStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "dashboard", "running");
     try {
       dashboard = runDashboard({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true, refresh: false });
@@ -686,6 +748,7 @@ export function runPass(options: PassOptions = {}): PassReport {
       dashboard.outcome === "pass" ? "Dashboard refreshed." : firstDashboardIssue(dashboard, dashboard.outcome === "fail" ? "fail" : "warn") ?? `Dashboard outcome: ${dashboard.outcome}.`,
     );
     automated.push("dashboard");
+    recordTiming("dashboard", dashboardStartedAt);
   }
 
   runPatchPhase("post-check");
@@ -794,6 +857,10 @@ export function runPass(options: PassOptions = {}): PassReport {
     security: security ? { outcome: security.outcome } : undefined,
     patches: buildPatchSummary(patchReports),
     dashboard: dashboard ? { outcome: dashboard.outcome } : undefined,
+    timing: {
+      durationMs: durationMsSince(passStartedAt),
+      steps: timingSteps,
+    },
     files: {
       pass: paths.passPath,
       doctor: paths.doctorPath,

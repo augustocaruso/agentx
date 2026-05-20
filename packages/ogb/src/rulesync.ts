@@ -27,6 +27,17 @@ export interface RulesyncProjectionOptions {
   features?: string[];
 }
 
+export interface RulesyncFeatureTiming {
+  feature: string;
+  status: "success" | "error";
+  durationMs: number;
+}
+
+export interface RulesyncProjectionTiming {
+  durationMs: number;
+  features: RulesyncFeatureTiming[];
+}
+
 export interface RulesyncProjectionResult {
   status: "applied" | "partial" | "preview" | "skipped" | "error";
   available: boolean;
@@ -38,6 +49,7 @@ export interface RulesyncProjectionResult {
   backups: BackupRecord[];
   retention?: BackupRetentionReport;
   skippedReason?: string;
+  timing?: RulesyncProjectionTiming;
 }
 
 const DEFAULT_RULESYNC_FEATURES = ["mcp", "commands", "subagents", "skills", "permissions"];
@@ -229,11 +241,16 @@ function runRulesync(command: RulesyncCommand, args: string[], cwd: string) {
   });
 }
 
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, Date.now() - startedAt);
+}
+
 export function projectHasGeminiSource(projectRoot: string): boolean {
   return fs.existsSync(path.join(projectRoot, "GEMINI.md")) || fs.existsSync(path.join(projectRoot, ".gemini"));
 }
 
 export function projectRulesyncProjection(options: RulesyncProjectionOptions = {}): RulesyncProjectionResult {
+  const startedAt = Date.now();
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const homeDir = path.resolve(options.homeDir ?? os.homedir());
   const paths = resolveProjectPaths(projectRoot, homeDir);
@@ -261,6 +278,7 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
       backups: backupSession.backups,
       retention: backupSession.retention,
       skippedReason: "Rulesync disabled",
+      timing: { durationMs: elapsedMs(startedAt), features: [] },
     };
   }
 
@@ -268,9 +286,9 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
   if (!command) {
     const skippedReason = "Rulesync is not installed. Install with npm install or npm install -g rulesync.";
     if (mode === "require") {
-      return { status: "error", available: false, promoted, conflicts, backups: backupSession.backups, retention: backupSession.retention, skippedReason };
+      return { status: "error", available: false, promoted, conflicts, backups: backupSession.backups, retention: backupSession.retention, skippedReason, timing: { durationMs: elapsedMs(startedAt), features: [] } };
     }
-    return { status: "skipped", available: false, promoted, conflicts, backups: backupSession.backups, retention: backupSession.retention, skippedReason };
+    return { status: "skipped", available: false, promoted, conflicts, backups: backupSession.backups, retention: backupSession.retention, skippedReason, timing: { durationMs: elapsedMs(startedAt), features: [] } };
   }
 
   if (!projectHasGeminiSource(projectRoot) && !projectHasGeminiSource(homeDir)) {
@@ -283,6 +301,7 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
       backups: backupSession.backups,
       retention: backupSession.retention,
       skippedReason: "No project or global Gemini source found",
+      timing: { durationMs: elapsedMs(startedAt), features: [] },
     };
   }
 
@@ -291,6 +310,7 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
   const stdoutParts: string[] = [];
   const stderrParts: string[] = [];
   const failedFeatures: string[] = [];
+  const featureTimings: RulesyncFeatureTiming[] = [];
 
   for (const feature of features) {
     const args = [
@@ -304,14 +324,19 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
     ];
     if (options.dryRun) args.push("--dry-run");
 
+    const featureStartedAt = Date.now();
     const result = runRulesync(command, args, stageRoot);
+    const featureDurationMs = elapsedMs(featureStartedAt);
     const stdout = result.stdout?.toString() ?? "";
     const stderr = result.stderr?.toString() ?? "";
     if (stdout.trim()) stdoutParts.push(`[${feature}]\n${stdout.trim()}`);
     if (stderr.trim()) stderrParts.push(`[${feature}]\n${stderr.trim()}`);
     if (result.error || result.status !== 0) {
       failedFeatures.push(feature);
+      featureTimings.push({ feature, status: "error", durationMs: featureDurationMs });
       if (result.error?.message) stderrParts.push(`[${feature}]\n${result.error.message}`);
+    } else {
+      featureTimings.push({ feature, status: "success", durationMs: featureDurationMs });
     }
   }
 
@@ -331,6 +356,7 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
       conflicts,
       backups: backupSession.backups,
       retention: backupSession.retention,
+      timing: { durationMs: elapsedMs(startedAt), features: featureTimings },
     };
   }
 
@@ -346,6 +372,7 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
       conflicts,
       backups: backupSession.backups,
       retention: backupSession.retention,
+      timing: { durationMs: elapsedMs(startedAt), features: featureTimings },
     };
   }
 
@@ -373,6 +400,7 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
     conflicts: promotion.conflicts,
     backups: backupSession.backups,
     retention: backupSession.retention,
+    timing: { durationMs: elapsedMs(startedAt), features: featureTimings },
   };
 }
 

@@ -379,12 +379,33 @@ test("unexpected command errors get PATH-specific next actions", () => {
 });
 
 test("check ritual view model highlights projected bridge assets", () => {
-  const model = ritualViewModel("check", passReport());
+  const model = ritualViewModel("check", passReport({
+    timing: {
+      durationMs: 1234,
+      steps: [],
+    },
+    sync: {
+      generatedConfigPath: `${projectRoot}/.opencode/generated/opencode.generated.json`,
+      builtInAgents: 1,
+      extensionAgents: 6,
+      builtInCommands: 2,
+      extensionCommands: 15,
+      skills: 17,
+      tuiFiles: 2,
+      externalIntegrationFiles: 3,
+      rulesyncStatus: "applied",
+      rulesyncPromoted: 0,
+      rulesyncDurationMs: 842,
+      notes: [],
+    },
+  }));
 
   assert.equal(model.title, "OGB check");
   assert.equal(model.statusLabel, "PASS");
   assert.deepEqual(model.metrics.map((metric) => [metric.label, metric.value]), [
     ["automated", "6"],
+    ["duration", "1.2s"],
+    ["rulesync", "842ms"],
     ["skills", "17"],
     ["commands", "17"],
     ["agents", "7"],
@@ -547,10 +568,10 @@ test("update final model surfaces bootstrap tails and useful retry actions", () 
 
 test("update final model surfaces post-update check summary without raw progress JSON", () => {
   const model = ritualViewModel("update", {
-    status: "error",
+    status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: "OGB bootstrap completed, but the post-update check did not finish cleanly: Post-update check failed.",
+    message: "OGB bootstrap completed. Post-update check needs attention: Post-update check failed.",
     postUpdate: {
       status: "fail",
       command: ["ogb", "check", "--force"],
@@ -566,6 +587,8 @@ test("update final model surfaces post-update check summary without raw progress
   });
 
   const text = model.callouts.join("\n");
+  assert.equal(model.statusLabel, "WARN");
+  assert.equal(model.tone, "warn");
   assert.match(text, /Validation falhou: OpenCode resolved config/);
   assert.doesNotMatch(text, /schemaVersion/);
   assert.match(model.next[0], /repair this automatically/);

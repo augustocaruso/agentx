@@ -14,6 +14,7 @@
   },
   "files": [
     "dist/**/*.js",
+    "scripts/**/*.py",
     "telemetry-email-worker/**/*.js",
     "telemetry-email-worker/**/*.example",
     "schemas/**/*.json",
@@ -32,7 +33,9 @@
     "author:snapshot": "uv run --project authoring/ux-profile-author ogb-ux-profile-author",
     "author:test": "uv run --project authoring/ux-profile-author pytest authoring/ux-profile-author/tests",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "lint": "echo add eslint later",
+    "lint": "biome check --formatter-enabled=false .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
     "pack:local": "npm run build && npm pack",
     "typecheck": "tsc --noEmit"
   },
@@ -48,6 +51,7 @@
     "smol-toml": "1.6.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
     "@types/node": "^20.14.0",
     "@types/react": "^19.2.14",
     "tsx": "^4.19.0",
