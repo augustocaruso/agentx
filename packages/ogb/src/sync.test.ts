@@ -17,6 +17,19 @@ function expectedGlobalExpandedInstruction(homeDir: string): string {
   return path.resolve(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")).replace(/\\/g, "/");
 }
 
+function writeFakeOpenCode(binDir: string, output = "OpenCode debug info\nsuperpowers plugin loaded\n"): void {
+  fs.mkdirSync(binDir, { recursive: true });
+  const command = path.join(binDir, "opencode");
+  fs.writeFileSync(command, `#!/usr/bin/env node
+if (process.argv[2] === "debug" && process.argv[3] === "info") {
+  process.stdout.write(${JSON.stringify(output)});
+  process.exit(0);
+}
+process.exit(0);
+`, "utf8");
+  fs.chmodSync(command, 0o755);
+}
+
 test("syncToOpenCode writes bridge-native generated config without Rulesync", () => {
   const projectRoot = tempProject();
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
@@ -494,6 +507,81 @@ test("syncToOpenCode projects Gemini extension skills into OpenCode skills", () 
   assert.match(projectedSkill, new RegExp(path.join(extensionDir, "references", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.doesNotMatch(projectedSkill, /\$\{extensionPath\}/);
   assert.match(projectedGuide, new RegExp(extensionDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("syncToOpenCode prefers validated native Superpowers plugin over managed project skill port", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-bin-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "superpowers");
+  const skillDir = path.join(extensionDir, "skills", "superpowers");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "superpowers" }));
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: superpowers\n---\n# Superpowers\n", "utf8");
+
+  const staleSkillDir = path.join(projectRoot, ".opencode", "skills", "superpowers");
+  const staleSkillText = "---\nname: superpowers\n---\n# Old port\n";
+  fs.mkdirSync(staleSkillDir, { recursive: true });
+  fs.writeFileSync(path.join(staleSkillDir, "SKILL.md"), staleSkillText, "utf8");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), JSON.stringify({
+    version: OGB_VERSION,
+    managedFiles: [
+      {
+        path: ".opencode/skills/superpowers/SKILL.md",
+        sha256: sha256Text(staleSkillText),
+        source: "ogb",
+        kind: "skill",
+        projection: "opencode",
+        origin: skillDir,
+      },
+    ],
+  }, null, 2) + "\n");
+
+  writeFakeOpenCode(binDir);
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const projectConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
+    const nativeReport = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-native-capabilities.json"), "utf8"));
+
+    assert.ok(projectConfig.plugin.includes("superpowers@git+https://github.com/obra/superpowers.git"));
+    assert.equal(fs.existsSync(staleSkillDir), false);
+    assert.ok(report.removedSkills.includes(".opencode/skills/superpowers"));
+    assert.equal(report.projectedSkills.includes(".opencode/skills/superpowers"), false);
+    assert.equal(report.nativeCapabilities.validatedNative.includes("superpowers"), true);
+    assert.deepEqual(nativeReport.suppressedExtensionNames, ["superpowers"]);
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test("syncToOpenCode keeps Superpowers skill port when native plugin smoke fails", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-bin-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "superpowers");
+  const skillDir = path.join(extensionDir, "skills", "superpowers");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "superpowers" }));
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: superpowers\n---\n# Superpowers\n", "utf8");
+
+  writeFakeOpenCode(binDir, "OpenCode debug info\nplugin failed\n");
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const projectConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
+
+    assert.ok(projectConfig.plugin.includes("superpowers@git+https://github.com/obra/superpowers.git"));
+    assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "skills", "superpowers", "SKILL.md")), true);
+    assert.ok(report.projectedSkills.includes(".opencode/skills/superpowers"));
+    assert.equal(report.nativeCapabilities.validatedNative.includes("superpowers"), false);
+    assert.ok(report.warnings.some((warning) => /native.*Superpowers|superpowers/i.test(warning)));
+  } finally {
+    process.env.PATH = previousPath;
+  }
 });
 
 test("syncToOpenCode repairs a legacy global skills file blocking home-mode projection", () => {
@@ -1419,6 +1507,41 @@ test("syncToOpenCode stores sensitive local MCP env literals and projects env re
   if (process.platform !== "win32") assert.equal(storeStat.mode & 0o777, 0o600);
 });
 
+test("syncToOpenCode warns when a sensitive MCP env reference cannot be materialized in the env store", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const fakeNotionToken = "ntn_" + "b".repeat(32);
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    mcpServers: {
+      notion: {
+        command: "npx",
+        args: ["-y", "@notionhq/notion-mcp-server"],
+        env: {
+          OPENAPI_MCP_HEADERS: `{"Authorization":"Bearer ${fakeNotionToken}","Notion-Version":"2022-06-28"}`,
+        },
+      },
+    },
+  }));
+  fs.mkdirSync(path.join(homeDir, ".config"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge"), "file blocking env store dir\n", "utf8");
+
+  const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const projectConfigText = fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8");
+  const projectConfig = JSON.parse(projectConfigText);
+
+  assert.equal(projectConfigText.includes(fakeNotionToken), false);
+  assert.deepEqual(projectConfig.mcp.notion.environment, {
+    OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+  });
+  assert.ok(report.warnings.some((warning) => warning.includes("could not store local MCP env values")));
+  assert.ok(report.warnings.some((warning) =>
+    warning.includes("notion.environment.OPENAPI_MCP_HEADERS")
+    && warning.includes("{env:OPENAPI_MCP_HEADERS}")
+    && warning.includes("missing from the OGB MCP env store")
+  ));
+});
+
 test("syncToOpenCode repairs global OpenCode MCP entries written with Gemini shape", () => {
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
   fs.mkdirSync(path.join(homeDir, ".gemini"), { recursive: true });
@@ -1475,6 +1598,41 @@ test("syncToOpenCode backs up and replaces a stale file blocking the global Open
   const backup = report.backups.find((item) => item.source === configDir);
   assert.ok(backup);
   assert.equal(fs.readFileSync(backup.backup, "utf8"), "stale projected file\n");
+});
+
+test("syncToOpenCode adds native Superpowers plugin to global JSONC config and suppresses global skill port", () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-bin-"));
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "superpowers");
+  const skillDir = path.join(extensionDir, "skills", "superpowers");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "superpowers" }));
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: superpowers\n---\n# Superpowers\n", "utf8");
+  const configDir = path.join(homeDir, ".config", "opencode");
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(path.join(configDir, "opencode.jsonc"), `// keep this comment
+{
+  "plugin": []
+}
+`, "utf8");
+
+  writeFakeOpenCode(binDir);
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    const report = syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+    const configText = fs.readFileSync(path.join(configDir, "opencode.jsonc"), "utf8");
+    const nativeReport = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-native-capabilities.json"), "utf8"));
+
+    assert.match(configText, /keep this comment/);
+    assert.match(configText, /superpowers@git\+https:\/\/github\.com\/obra\/superpowers\.git/);
+    assert.equal(fs.existsSync(path.join(configDir, "skills", "superpowers", "SKILL.md")), false);
+    assert.equal(report.projectedSkills.includes(".config/opencode/skills/superpowers"), false);
+    assert.equal(report.nativeCapabilities.validatedNative.includes("superpowers"), true);
+    assert.deepEqual(nativeReport.suppressedExtensionNames, ["superpowers"]);
+  } finally {
+    process.env.PATH = previousPath;
+  }
 });
 
 test("syncToOpenCode can wire external quota UI and runtime fallback plugins", () => {

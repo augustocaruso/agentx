@@ -15,6 +15,7 @@ export interface ProjectPaths {
   agentSyncAdoptionPath: string;
   bidirectionalSyncPath: string;
   extensionMapPath: string;
+  nativeCapabilitiesPath: string;
   modelRoutingPath: string;
   dashboardPath: string;
   dashboardMarkdownPath: string;
@@ -88,6 +89,7 @@ export function resolveProjectPaths(projectRoot = process.cwd(), homeDir = os.ho
     agentSyncAdoptionPath: path.join(generatedDir, "ogb-agent-sync-adoption.json"),
     bidirectionalSyncPath: path.join(generatedDir, "ogb-bidirectional-sync.json"),
     extensionMapPath: path.join(generatedDir, "ogb-extension-map.json"),
+    nativeCapabilitiesPath: path.join(generatedDir, "ogb-native-capabilities.json"),
     modelRoutingPath: path.join(generatedDir, "ogb-model-routing.json"),
     dashboardPath: path.join(generatedDir, "ogb-dashboard.json"),
     dashboardMarkdownPath: path.join(generatedDir, "ogb-dashboard.md"),

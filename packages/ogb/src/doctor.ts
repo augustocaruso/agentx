@@ -5,9 +5,12 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS } from "./built-ins.js";
 import { commandExists, resolveCommand } from "./command-resolution.js";
 import { buildInventory } from "./inventory.js";
+import { readMcpEnvValues } from "./mcp-env-store.js";
 import { AUTO_FALLBACK_PLUGIN, resolveFallbackConfigPath } from "./external-integrations.js";
 import { sha256File, sha256Text } from "./file-hash.js";
 import { diagnoseOpenCodeMcpConfig } from "./mcp-projection.js";
+import { detectNativeCapabilitySources, summarizeNativeCapabilityReport, type NativeCapabilitySummary } from "./native-capability-resolver.js";
+import { capabilityEntry, pluginPackageName } from "./native-capability-registry.js";
 import { readOgbConfig } from "./ogb-config.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { configReferencesExpandedGemini, projectConfigPath } from "./project-config.js";
@@ -94,6 +97,9 @@ export interface DoctorReport {
     cooldownMs?: number;
     maxRetries?: number;
     logging?: boolean;
+  };
+  nativeCapabilities: NativeCapabilitySummary & {
+    reportExists: boolean;
   };
   modelResolution: {
     checked: boolean;
@@ -254,17 +260,6 @@ function listConfiguredPlugins(projectRoot: string, homeDir: string): string[] {
   return [...new Set(plugins)];
 }
 
-function pluginPackageName(plugin: string): string {
-  const trimmed = plugin.trim();
-  if (trimmed.startsWith("file:")) return trimmed;
-  if (trimmed.startsWith("@")) {
-    const [scope, rest] = trimmed.split("/", 2);
-    const name = rest?.split("@")[0];
-    return name ? `${scope}/${name}` : trimmed;
-  }
-  return trimmed.split("@")[0] || trimmed;
-}
-
 function hasConfiguredPlugin(plugins: string[], expected: string): boolean {
   const expectedName = pluginPackageName(expected);
   return plugins.some((plugin) => pluginPackageName(plugin) === expectedName);
@@ -321,6 +316,13 @@ function modelCandidates(model: string, providerId?: string): string[] {
   return [...new Set(candidates)];
 }
 
+function openCodeModelsTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.OGB_OPENCODE_MODELS_TIMEOUT_MS;
+  const parsed = raw === undefined ? NaN : Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 30_000;
+  return Math.min(120_000, Math.max(1, Math.trunc(parsed)));
+}
+
 function resolveOpenCodeModels(projectRoot: string, homeDir: string, modelRouting: any): DoctorReport["modelResolution"] {
   const referenced = collectReferencedModels(modelRouting);
   if (referenced.length === 0) {
@@ -344,20 +346,28 @@ function resolveOpenCodeModels(projectRoot: string, homeDir: string, modelRoutin
     };
   }
 
+  const timeoutMs = openCodeModelsTimeoutMs();
   const result = spawnCommandSync(command, ["models"], {
     cwd: projectRoot,
     encoding: "utf8",
-    timeout: 30_000,
+    timeout: timeoutMs,
     env: { ...process.env, NO_COLOR: process.env.NO_COLOR ?? "1", OGB_STARTUP_SYNC: "0" },
   });
   if (result.error || result.status !== 0) {
+    const errorCode = typeof (result.error as NodeJS.ErrnoException | undefined)?.code === "string"
+      ? (result.error as NodeJS.ErrnoException).code
+      : "";
+    const errorMessage = result.error?.message ?? "";
+    const timedOut = /ETIMEDOUT|timeout|timed out/i.test(`${errorCode} ${errorMessage}`);
     return {
       checked: false,
       command,
       availableModels: 0,
       referencedModels: referenced.length,
       unresolved: [],
-      message: result.error?.message ?? "opencode models failed; model resolution skipped.",
+      message: timedOut
+        ? `opencode models timed out after ${timeoutMs}ms; model resolution skipped.`
+        : result.error?.message ?? "opencode models failed; model resolution skipped.",
     };
   }
 
@@ -434,6 +444,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   const errors: string[] = [];
   const generatedConfig = readJsonc(paths.generatedOpenCodeConfigPath);
   const extensionMap = readJsonc(paths.extensionMapPath);
+  const nativeCapabilityReport = readJsonc(paths.nativeCapabilitiesPath);
   const modelRouting = readJsonc(paths.modelRoutingPath);
   recoverStaleStartupStatus({
     statusPath: paths.pluginStatusPath,
@@ -498,8 +509,16 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
       : 0,
   };
   const runtimeFallback = readRuntimeFallback(paths.projectRoot, paths.homeDir);
+  const configuredPlugins = listConfiguredPlugins(paths.projectRoot, paths.homeDir);
+  const nativeCapabilities = {
+    ...summarizeNativeCapabilityReport(nativeCapabilityReport, paths.nativeCapabilitiesPath),
+    reportExists: fs.existsSync(paths.nativeCapabilitiesPath),
+  };
   const modelResolution = resolveOpenCodeModels(paths.projectRoot, paths.homeDir, modelRouting);
-  warnings.push(...diagnoseOpenCodeMcpConfig(opencodeConfigObject?.mcp, inv.mcps));
+  warnings.push(...diagnoseOpenCodeMcpConfig(opencodeConfigObject?.mcp, inv.mcps, {
+    storedEnvValues: readMcpEnvValues({ homeDir: paths.homeDir }),
+    processEnv: process.env,
+  }));
   const mcpCommandCheck = inv.mcps.map((mcp) => {
     if (mcp.type !== "stdio") return { name: mcp.name, command: mcp.command, ok: true };
     if (!mcp.command) return { name: mcp.name, command: mcp.command, ok: false, message: "Missing stdio command" };
@@ -587,6 +606,23 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   if (runtimeFallback.configured && !runtimeFallback.pluginActive) warnings.push("opencode-auto-fallback is enabled in OGB config, but the OpenCode plugin is not active; disable externalPlugins.autoFallback or install a compatible plugin version.");
   if (runtimeFallback.configured && !runtimeFallback.configExists) warnings.push(`opencode-auto-fallback config is missing: ${runtimeFallback.configPath}. Run ogb sync.`);
   if (runtimeFallback.configured && runtimeFallback.configEnabled === false) warnings.push("opencode-auto-fallback config exists but is disabled.");
+  const nativeSources = detectNativeCapabilitySources({
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    currentOpenCodePlugins: configuredPlugins,
+  });
+  const hasPluginNativeSource = nativeSources.some((source) => capabilityEntry(source.entityId, "opencode")?.nativeInstall?.kind === "opencode-plugin");
+  if (hasPluginNativeSource && !nativeCapabilities.reportExists) warnings.push("Native capability report is missing. Run ogb sync.");
+  if (nativeCapabilityReport?._generated?.version && nativeCapabilityReport._generated.version !== OGB_VERSION) {
+    warnings.push(`Native capability report was generated by ogb ${nativeCapabilityReport._generated.version}; current ogb is ${OGB_VERSION}. Run ogb sync.`);
+  }
+  for (const decision of Array.isArray(nativeCapabilityReport?.decisions) ? nativeCapabilityReport.decisions : []) {
+    const plugin = decision?.nativeInstall?.kind === "opencode-plugin" ? decision.nativeInstall.plugin : undefined;
+    if ((decision?.action === "install_native" || decision?.action === "use_existing_native") && plugin && !hasConfiguredPlugin(configuredPlugins, plugin)) {
+      warnings.push(`Native capability warning: ${decision.displayName ?? decision.entityId} expects OpenCode plugin ${plugin}, but it is not configured. Run ogb sync.`);
+    }
+  }
+  for (const warning of nativeCapabilities.warnings) warnings.push(`Native capability warning: ${warning}`);
   for (const model of modelResolution.unresolved) warnings.push(`Model resolution warning: ${model} was not found in opencode models.`);
 
   const report: DoctorReport = {
@@ -621,6 +657,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
     startupSync,
     extensionCompatibility,
     runtimeFallback,
+    nativeCapabilities,
     modelResolution,
     mcpCommandCheck,
     counts: {
@@ -656,6 +693,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
     console.log(`Extension commands: ${report.extensionCompatibility.projectedCommands} projected`);
     console.log(`Model routing: ${report.extensionCompatibility.modelRoutingReport ? `${report.extensionCompatibility.modelRoutingDecisions} decision(s), ${report.extensionCompatibility.modelRoutingRouted} routed` : "missing"}`);
     console.log(`Runtime fallback: ${report.runtimeFallback.configured ? `${report.runtimeFallback.pluginActive ? "plugin active" : "plugin missing"}, config ${report.runtimeFallback.configExists ? "present" : "missing"}, ${report.runtimeFallback.agentFallbacks} agent chain(s)` : "disabled"}`);
+    console.log(`Native capabilities: ${report.nativeCapabilities.reportExists ? `${report.nativeCapabilities.validatedNative.length} native, ${report.nativeCapabilities.fallbackCompat.length} fallback` : "missing"}`);
     console.log(`Model resolution: ${report.modelResolution.message}`);
     console.log(`Generated files: ${report.generated.expandedGeminiVersion ?? "missing context"}, ${report.generated.generatedConfigVersion ?? "missing config"}`);
     console.log(`Startup sync: project ${report.startupSync.projectPlugin && report.startupSync.projectConfig ? "installed" : "missing"}, global ${report.startupSync.globalPlugin && report.startupSync.globalConfig ? "installed" : "missing"}${report.startupSync.lastState ? `, last ${report.startupSync.lastState}` : ""}`);

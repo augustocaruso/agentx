@@ -2,6 +2,7 @@ import type { GeminiMcpServer } from "./types.js";
 
 const SENSITIVE_ENV_KEY = /(SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL|AUTH|PRIVATE)/i;
 const ENV_REFERENCE = /^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})$/;
+const OPENCODE_ENV_REFERENCE = /^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$/;
 const HIGH_CONFIDENCE_SECRET_VALUE = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/i,
   /\b(?:sk-|ntn_|ghp_|github_pat_|xox[baprs]-|AIza)[A-Za-z0-9._-]{8,}/i,
@@ -18,6 +19,10 @@ function uniqueWarnings(warnings: string[]): string[] {
 
 export function openCodeEnvReference(name: string): string {
   return `{env:${name}}`;
+}
+
+export function openCodeReferencedEnvName(value: string): string | undefined {
+  return value.trim().match(OPENCODE_ENV_REFERENCE)?.[1];
 }
 
 export function referencedEnvName(value: string): string | undefined {
@@ -138,12 +143,24 @@ export function projectOpenCodeMcpFromGeminiServers(servers: GeminiMcpServer[]):
   return { mcp, warnings: uniqueWarnings(warnings) };
 }
 
-export function diagnoseOpenCodeMcpConfig(rawMcp: unknown, geminiServers: GeminiMcpServer[] = []): string[] {
+export function diagnoseOpenCodeMcpConfig(
+  rawMcp: unknown,
+  geminiServers: GeminiMcpServer[] = [],
+  options: {
+    storedEnvValues?: Record<string, string>;
+    storedEnvKeys?: string[];
+    processEnv?: NodeJS.ProcessEnv;
+  } = {},
+): string[] {
   if (rawMcp === undefined || rawMcp === null) return [];
   if (!isRecord(rawMcp)) return ["OpenCode MCP shape warning: mcp must be an object."];
 
   const warnings: string[] = [];
   const geminiByName = new Map(geminiServers.map((server) => [server.name, server]));
+  const storedEnvKeys = new Set([
+    ...Object.keys(options.storedEnvValues ?? {}),
+    ...(options.storedEnvKeys ?? []),
+  ]);
 
   for (const [name, rawConfig] of Object.entries(rawMcp)) {
     if (!isRecord(rawConfig)) {
@@ -175,6 +192,21 @@ export function diagnoseOpenCodeMcpConfig(rawMcp: unknown, geminiServers: Gemini
       const missing = expected.envKeys.filter((key) => !(key in environment));
       if (missing.length > 0) {
         warnings.push(`OpenCode MCP shape warning: ${name}.environment is missing Gemini env key(s): ${missing.join(", ")}. Run ogb sync.`);
+      }
+    }
+
+    if (expected?.secretEnvKeys && expected.secretEnvKeys.length > 0) {
+      const environment = isRecord(rawConfig.environment) ? rawConfig.environment : {};
+      for (const key of expected.secretEnvKeys) {
+        const value = environment[key];
+        if (typeof value !== "string") continue;
+        const envName = openCodeReferencedEnvName(value);
+        if (!envName) continue;
+        const foundInStore = storedEnvKeys.has(envName);
+        const foundInProcess = options.processEnv?.[envName] !== undefined;
+        if (!foundInStore && !foundInProcess) {
+          warnings.push(`OpenCode MCP environment warning: ${name}.environment.${key} references ${openCodeEnvReference(envName)}, but ${envName} is missing from the OGB MCP env store and current process environment. Run ogb sync from the Gemini MCP source with the literal present, or set ${envName} before launching OpenCode.`);
+        }
       }
     }
   }

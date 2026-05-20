@@ -14,8 +14,8 @@ import {
 } from "./extension-projection.js";
 import { externalOpenCodePlugins, externalTuiPlugins, projectExternalIntegrations } from "./external-integrations.js";
 import { buildInventory } from "./inventory.js";
-import { syncMcpEnvStore } from "./mcp-env-store.js";
-import { projectOpenCodeMcpFromGeminiServers } from "./mcp-projection.js";
+import { readMcpEnvValues, syncMcpEnvStore } from "./mcp-env-store.js";
+import { diagnoseOpenCodeMcpConfig, projectOpenCodeMcpFromGeminiServers } from "./mcp-projection.js";
 import {
   defaultOpenCodeAgent,
   normalizeOpenCodeModelId,
@@ -27,6 +27,15 @@ import {
   type ResolvedAgentFallback,
 } from "./ogb-config.js";
 import { createModelRoutingContext, writeModelRoutingReport, type ModelRoutingDecision } from "./model-routing.js";
+import {
+  createOpenCodeNativeSmoke,
+  detectNativeCapabilitySources,
+  resolveNativeCapabilities,
+  summarizeNativeCapabilityReport,
+  type NativeCapabilityReport,
+  type NativeCapabilitySummary,
+} from "./native-capability-resolver.js";
+import { entityIdFromGeminiExtensionName, entityIdFromSkillName, pluginPackageName } from "./native-capability-registry.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import { ensureProjectConfig } from "./project-config.js";
 import { projectRulesyncProjection, type RulesyncMode, type RulesyncProjectionResult } from "./rulesync.js";
@@ -72,6 +81,7 @@ export interface SyncReport {
   projectedTuiFiles: string[];
   projectedExternalPlugins: string[];
   projectedExternalIntegrationFiles: string[];
+  nativeCapabilities: NativeCapabilitySummary;
   rulesync: RulesyncProjectionResult;
   backups: BackupRecord[];
   notes: string[];
@@ -93,15 +103,31 @@ function generatedOpenCodeConfig(projectRoot: string, homeDir?: string) {
       mcp: projectedMcp.mcp,
     },
     warnings: projectedMcp.warnings,
+    mcps: projectedMcp.mcps,
   };
 }
 
 function openCodeMcpFromInventory(projectRoot: string, homeDir?: string): {
   mcp: Record<string, unknown>;
+  mcps: GeminiMcpServer[];
   warnings: string[];
 } {
   const inv = buildInventory({ projectRoot, homeDir });
-  return projectOpenCodeMcpFromGeminiServers(inv.mcps);
+  const projected = projectOpenCodeMcpFromGeminiServers(inv.mcps);
+  return { ...projected, mcps: inv.mcps };
+}
+
+function openCodeMcpEnvReferenceWarnings(options: {
+  mcp: Record<string, unknown>;
+  mcps: GeminiMcpServer[];
+  homeDir: string;
+  storedEnvKeys: string[];
+}): string[] {
+  return diagnoseOpenCodeMcpConfig(options.mcp, options.mcps, {
+    storedEnvValues: readMcpEnvValues({ homeDir: options.homeDir }),
+    storedEnvKeys: options.storedEnvKeys,
+    processEnv: process.env,
+  }).filter((warning) => warning.startsWith("OpenCode MCP environment warning:"));
 }
 
 function expandedContentBody(content: string): string {
@@ -496,6 +522,72 @@ function readJson(filePath: string): any {
   } catch {
     return undefined;
   }
+}
+
+function readJsoncObject(filePath: string): any {
+  try {
+    return parseJsonc(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return undefined;
+  }
+}
+
+function pluginSpecsFromConfig(filePath: string): string[] {
+  const config = readJsoncObject(filePath);
+  const plugins = Array.isArray(config?.plugin) ? config.plugin : [];
+  return plugins.filter((plugin: unknown): plugin is string => typeof plugin === "string" && plugin.trim().length > 0);
+}
+
+function mergePluginSpecsByPackage(...groups: Array<string[] | undefined>): string[] {
+  const byPackage = new Map<string, string>();
+  for (const plugin of groups.flatMap((group) => group ?? [])) {
+    const trimmed = plugin.trim();
+    if (!trimmed) continue;
+    const packageName = pluginPackageName(trimmed);
+    if (!byPackage.has(packageName)) byPackage.set(packageName, trimmed);
+  }
+  return [...byPackage.values()];
+}
+
+function nativeCapabilitiesReportStatePath(paths: ReturnType<typeof resolveProjectPaths>): string {
+  return paths.homeMode
+    ? ".config/opencode-gemini-bridge/generated/ogb-native-capabilities.json"
+    : ".opencode/generated/ogb-native-capabilities.json";
+}
+
+function writeNativeCapabilitiesReport(options: {
+  paths: ReturnType<typeof resolveProjectPaths>;
+  report: NativeCapabilityReport;
+  dryRun?: boolean;
+}): NativeCapabilitySummary {
+  const summary = summarizeNativeCapabilityReport(options.report, nativeCapabilitiesReportStatePath(options.paths));
+  if (options.dryRun) return summary;
+  const content = `${JSON.stringify(options.report, null, 2)}\n`;
+  fs.mkdirSync(path.dirname(options.paths.nativeCapabilitiesPath), { recursive: true });
+  fs.writeFileSync(options.paths.nativeCapabilitiesPath, content, "utf8");
+  const state = readSyncState(options.paths.projectRoot, options.paths.homeMode ? options.paths.homeDir : undefined) ?? emptySyncState(OGB_VERSION);
+  upsertManagedFile(state, {
+    path: nativeCapabilitiesReportStatePath(options.paths),
+    sha256: sha256Text(content),
+    source: "ogb",
+    kind: "config",
+  });
+  writeSyncState(state, options.paths.projectRoot, options.paths.homeMode ? options.paths.homeDir : undefined);
+  return summary;
+}
+
+function shouldSuppressNativeSkill(options: {
+  extensionName?: string;
+  skillName: string;
+  suppressedExtensionNames: Set<string>;
+  suppressedSkillNames: Set<string>;
+}): boolean {
+  if (options.extensionName && options.suppressedExtensionNames.has(options.extensionName)) return true;
+  const extensionEntity = options.extensionName ? entityIdFromGeminiExtensionName(options.extensionName) : undefined;
+  if (extensionEntity && options.suppressedSkillNames.has(extensionEntity)) return true;
+  if (options.suppressedSkillNames.has(options.skillName)) return true;
+  const skillEntity = entityIdFromSkillName(options.skillName);
+  return Boolean(skillEntity && options.suppressedSkillNames.has(skillEntity));
 }
 
 function stableJson(value: unknown): string {
@@ -1240,6 +1332,7 @@ function ensureGlobalOpenCodeConfig(options: {
   globalRoot: string;
   expandedPath?: string;
   mcp?: Record<string, unknown>;
+  plugins?: string[];
   state: ReturnType<typeof emptySyncState>;
   backupSession: BackupSession;
   dryRun?: boolean;
@@ -1250,6 +1343,7 @@ function ensureGlobalOpenCodeConfig(options: {
   const expandedInstruction = options.expandedPath ? globalExpandedInstructionRef(options.globalRoot, options.expandedPath) : undefined;
   const mcp = options.mcp ?? {};
   const mcpServers = Object.keys(mcp).sort();
+  const desiredPlugins = mergePluginSpecsByPackage(options.plugins);
 
   if (!fs.existsSync(configPath)) {
     const contentObject: Record<string, unknown> = {
@@ -1257,6 +1351,7 @@ function ensureGlobalOpenCodeConfig(options: {
     };
     if (expandedInstruction) contentObject.instructions = [expandedInstruction];
     if (mcpServers.length > 0) contentObject.mcp = mcp;
+    if (desiredPlugins.length > 0) contentObject.plugin = desiredPlugins;
     const content = `${JSON.stringify(contentObject, null, 2)}\n`;
     if (options.dryRun) return { promoted: relPath, mcpServers };
     const repairWarning = repairNonDirectoryPathBlockers({
@@ -1302,10 +1397,19 @@ function ensureGlobalOpenCodeConfig(options: {
   }
   const currentMcp = isRecord(rawMcp) ? rawMcp : {};
   const nextMcp = mcpServers.length > 0 ? { ...currentMcp, ...mcp } : currentMcp;
+  const rawPlugins = (parsed as Record<string, unknown>).plugin;
+  if (desiredPlugins.length > 0 && rawPlugins !== undefined && !Array.isArray(rawPlugins) && !options.force) {
+    return { mcpServers: [], warning: `Global OpenCode config conflict: ${relPath} has a non-array plugin field; leaving it unchanged` };
+  }
+  const currentPlugins = Array.isArray(rawPlugins)
+    ? rawPlugins.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+  const nextPlugins = desiredPlugins.length > 0 ? mergePluginSpecsByPackage(currentPlugins, desiredPlugins) : currentPlugins;
   const instructionsChanged = expandedInstruction !== undefined && JSON.stringify(nextInstructions) !== JSON.stringify(currentInstructions);
   const mcpChanged = mcpServers.length > 0 && JSON.stringify(nextMcp) !== JSON.stringify(currentMcp);
+  const pluginsChanged = desiredPlugins.length > 0 && JSON.stringify(nextPlugins) !== JSON.stringify(currentPlugins);
 
-  if (!instructionsChanged && !mcpChanged) {
+  if (!instructionsChanged && !mcpChanged && !pluginsChanged) {
     upsertManagedFile(options.state, {
       path: relPath,
       sha256: sha256Text(currentText),
@@ -1325,6 +1429,9 @@ function ensureGlobalOpenCodeConfig(options: {
   }
   if (mcpChanged) {
     nextText = applyEdits(nextText, modifyJsonc(nextText, ["mcp"], nextMcp, { formattingOptions }));
+  }
+  if (pluginsChanged) {
+    nextText = applyEdits(nextText, modifyJsonc(nextText, ["plugin"], nextPlugins, { formattingOptions }));
   }
   if (options.dryRun) return { promoted: relPath, mcpServers };
 
@@ -2318,6 +2425,8 @@ function projectGlobalGeminiSkills(options: {
   homeDir: string;
   state: ReturnType<typeof emptySyncState>;
   backupSession: BackupSession;
+  suppressedExtensionNames?: Set<string>;
+  suppressedSkillNames?: Set<string>;
   dryRun?: boolean;
   force?: boolean;
 }): ProjectSkillDirsResult {
@@ -2325,8 +2434,11 @@ function projectGlobalGeminiSkills(options: {
   const promoted: string[] = [];
   const keepSkillFiles = new Set<string>();
   const used = new Set<string>();
+  const suppressedExtensionNames = options.suppressedExtensionNames ?? new Set<string>();
+  const suppressedSkillNames = options.suppressedSkillNames ?? new Set<string>();
 
   for (const skill of listGeminiGlobalSkillDirs(options.homeDir)) {
+    if (shouldSuppressNativeSkill({ skillName: skill.skillName, suppressedExtensionNames, suppressedSkillNames })) continue;
     const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
     used.add(targetName);
     keepSkillFiles.add(`${globalOpenCodeRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
@@ -2349,6 +2461,7 @@ function projectGlobalGeminiSkills(options: {
   }
 
   for (const skill of listGeminiExtensionSkillDirs(options.homeDir)) {
+    if (shouldSuppressNativeSkill({ extensionName: skill.extensionName, skillName: skill.skillName, suppressedExtensionNames, suppressedSkillNames })) continue;
     const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
     used.add(targetName);
     keepSkillFiles.add(`${globalOpenCodeRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
@@ -2751,7 +2864,15 @@ function hasOnlyOptionalYoloPermissionDrift(file: BuiltInTextFile, currentText: 
   return normalizeYoloOptionalPermissions(currentText) === normalizeYoloOptionalPermissions(file.content);
 }
 
-function projectExtensionSkills(options: { projectRoot: string; homeDir: string; backupSession: BackupSession; dryRun?: boolean; force?: boolean }): ProjectSkillDirsResult {
+function projectExtensionSkills(options: {
+  projectRoot: string;
+  homeDir: string;
+  backupSession: BackupSession;
+  suppressedExtensionNames?: Set<string>;
+  suppressedSkillNames?: Set<string>;
+  dryRun?: boolean;
+  force?: boolean;
+}): ProjectSkillDirsResult {
   const extensionSkills = listGeminiExtensionSkillDirs(options.homeDir);
   const warnings: string[] = [];
   const promoted: string[] = [];
@@ -2760,8 +2881,11 @@ function projectExtensionSkills(options: { projectRoot: string; homeDir: string;
   const state = readSyncState(options.projectRoot) ?? emptySyncState(OGB_VERSION);
   const globalState = readSyncState(options.homeDir, options.homeDir) ?? emptySyncState(OGB_VERSION);
   let globalStateTouched = false;
+  const suppressedExtensionNames = options.suppressedExtensionNames ?? new Set<string>();
+  const suppressedSkillNames = options.suppressedSkillNames ?? new Set<string>();
 
   for (const skill of extensionSkills) {
+    if (shouldSuppressNativeSkill({ extensionName: skill.extensionName, skillName: skill.skillName, suppressedExtensionNames, suppressedSkillNames })) continue;
     const targetName = safeSkillTargetName(skill.skillName, used, skill.extensionName);
     used.add(targetName);
     const sourceBaseDir = path.dirname(path.dirname(skill.sourceDir));
@@ -2998,19 +3122,56 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
 
   const globalMcp = openCodeMcpFromInventory(paths.homeDir, paths.homeDir);
   warnings.push(...globalMcp.warnings);
+  warnings.push(...openCodeMcpEnvReferenceWarnings({
+    mcp: globalMcp.mcp,
+    mcps: globalMcp.mcps,
+    homeDir: paths.homeDir,
+    storedEnvKeys: options.dryRun ? mcpEnvStore.stored : [],
+  }));
   const hasGlobalMcp = Object.keys(globalMcp.mcp).length > 0;
-  const projectedConfig = projectedContext.expanded || hasGlobalMcp
+  const nativeSources = detectNativeCapabilitySources({
+    projectRoot: paths.homeDir,
+    homeDir: paths.homeDir,
+    currentOpenCodePlugins: pluginSpecsFromConfig(globalConfigPath(globalRoot)),
+  });
+  const plannedNativeCapabilities = resolveNativeCapabilities({
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    target: "opencode",
+    sources: nativeSources,
+    currentOpenCodePlugins: pluginSpecsFromConfig(globalConfigPath(globalRoot)),
+    availableMcpServers: Object.keys(globalMcp.mcp),
+  });
+  const hasNativePlugins = plannedNativeCapabilities.openCodePlugins.length > 0;
+  const projectedConfig = projectedContext.expanded || hasGlobalMcp || hasNativePlugins
     ? ensureGlobalOpenCodeConfig({
         state,
         globalRoot,
         expandedPath: projectedContext.expanded ? paths.expandedGeminiPath : undefined,
         mcp: globalMcp.mcp,
+        plugins: plannedNativeCapabilities.openCodePlugins,
         backupSession,
         dryRun: options.dryRun,
         force: options.force,
       })
     : { mcpServers: [] };
   if (projectedConfig.warning) warnings.push(projectedConfig.warning);
+  const nativeCapabilitiesReport = resolveNativeCapabilities({
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    target: "opencode",
+    sources: nativeSources,
+    currentOpenCodePlugins: options.dryRun
+      ? mergePluginSpecsByPackage(pluginSpecsFromConfig(globalConfigPath(globalRoot)), plannedNativeCapabilities.openCodePlugins)
+      : pluginSpecsFromConfig(globalConfigPath(globalRoot)),
+    availableMcpServers: Object.keys(globalMcp.mcp),
+    smoke: options.dryRun
+      ? undefined
+      : createOpenCodeNativeSmoke({ projectRoot: paths.projectRoot, homeDir: paths.homeDir }),
+  });
+  warnings.push(...nativeCapabilitiesReport.warnings);
+  const nativeSuppressedExtensionNames = new Set(nativeCapabilitiesReport.suppressedExtensionNames);
+  const nativeSuppressedSkillNames = new Set(nativeCapabilitiesReport.suppressedSkillNames);
 
   const projectedCommands = projectGlobalGeminiCommands({
     homeDir: paths.homeDir,
@@ -3103,6 +3264,8 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     homeDir: paths.homeDir,
     state,
     backupSession,
+    suppressedExtensionNames: nativeSuppressedExtensionNames,
+    suppressedSkillNames: nativeSuppressedSkillNames,
     dryRun: options.dryRun,
     force: options.force,
   });
@@ -3184,6 +3347,11 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     };
     writeSyncState(state, paths.projectRoot, paths.homeDir);
   }
+  const nativeCapabilities = writeNativeCapabilitiesReport({
+    paths,
+    report: nativeCapabilitiesReport,
+    dryRun: options.dryRun,
+  });
 
   const report: SyncReport = {
     version: OGB_VERSION,
@@ -3208,6 +3376,7 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     projectedTuiFiles: [],
     projectedExternalPlugins: [],
     projectedExternalIntegrationFiles: [],
+    nativeCapabilities,
     rulesync,
     backups: backupSession.backups,
     notes: [...new Set([
@@ -3284,6 +3453,26 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
   const generated = generatedResult.config;
   const mcp = generated.mcp as Record<string, unknown>;
   const warnings: string[] = [...mcpEnvStore.warnings, ...generatedResult.warnings];
+  warnings.push(...openCodeMcpEnvReferenceWarnings({
+    mcp,
+    mcps: generatedResult.mcps,
+    homeDir: paths.homeDir,
+    storedEnvKeys: options.dryRun ? mcpEnvStore.stored : [],
+  }));
+  const nativeSources = detectNativeCapabilitySources({
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    currentOpenCodePlugins: mergePluginSpecsByPackage(pluginSpecsFromConfig(path.join(paths.projectRoot, "opencode.jsonc")), openCodePlugins),
+  });
+  const plannedNativeCapabilities = resolveNativeCapabilities({
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    target: "opencode",
+    sources: nativeSources,
+    currentOpenCodePlugins: mergePluginSpecsByPackage(pluginSpecsFromConfig(path.join(paths.projectRoot, "opencode.jsonc")), openCodePlugins),
+    availableMcpServers: Object.keys(mcp),
+  });
+  const desiredOpenCodePlugins = mergePluginSpecsByPackage(openCodePlugins, plannedNativeCapabilities.openCodePlugins);
   let projectConfigBackups: BackupRecord[] = [];
   let projectConfigRetentionWarnings: string[] = [];
 
@@ -3306,18 +3495,37 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
       homeDir: paths.homeDir,
       force: options.force,
       mcp,
-      plugins: openCodePlugins,
+      plugins: desiredOpenCodePlugins,
       defaultAgent: defaultOpenCodeAgent(ogbConfig),
     });
     projectConfigBackups = configResult.backups ?? [];
     projectConfigRetentionWarnings = configResult.retention?.warnings ?? [];
     if (configResult.status === "conflict") warnings.push(configResult.message ?? "opencode.jsonc conflict");
   }
+  const effectiveOpenCodePlugins = options.dryRun
+    ? desiredOpenCodePlugins
+    : pluginSpecsFromConfig(path.join(paths.projectRoot, "opencode.jsonc"));
+  const nativeCapabilitiesReport = resolveNativeCapabilities({
+    projectRoot: paths.projectRoot,
+    homeDir: paths.homeDir,
+    target: "opencode",
+    sources: nativeSources,
+    currentOpenCodePlugins: effectiveOpenCodePlugins,
+    availableMcpServers: Object.keys(mcp),
+    smoke: options.dryRun
+      ? undefined
+      : createOpenCodeNativeSmoke({ projectRoot: paths.projectRoot, homeDir: paths.homeDir }),
+  });
+  warnings.push(...nativeCapabilitiesReport.warnings);
+  const nativeSuppressedExtensionNames = new Set(nativeCapabilitiesReport.suppressedExtensionNames);
+  const nativeSuppressedSkillNames = new Set(nativeCapabilitiesReport.suppressedSkillNames);
 
   const projectedSkills = projectExtensionSkills({
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
     backupSession,
+    suppressedExtensionNames: nativeSuppressedExtensionNames,
+    suppressedSkillNames: nativeSuppressedSkillNames,
     dryRun: options.dryRun,
     force: options.force,
   });
@@ -3425,6 +3633,11 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     backupSession,
   });
   warnings.push(...projectedExternalIntegrations.warnings);
+  const nativeCapabilities = writeNativeCapabilitiesReport({
+    paths,
+    report: nativeCapabilitiesReport,
+    dryRun: options.dryRun,
+  });
 
   const report: SyncReport = {
     version: OGB_VERSION,
@@ -3455,6 +3668,7 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     projectedExternalIntegrationFiles: projectedExternalIntegrations.writes
       .filter((item) => item.status === "created" || item.status === "updated" || item.status === "preview")
       .map((item) => item.relPath),
+    nativeCapabilities,
     rulesync,
     backups: [
       ...projectConfigBackups,

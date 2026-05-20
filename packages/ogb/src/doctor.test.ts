@@ -13,6 +13,14 @@ function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-doctor-"));
 }
 
+function writeFakeOpenCode(binDir: string, body: string): string {
+  fs.mkdirSync(binDir, { recursive: true });
+  const command = path.join(binDir, "opencode");
+  fs.writeFileSync(command, `#!/usr/bin/env node\n${body}\n`, "utf8");
+  fs.chmodSync(command, 0o755);
+  return command;
+}
+
 test("runDoctor prints one warning line for duplicate skill names", () => {
   const projectRoot = tempRoot();
   const homeDir = tempRoot();
@@ -63,6 +71,44 @@ test("runDoctor counts OpenCode skills without double-counting Gemini sources in
 
   assert.equal(report.counts.skills.ok, 2);
   assert.equal(report.warnings.some((warning) => warning.includes("legacy-home-project")), false);
+});
+
+test("runDoctor honors the OpenCode model lookup timeout environment", () => {
+  const projectRoot = tempRoot();
+  const homeDir = tempRoot();
+  const binDir = path.join(tempRoot(), "bin");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-model-routing.json"), JSON.stringify({
+    decisions: [
+      {
+        chain: [
+          { providerId: "openai", model: "gpt-slow" },
+        ],
+      },
+    ],
+  }, null, 2), "utf8");
+  writeFakeOpenCode(binDir, `
+    if (process.argv[2] === "models") {
+      setTimeout(() => {
+        console.log("openai/gpt-slow");
+      }, 250);
+    }
+  `);
+  const previousPath = process.env.PATH;
+  const previousTimeout = process.env.OGB_OPENCODE_MODELS_TIMEOUT_MS;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  process.env.OGB_OPENCODE_MODELS_TIMEOUT_MS = "1";
+  try {
+    const report = runDoctor({ projectRoot, homeDir, silent: true });
+
+    assert.equal(report.modelResolution.checked, false);
+    assert.equal(report.modelResolution.referencedModels, 1);
+    assert.match(report.modelResolution.message, /timed out|ETIMEDOUT|timeout/i);
+  } finally {
+    process.env.PATH = previousPath;
+    if (previousTimeout === undefined) delete process.env.OGB_OPENCODE_MODELS_TIMEOUT_MS;
+    else process.env.OGB_OPENCODE_MODELS_TIMEOUT_MS = previousTimeout;
+  }
 });
 
 test("runDoctor matches OpenCode plugins by package name across versions", () => {
@@ -128,6 +174,37 @@ test("runDoctor treats the global extension map as review inventory, not permane
   assert.equal(report.extensionCompatibility.hooks, 1);
   assert.equal(report.warnings.some((warning) => warning.startsWith("Extension needs review:")), false);
   assert.equal(report.warnings.some((warning) => warning.includes("Missing gemini-extension.json")), false);
+});
+
+test("runDoctor reports native capability decisions from sync", () => {
+  const projectRoot = tempRoot();
+  const homeDir = tempRoot();
+  const binDir = path.join(tempRoot(), "bin");
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "superpowers");
+  const skillDir = path.join(extensionDir, "skills", "superpowers");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "superpowers" }), "utf8");
+  fs.writeFileSync(path.join(skillDir, "SKILL.md"), "---\nname: superpowers\n---\n# Superpowers\n", "utf8");
+  writeFakeOpenCode(binDir, `
+    if (process.argv[2] === "debug" && process.argv[3] === "info") {
+      console.log("superpowers plugin loaded");
+      process.exit(0);
+    }
+  `);
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const report = runDoctor({ projectRoot, homeDir, silent: true });
+
+    assert.equal(report.nativeCapabilities.reportExists, true);
+    assert.equal(report.nativeCapabilities.validatedNative.includes("superpowers"), true);
+    assert.equal(report.nativeCapabilities.fallbackCompat.includes("superpowers"), false);
+    assert.equal(report.warnings.some((warning) => /Native capability.*missing/i.test(warning)), false);
+  } finally {
+    process.env.PATH = previousPath;
+  }
 });
 
 test("runDoctor recovers stale global startup sync status when project root is home", () => {
@@ -270,4 +347,49 @@ test("runDoctor reports OpenCode MCP entries written with Gemini shape", () => {
   assert.ok(report.warnings.some((warning) => warning.includes("notion.command must be an array")));
   assert.ok(report.warnings.some((warning) => warning.includes("notion.type is missing")));
   assert.ok(report.warnings.some((warning) => warning.includes("notion.environment is missing Gemini env key(s): OPENAPI_MCP_HEADERS")));
+});
+
+test("runDoctor reports sensitive OpenCode MCP env references missing from the OGB env store", () => {
+  const projectRoot = tempRoot();
+  const homeDir = tempRoot();
+  const fakeNotionToken = "ntn_" + "c".repeat(32);
+  const originalHeaders = process.env.OPENAPI_MCP_HEADERS;
+  delete process.env.OPENAPI_MCP_HEADERS;
+  try {
+    fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+    fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+      mcpServers: {
+        notion: {
+          command: "npx",
+          args: ["-y", "@notionhq/notion-mcp-server"],
+          env: {
+            OPENAPI_MCP_HEADERS: `{"Authorization":"Bearer ${fakeNotionToken}","Notion-Version":"2022-06-28"}`,
+          },
+        },
+      },
+    }, null, 2), "utf8");
+    fs.writeFileSync(path.join(projectRoot, "opencode.jsonc"), JSON.stringify({
+      mcp: {
+        notion: {
+          type: "local",
+          command: ["npx", "-y", "@notionhq/notion-mcp-server"],
+          enabled: true,
+          environment: {
+            OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+          },
+        },
+      },
+    }, null, 2), "utf8");
+
+    const report = runDoctor({ projectRoot, homeDir, silent: true });
+
+    assert.ok(report.warnings.some((warning) =>
+      warning.includes("notion.environment.OPENAPI_MCP_HEADERS")
+      && warning.includes("missing from the OGB MCP env store")
+    ));
+    assert.equal(JSON.stringify(report).includes(fakeNotionToken), false);
+  } finally {
+    if (originalHeaders === undefined) delete process.env.OPENAPI_MCP_HEADERS;
+    else process.env.OPENAPI_MCP_HEADERS = originalHeaders;
+  }
 });

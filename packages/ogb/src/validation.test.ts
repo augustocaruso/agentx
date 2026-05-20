@@ -35,6 +35,62 @@ test("runValidation repairs a stale file blocking the global OpenCode config dir
   }
 });
 
+test("runValidation can reuse a doctor report already produced by pass", () => {
+  const homeDir = tempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-validation-project-"));
+  const originalPath = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    const report = runValidation({
+      projectRoot,
+      homeDir,
+      silent: true,
+      doctorReport: {
+        warnings: ["precomputed doctor warning"],
+        errors: [],
+      },
+    });
+    const doctorCheck = report.checks.find((check) => check.name === "ogb doctor");
+    const details = doctorCheck?.details as { warnings?: string[] } | undefined;
+
+    assert.equal(doctorCheck?.status, "warn");
+    assert.deepEqual(details?.warnings, ["precomputed doctor warning"]);
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
+test("runValidation can skip the expensive OpenCode debug probe inside pass", () => {
+  const homeDir = tempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-validation-project-"));
+  const binDir = path.join(homeDir, "bin");
+  const marker = path.join(homeDir, "debug-invoked");
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, "opencode"), `#!/usr/bin/env sh\necho debug-called > "${marker}"\nexit 7\n`, { mode: 0o755 });
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ""}`;
+  try {
+    const report = runValidation({
+      projectRoot,
+      homeDir,
+      silent: true,
+      doctorReport: {
+        warnings: [],
+        errors: [],
+      },
+      skipOpenCodeDebugConfig: true,
+    });
+    const debugCheck = report.checks.find((check) => check.name === "OpenCode resolved config");
+
+    assert.equal(debugCheck?.status, "skip");
+    assert.match(debugCheck?.message ?? "", /already validated the managed OpenCode files/i);
+    assert.equal(fs.existsSync(marker), false);
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
 test("runValidation repairs the exact OpenCode mkdir EEXIST path and retries debug config", () => {
   const homeDir = tempHome();
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-validation-project-"));

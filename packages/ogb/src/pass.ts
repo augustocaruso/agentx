@@ -698,7 +698,14 @@ export function runPass(options: PassOptions = {}): PassReport {
     const validationStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "validate", "running");
     try {
-      validation = runValidation({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true, windows: options.windows });
+      validation = runValidation({
+        projectRoot: paths.projectRoot,
+        homeDir: paths.homeDir,
+        silent: true,
+        windows: options.windows,
+        doctorReport: doctor,
+        skipOpenCodeDebugConfig: true,
+      });
     } catch (error) {
       emitCheckProgress(options.onProgress, "validate", "fail", error instanceof Error ? error.message : String(error));
       throw error;

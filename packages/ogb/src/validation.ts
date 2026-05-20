@@ -6,7 +6,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession } from "./backup-policy.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
-import { runDoctor } from "./doctor.js";
+import { runDoctor, type DoctorReport } from "./doctor.js";
 import { diagnoseOpenCodeMcpConfig } from "./mcp-projection.js";
 import { runNativeCommand, type NativeCommandResult } from "./native-runner.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
@@ -24,6 +24,8 @@ export interface ValidationOptions {
   windows?: boolean;
   opencodeRun?: boolean;
   silent?: boolean;
+  doctorReport?: Pick<DoctorReport, "warnings" | "errors">;
+  skipOpenCodeDebugConfig?: boolean;
 }
 
 export interface ValidationCheck {
@@ -321,8 +323,16 @@ function validateHomeGlobalFiles(paths: ReturnType<typeof resolveProjectPaths>, 
   });
 }
 
-function validateOpenCodeDebugConfig(paths: ReturnType<typeof resolveProjectPaths>, checks: ValidationCheck[]): void {
+function validateOpenCodeDebugConfig(paths: ReturnType<typeof resolveProjectPaths>, checks: ValidationCheck[], options: { skip?: boolean } = {}): void {
   const { projectRoot, homeDir, homeMode } = paths;
+  if (options.skip) {
+    checks.push({
+      name: "OpenCode resolved config",
+      status: "skip",
+      message: "Skipped opencode debug config because this pass already validated the managed OpenCode files directly.",
+    });
+    return;
+  }
   const opencode = resolveCommand("opencode", { homeDir });
   if (!opencode) {
     checks.push({ name: "OpenCode resolved config", status: "skip", message: "opencode is not on PATH." });
@@ -648,7 +658,7 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   const checks: ValidationCheck[] = [];
   repairGlobalOpenCodeConfigDir(paths, checks);
-  const doctor = runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true });
+  const doctor = options.doctorReport ?? runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true });
 
   checks.push({
     name: "ogb doctor",
@@ -664,7 +674,15 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
   addToolCheck(checks, "node", ["--version"], paths.projectRoot, paths.homeDir);
   addToolCheck(checks, "npm", ["--version"], paths.projectRoot, paths.homeDir);
   addToolCheck(checks, "gemini", ["--version"], paths.projectRoot, paths.homeDir);
-  addToolCheck(checks, "opencode", ["--version"], paths.projectRoot, paths.homeDir);
+  if (options.skipOpenCodeDebugConfig) {
+    checks.push({
+      name: "opencode executable",
+      status: "skip",
+      message: "Skipped opencode command probe because this pass already validated the managed OpenCode files directly.",
+    });
+  } else {
+    addToolCheck(checks, "opencode", ["--version"], paths.projectRoot, paths.homeDir);
+  }
   validateOgbGlobal(checks, paths.projectRoot, paths.homeDir);
 
   if (paths.homeMode) {
@@ -680,7 +698,7 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
     });
   }
 
-  validateOpenCodeDebugConfig(paths, checks);
+  validateOpenCodeDebugConfig(paths, checks, { skip: options.skipOpenCodeDebugConfig });
   validateReleaseBootstrap(paths.projectRoot, checks);
   if (options.windows) validateWindowsInstaller(paths.projectRoot, checks);
   if (options.opencodeRun) validateOptionalOpenCodeRun(paths.projectRoot, paths.homeDir, checks);

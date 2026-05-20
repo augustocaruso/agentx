@@ -24,8 +24,30 @@ function converterScriptPath(): string {
   return path.resolve(here, "..", "scripts", "gemini_antigravity_converter.py");
 }
 
-function pythonCommand(): string {
-  return process.env.OGB_PYTHON_BIN || "python3";
+function pythonCommands(): string[] {
+  return process.env.OGB_PYTHON_BIN ? [process.env.OGB_PYTHON_BIN] : ["python3", "python"];
+}
+
+function converterEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  if (process.platform === "win32") return env;
+  const currentPath = env.PATH ?? "";
+  const parts = currentPath.split(path.delimiter).filter(Boolean);
+  for (const fallback of ["/usr/local/bin", "/usr/bin", "/bin"]) {
+    if (!parts.includes(fallback)) parts.push(fallback);
+  }
+  env.PATH = parts.join(path.delimiter);
+  return env;
+}
+
+function resolvePythonCommand(command: string): string | undefined {
+  if (process.platform === "win32") return command;
+  if (path.isAbsolute(command) || command.includes("/")) return fs.existsSync(command) ? command : undefined;
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter).filter(Boolean)) {
+    const candidate = path.join(dir, command);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return undefined;
 }
 
 function parseConverterOutput(stdout: string): AntigravityCommandSkill {
@@ -61,16 +83,26 @@ export function convertGeminiCommandToAntigravitySkill(input: AntigravityCommand
   if (input.extensionName) args.push("--extension-name", input.extensionName);
   if (input.extensionDir) args.push("--extension-dir", input.extensionDir);
 
-  const result = spawnCommandSync(pythonCommand(), args, {
-    cwd: path.dirname(script),
-    env: process.env,
-    encoding: "utf8",
-    timeout: 30_000,
-    maxBuffer: 1024 * 1024,
-  });
-  if (result.error || result.status !== 0) {
-    const detail = String(result.stderr || result.error?.message || "unknown converter failure").trim();
-    throw new Error(`Antigravity converter failed: ${detail}`);
+  let lastFailure = "unknown converter failure";
+  for (const command of pythonCommands()) {
+    const resolvedCommand = resolvePythonCommand(command);
+    if (!resolvedCommand) {
+      lastFailure = `${command} not found on PATH`;
+      if (command === "python3" && !process.env.OGB_PYTHON_BIN) continue;
+      break;
+    }
+    const result = spawnCommandSync(resolvedCommand, args, {
+      cwd: path.dirname(script),
+      env: converterEnv(),
+      encoding: "utf8",
+      timeout: 30_000,
+      maxBuffer: 1024 * 1024,
+    });
+    if (!result.error && result.status === 0) return parseConverterOutput(String(result.stdout || ""));
+    lastFailure = String(result.stderr || result.error?.message || `exit code ${String(result.status ?? "unknown")}`).trim();
+    const missingCommand = (result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+    if (missingCommand && command === "python3" && !process.env.OGB_PYTHON_BIN) continue;
+    break;
   }
-  return parseConverterOutput(String(result.stdout || ""));
+  throw new Error(`Antigravity converter failed: ${lastFailure}`);
 }
