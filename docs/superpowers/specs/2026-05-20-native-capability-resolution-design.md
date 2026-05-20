@@ -23,9 +23,11 @@ Adicionar uma camada de resolução antes da projeção:
 
 - Discovery remoto dinâmico por marketplace ou busca web no fluxo normal.
 - Instalação de entidades desconhecidas por inferência heurística.
-- Migração inversa OpenCode para Gemini ou Antigravity como comportamento padrão.
+- Migração inversa genérica OpenCode para Gemini ou Antigravity sem uma entrada explícita no registry.
 - Remoção de arquivos que não foram gerenciados pelo OGB.
 - Troca automática de fonte canônica sem modo/contrato explícito.
+
+Fica dentro do escopo a replicação compatível de uma entidade quando o melhor pacote nativo conhecido existe em um destino, mas outro destino ainda não tem equivalente nativo. Nesse caso, o registry precisa descrever como decompor a entidade em prompts, skills, MCPs, hooks, commands ou config compatível.
 
 ## Modelo Mental
 
@@ -38,6 +40,8 @@ inventario -> resolver nativo -> decisao -> execucao -> validacao -> estado
 O resolvedor responde uma pergunta simples: "Para esta entidade e este destino, existe um caminho nativo melhor do que gerar compatibilidade?"
 
 Se sim, o OGB instala/configura o nativo e valida. Se a validação passar, o OGB remove apenas ports antigos que ele mesmo gerenciou. Se a validação falhar, o OGB mantém ou gera o port compatível.
+
+O resolvedor não assume uma direção fixa. Gemini pode ser fonte para OpenCode, OpenCode pode ser fonte para Gemini, Antigravity pode ser fonte para OpenCode, e assim por diante. A regra é por entidade e destino, não por ecossistema inteiro. O que não pode acontecer é uma migração inversa ampla por heurística: cada inversão precisa de uma entrada explícita no registry, com mapeamento e smoke próprios.
 
 ## Decisões Possíveis
 
@@ -77,6 +81,8 @@ smoke_checks
 compatibility_port
 managed_port_paths
 deprecation_policy
+source_adapters
+target_adapters
 ```
 
 ### `entity_id`
@@ -119,6 +125,16 @@ Conjunto de verificações que provam que o nativo está funcionando. Para Super
 
 Define o fallback atual: copiar/projetar skills, commands, MCPs, hooks ou agents para paths OpenCode/Antigravity, com hashes e sync state.
 
+### `source_adapters`
+
+Define de onde uma entidade pode ser lida. Normalmente a fonte é Gemini, mas uma entidade pode ter uma fonte nativa mais rica em outro destino. Exemplo: um plugin OpenCode pode ser a fonte conhecida para uma entidade ainda sem extensão Gemini equivalente.
+
+O adapter de fonte precisa ser explícito e limitado. Ele não deve varrer plugins OpenCode arbitrários tentando inferir semântica. Ele deve reconhecer pacotes conhecidos, versões compatíveis e surfaces documentadas.
+
+### `target_adapters`
+
+Define como uma entidade é projetada para cada destino. O adapter pode escolher instalação nativa, port compatível, ou bloqueio por incompatibilidade. Prompts, MCPs, hooks e commands não são todos equivalentes; cada surface precisa de regra própria.
+
 ### `managed_port_paths`
 
 Lista de prefixes que o OGB pode remover quando o nativo passar no smoke. Nunca remover arquivos fora do sync state ou sem marker/hashes compatíveis.
@@ -143,6 +159,35 @@ Contrato inicial:
 - Quando essa entrada existir e o smoke passar, o OGB deve remover ports gerenciados antigos e privilegiar a instalação nativa.
 
 Esse desenho evita tratar o port provisório como permanente. O port é uma ponte, não a fonte canônica final.
+
+## Entidades Nativas Em Apenas Um Destino
+
+Algumas entidades vão nascer com suporte nativo forte em um destino antes dos outros. O OGB precisa conseguir replicar essas entidades para destinos sem instalação nativa equivalente.
+
+Exemplo: Honcho tem um plugin OpenCode com fluxo de instalação próprio, comandos, ferramentas, config compartilhada e hooks de runtime. Se não houver uma Gemini CLI extension equivalente, o OGB não deve concluir que Honcho é "OpenCode-only". Ele deve ter uma entrada de registry capaz de:
+
+- reconhecer a instalação nativa OpenCode;
+- validar que ela funciona no OpenCode;
+- identificar as surfaces portáveis da entidade;
+- projetar MCP/config/prompt/commands/hooks compatíveis para Gemini CLI ou Antigravity CLI quando não houver nativo nesses destinos;
+- marcar como `needs_review` qualquer surface sem equivalência segura;
+- remover apenas ports gerenciados quando surgir um nativo validável no destino.
+
+Nesse cenário, o OpenCode plugin não vira fonte canônica global do usuário. Ele vira uma fonte conhecida para a entidade `honcho`, porque o registry diz que aquele pacote específico é confiável e sabe como decompor suas surfaces.
+
+## Honcho Como Caso Motivador
+
+Contrato esperado:
+
+- Entidade: `honcho`.
+- Fonte nativa inicial: plugin OpenCode `@honcho-ai/opencode-honcho`, quando instalado e validado.
+- Destinos sem nativo equivalente: usar port compatível.
+- Config compartilhada: preservar a fronteira de `~/.honcho/config.json` quando a entidade já usa essa camada comum.
+- MCP: projetar para o formato MCP do destino quando houver servidor MCP documentado.
+- Prompts/commands: converter apenas quando a semântica for clara.
+- Hooks: projetar somente quando houver evento equivalente; caso contrário, registrar `needs_review`.
+
+Esse caso impede uma leitura estreita de "nativo sempre vence no destino atual". O contrato real é: **nativo conhecido vence quando existe no destino; quando só existe em outro destino, ele pode ser fonte para um port compatível bem validado**.
 
 ## UX Pública
 
@@ -180,6 +225,7 @@ O `doctor` deve reportar:
 - nativo ativo e validado;
 - nativo conhecido mas não instalado;
 - nativo instalado mas falhando no smoke;
+- entidade replicada de outro destino por falta de nativo local;
 - fallback compatível em uso;
 - port antigo removível;
 - conflito manual bloqueando remoção.
@@ -204,11 +250,15 @@ Inventory entity
 - Ports gerenciados antigos são removidos somente após nativo validado.
 - Ports não gerenciados ou editados manualmente são preservados e reportados.
 - Antigravity CLI pode permanecer em port provisório hoje, mas o registry permite migrar para nativo depois sem mudar a arquitetura.
+- Uma entidade com nativo apenas em OpenCode, como Honcho, pode ser replicada para Gemini CLI ou Antigravity CLI por adapter explícito.
+- Surfaces sem equivalência segura viram `needs_review` em vez de conversão silenciosa.
 - `doctor` e `check` explicam a decisão em linguagem simples.
-- Testes cobrem nativo válido, nativo ausente, nativo falhando, port gerenciado removido e conflito manual preservado.
+- Testes cobrem nativo válido, nativo ausente, nativo falhando, port gerenciado removido, replicação de outro destino e conflito manual preservado.
 
 ## Referências
 
 - Superpowers OpenCode docs: https://github.com/obra/superpowers/blob/main/docs/README.opencode.md
 - Superpowers OpenCode issue sobre validação real de skills: https://github.com/obra/superpowers/issues/1087
 - Antigravity CLI transition context: https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
+- Honcho OpenCode integration: https://docs.honcho.dev/v3/guides/integrations/opencode
+- Honcho MCP integration: https://docs.honcho.dev/v3/guides/integrations/mcp
