@@ -99,6 +99,8 @@ test("runPass does not warn users about known unsupported Gemini lifecycle hooks
     hooks: {
       AfterAgent: [{ command: "echo after-agent" }],
       Notification: [{ command: "echo notify" }],
+      SessionStart: [{ command: "echo session-start" }],
+      SessionEnd: [{ command: "echo session-end" }],
     },
   }, null, 2), "utf8");
 

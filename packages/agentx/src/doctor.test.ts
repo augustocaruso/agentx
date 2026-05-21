@@ -203,6 +203,8 @@ test("runDoctor treats known unsupported Gemini lifecycle hooks as compatibility
     hooks: {
       AfterAgent: [{ command: "echo after-agent" }],
       Notification: [{ command: "echo notify" }],
+      SessionStart: [{ command: "echo session-start" }],
+      SessionEnd: [{ command: "echo session-end" }],
     },
   }, null, 2), "utf8");
 

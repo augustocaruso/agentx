@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.14 - Gemini session hooks are compatibility notes
+
+- Treat Gemini `SessionStart` and `SessionEnd` hooks like other Gemini-only lifecycle hooks during install/check: visible in inventory, but not install/update blockers.
+
 ## 0.2.13 - Windows release smoke uses agentx
 
 - Updates the Windows home-mode release smoke to create the current `agentx` command shim instead of the legacy `ogb` shim.

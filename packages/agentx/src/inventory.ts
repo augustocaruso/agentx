@@ -301,7 +301,7 @@ function collectHooks(projectRoot: string, homeDir: string, homeMode: boolean): 
   ]));
   const hooks: HookInfo[] = [];
   const autoSyncedHooks = new Set(["BeforeTool", "AfterTool", "BeforeAgent"]);
-  const compatibilityNoteHooks = new Set(["AfterAgent", "Notification"]);
+  const compatibilityNoteHooks = new Set(["AfterAgent", "Notification", "SessionStart", "SessionEnd"]);
 
   for (const [scope, settingsPath] of settings) {
     if (!exists(settingsPath)) continue;
