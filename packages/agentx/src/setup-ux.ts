@@ -590,7 +590,7 @@ function sameStringArray(left: unknown, right: string[]): boolean {
     && left.every((item, index) => item === right[index]);
 }
 
-function clearStaleStartupFailureAfterLauncherRepair(options: {
+function clearStaleStartupStatusAfterLauncherRepair(options: {
   statusPath: string;
   cwd: string;
   startupCommand: { command: string; baseArgs: string[] };
@@ -598,7 +598,7 @@ function clearStaleStartupFailureAfterLauncherRepair(options: {
   dryRun?: boolean;
 }): boolean {
   const status = readJsonc(options.statusPath);
-  if (status.state !== "fail" && status.state !== "error") return false;
+  if (typeof status.state !== "string" || status.state === "running") return false;
 
   const desiredArgs = startupLauncherArgs(options.startupCommand);
   const alreadyCurrent = status.command === options.startupCommand.command
@@ -621,7 +621,7 @@ function clearStaleStartupFailureAfterLauncherRepair(options: {
       exitCode: 0,
       command: options.startupCommand.command,
       args: desiredArgs,
-      stdoutTail: "Cleared stale startup sync failure after rewriting the startup launcher.",
+      stdoutTail: "Cleared stale startup sync status after rewriting the startup launcher.",
     }, null, 2)}\n`, "utf8");
   }
   return true;
@@ -929,20 +929,22 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     ? checkPluginSyntax(undefined, startupPluginSourceText)
     : checkPluginSyntax(globalStartupPluginPath);
   if (!pluginCheck.ok) warnings.push(pluginCheck.message);
-  recoverStaleStartupStatus({
+  const startupRecovery = recoverStaleStartupStatus({
     statusPath: adapter.join(globalGeneratedDir, "agentx-plugin-status.json"),
     lockPath: adapter.join(globalGeneratedDir, "agentx-startup-sync.lock"),
     cwd: homeDir,
     reason: "setup-ux.recovered-stale",
     dryRun: Boolean(options.dryRun),
   });
-  clearStaleStartupFailureAfterLauncherRepair({
-    statusPath: adapter.join(globalGeneratedDir, "agentx-plugin-status.json"),
-    cwd: homeDir,
-    startupCommand,
-    startupConfigWrite,
-    dryRun: Boolean(options.dryRun),
-  });
+  if (!startupRecovery.recovered) {
+    clearStaleStartupStatusAfterLauncherRepair({
+      statusPath: adapter.join(globalGeneratedDir, "agentx-plugin-status.json"),
+      cwd: homeDir,
+      startupCommand,
+      startupConfigWrite,
+      dryRun: Boolean(options.dryRun),
+    });
+  }
   for (const write of writes) {
     if (write.status === "conflict") warnings.push(`${write.path} exists and differs; re-run setup-ux with --force to replace the OGB profile.`);
     if (write.status === "protected") warnings.push(`${write.path} protegido pelo modo mantenedor local; arquivo mantido sem alteracao.`);

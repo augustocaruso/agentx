@@ -819,6 +819,43 @@ test("setupUx recovers stale global startup sync status", () => {
   assert.equal(fs.existsSync(path.join(generatedDir, "agentx-startup-sync.lock")), false);
 });
 
+test("setupUx replaces pass status when the global startup launcher changed", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const configDir = path.join(root, "config", "opencode");
+  const generatedDir = path.join(homeDir, ".config", "agentx", "generated");
+  const projectRoot = path.join(root, "project");
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.mkdirSync(projectRoot, { recursive: true });
+  fs.writeFileSync(path.join(generatedDir, "agentx-plugin-status.json"), JSON.stringify({
+    version: 1,
+    state: "pass",
+    reason: "plugin.init",
+    cwd: homeDir,
+    startedAt: "2026-05-15T18:48:05.767Z",
+    finishedAt: "2026-05-15T18:48:06.489Z",
+    exitCode: 0,
+    command: path.join(root, "repo", "packages", "ogb", "dist", "cli.js"),
+    args: ["--project", homeDir, "startup-sync"],
+  }, null, 2) + "\n");
+
+  setupUx({
+    homeDir,
+    configDir,
+    projectRoot,
+    resetGlobal: true,
+    installOpenCode: false,
+    installPlugins: false,
+  });
+
+  const startupConfig = readJson(path.join(generatedDir, "agentx-startup-sync.json"));
+  const status = readJson(path.join(generatedDir, "agentx-plugin-status.json"));
+  assert.equal(status.state, "pass");
+  assert.equal(status.reason, "setup-ux.replaced-stale-startup-launcher");
+  assert.equal(status.command, startupConfig.command);
+  assert.deepEqual(status.args, [...startupConfig.baseArgs, "startup-sync"]);
+});
+
 test("setupUx keeps websearch-cited disabled even after OpenAI and Google auth exist", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");

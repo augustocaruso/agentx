@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5 - Ponte de upgrade OGB para agentX
+
+- Publica o release pack novo também como `opencode-gemini-bridge-pack.zip`, para versões antigas de `ogb update` encontrarem o asset legado durante a migração para `agentx-pack.zip`.
+- Faz `setup-ux` substituir status de startup que ainda aponta para um launcher antigo, evitando dashboard/sidebar presos em metadados de `packages/ogb` depois do rebrand.
+- Adiciona regressões para bloquear perda do asset legado e status de startup stale.
+
 ## 0.2.4 - Check não varre a home como repo de extensão
 
 - Faz o patch pré-update do Medical Notes Workbench usar `git status/diff` só quando a pasta da extensão é um worktree Git próprio.

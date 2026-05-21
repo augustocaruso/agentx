@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { BINARY, BOOTSTRAP_TEMP_PREFIX, DISPLAY, GITHUB_REPO, LEGACY_BINARY, PACKAGE, RELEASE_ASSET } from "./brand.js";
+import { BINARY, BOOTSTRAP_TEMP_PREFIX, DISPLAY, GITHUB_REPO, LEGACY_BINARY, LEGACY_RELEASE_ASSET, PACKAGE, RELEASE_ASSET } from "./brand.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const packageRoot = path.join(repoRoot, "packages", "agentx");
@@ -40,13 +40,15 @@ test("release workflow centralizes branded artifact names", () => {
   assert.match(workflow, new RegExp(`PACKAGE_NAME:\\s+${PACKAGE}`));
   assert.match(workflow, /PACKAGE_DIR:\s+packages\/agentx/);
   assert.match(workflow, new RegExp(`RELEASE_ASSET:\\s+${RELEASE_ASSET}`));
+  assert.match(workflow, new RegExp(`LEGACY_RELEASE_ASSET:\\s+${LEGACY_RELEASE_ASSET}`));
   assert.match(workflow, /zip -r "\$RELEASE_ASSET"/);
+  assert.match(workflow, /cp "\$RELEASE_ASSET" "\$LEGACY_RELEASE_ASSET"/);
   assert.match(workflow, /name: \$\{\{ env\.PACKAGE_NAME \}\}-pack/);
-  assert.match(workflow, /path:\s*\$\{\{ env\.RELEASE_ASSET \}\}/);
+  assert.match(workflow, /path:\s*\|[\s\S]*\$\{\{ env\.RELEASE_ASSET \}\}[\s\S]*\$\{\{ env\.LEGACY_RELEASE_ASSET \}\}/);
+  assert.match(workflow, /files:\s*\|[\s\S]*\$\{\{ env\.RELEASE_ASSET \}\}[\s\S]*\$\{\{ env\.LEGACY_RELEASE_ASSET \}\}/);
   assert.match(workflow, /TELEMETRY_LEGACY_DEFAULTS_SCHEMA:\s+opencode-gemini-bridge\.telemetry-defaults\.v1/);
   assert.match(workflow, /j\.schema === process\.env\.TELEMETRY_LEGACY_DEFAULTS_SCHEMA/);
   assert.match(workflow, /j\.schema = process\.env\.TELEMETRY_DEFAULTS_SCHEMA/);
-  assert.doesNotMatch(workflow, /opencode-gemini-bridge-pack\.zip/);
   assert.doesNotMatch(workflow, /opencode-gemini-bridge-\*\.tgz/);
   assert.doesNotMatch(workflow, /npm pack/);
   assert.doesNotMatch(workflow, /\.tgz/);
@@ -98,11 +100,13 @@ const allowedBrandLiteralReferences: Record<string, RegExp[]> = {
     /^\s*PACKAGE_NAME: agentx\s*$/,
     /^\s*PACKAGE_DIR: packages\/agentx\s*$/,
     /^\s*RELEASE_ASSET: agentx-pack\.zip\s*$/,
+    /^\s*LEGACY_RELEASE_ASSET: opencode-gemini-bridge-pack\.zip\s*$/,
     /^\s*TELEMETRY_DEFAULTS_SCHEMA: agentx\.telemetry-defaults\.v2\s*$/,
     /^\s*TELEMETRY_LEGACY_DEFAULTS_SCHEMA: opencode-gemini-bridge\.telemetry-defaults\.v1\s*$/,
     /OGB_TELEMETRY_DEFAULTS_JSON/,
     /\$\{\{\s*env\.PACKAGE_NAME\s*\}\}/,
     /\$\{\{\s*env\.PACKAGE_DIR\s*\}\}/,
+    /\$\{\{\s*env\.LEGACY_RELEASE_ASSET\s*\}\}/,
   ],
   "scripts/bootstrap-mac.sh": [
     /^\s*AGENTX_GITHUB_REPO=\$DEFAULT_REPO bash bootstrap-mac\.sh /,
