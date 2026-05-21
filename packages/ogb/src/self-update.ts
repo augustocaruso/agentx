@@ -5,11 +5,12 @@ import { runNativeCommand, type NativeCommandResult, type NativeCommandSpec } fr
 import { createPlatformAdapter } from "./platform-adapter.js";
 import { normalizePathInput, resolveProjectPaths } from "./paths.js";
 import { emitRitualProgress, progressStatusFromOutcome, RITUAL_PROGRESS_SCHEMA_VERSION, type RitualProgressJsonEvent, type RitualProgressSink, type RitualProgressStatus, type RitualProgressSummary } from "./ritual-progress.js";
+import { GITHUB_REPO } from "./brand.js";
 import { writeStateRecord } from "./state-store.js";
 import { AGENTX_VERSION } from "./types.js";
 import type { RulesyncMode } from "./rulesync.js";
 
-const DEFAULT_REPO = "augustocaruso/opencode-gemini-bridge";
+const DEFAULT_REPO = GITHUB_REPO;
 const DEFAULT_VERSION = "latest";
 
 export interface SelfUpdateOptions {

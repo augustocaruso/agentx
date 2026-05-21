@@ -23,7 +23,7 @@ test("buildSelfUpdateCommand uses GitHub bootstrap on POSIX platforms", () => {
   assert.equal(command[1], "-lc");
   assert.match(command[2], /bootstrap-mac\.sh/);
   assert.match(command[2], /--repo/);
-  assert.match(command[2], /augustocaruso\/opencode-gemini-bridge/);
+  assert.match(command[2], /augustocaruso\/agentx/);
   assert.match(command[2], /--version/);
   assert.match(command[2], /latest/);
   assert.match(command[2], /--project/);

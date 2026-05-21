@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession } from "./backup-policy.js";
+import { GITHUB_REPO, RELEASE_ASSET } from "./brand.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
@@ -516,17 +517,17 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     windowsInstaller: readScript("install-windows.ps1"),
   };
   const required = [
-    ["bootstrap-mac.sh default repo", scripts.macBootstrap, "augustocaruso/opencode-gemini-bridge"],
-    ["bootstrap-mac.sh release asset", scripts.macBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
+    ["bootstrap-mac.sh default repo", scripts.macBootstrap, GITHUB_REPO],
+    ["bootstrap-mac.sh release asset", scripts.macBootstrap, `releases/latest/download/${RELEASE_ASSET}`],
     ["bootstrap-mac.sh installer", scripts.macBootstrap, "install-mac.sh"],
-    ["bootstrap-linux.sh default repo", scripts.linuxBootstrap, "augustocaruso/opencode-gemini-bridge"],
-    ["bootstrap-linux.sh release asset", scripts.linuxBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
+    ["bootstrap-linux.sh default repo", scripts.linuxBootstrap, GITHUB_REPO],
+    ["bootstrap-linux.sh release asset", scripts.linuxBootstrap, `releases/latest/download/${RELEASE_ASSET}`],
     ["bootstrap-linux.sh installer", scripts.linuxBootstrap, "install-linux.sh"],
     ["bootstrap-linux.sh posix fallback", scripts.linuxBootstrap, "install-posix.sh"],
     ["bootstrap-linux.sh legacy fallback", scripts.linuxBootstrap, "install-mac.sh"],
     ["bootstrap-linux.sh fallback message", scripts.linuxBootstrap, "legacy POSIX installer"],
-    ["bootstrap-windows.ps1 default repo", scripts.windowsBootstrap, "augustocaruso/opencode-gemini-bridge"],
-    ["bootstrap-windows.ps1 release asset", scripts.windowsBootstrap, "releases/latest/download/opencode-gemini-bridge-pack.zip"],
+    ["bootstrap-windows.ps1 default repo", scripts.windowsBootstrap, GITHUB_REPO],
+    ["bootstrap-windows.ps1 release asset", scripts.windowsBootstrap, `releases/latest/download/${RELEASE_ASSET}`],
     ["bootstrap-windows.ps1 installer", scripts.windowsBootstrap, "install-windows.ps1"],
     ["bootstrap-windows.ps1 path arg normalization", scripts.windowsBootstrap, "Normalize-PathArgument"],
     ["bootstrap-windows.ps1 repairs blocked OpenCode config dir", scripts.windowsBootstrap, "Repair-DirectoryBlocker (Join-Path $HOME \".config\\opencode\") \"bootstrap\""],

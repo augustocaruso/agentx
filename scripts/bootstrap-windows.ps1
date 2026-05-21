@@ -1,5 +1,5 @@
 param(
-  [string]$Repo = $(if ($env:OGB_GITHUB_REPO) { $env:OGB_GITHUB_REPO } else { "augustocaruso/opencode-gemini-bridge" }),
+  [string]$Repo = $(if ($env:OGB_GITHUB_REPO) { $env:OGB_GITHUB_REPO } else { "augustocaruso/agentx" }),
   [string]$Version = $(if ($env:OGB_RELEASE_VERSION) { $env:OGB_RELEASE_VERSION } else { "latest" }),
   [string]$Project,
   [string]$Prefix,
@@ -76,9 +76,9 @@ New-Item -ItemType Directory -Force $TempDir | Out-Null
 
 try {
   if ($Version -eq "latest") {
-    $ReleaseUrl = "https://github.com/$Repo/releases/latest/download/opencode-gemini-bridge-pack.zip"
+    $ReleaseUrl = "https://github.com/$Repo/releases/latest/download/agentx-pack.zip"
   } else {
-    $ReleaseUrl = "https://github.com/$Repo/releases/download/$Version/opencode-gemini-bridge-pack.zip"
+    $ReleaseUrl = "https://github.com/$Repo/releases/download/$Version/agentx-pack.zip"
   }
 
   $ZipPath = Join-Path $TempDir "ogb.zip"

@@ -66,7 +66,7 @@ test("linux public scripts wrap the shared POSIX implementation", () => {
   assert.match(script("bootstrap-linux.sh"), /install-posix\.sh/);
   assert.match(script("bootstrap-linux.sh"), /install-mac\.sh/);
   assert.match(script("bootstrap-linux.sh"), /legacy POSIX installer/);
-  assert.match(script("bootstrap-linux.sh"), /opencode-gemini-bridge-pack\.zip/);
+  assert.match(script("bootstrap-linux.sh"), /agentx-pack\.zip/);
   assert.match(script("bootstrap-linux.sh"), /run_installer/);
   assert.match(script("bootstrap-linux.sh"), /\$\{#INSTALLER_ARGS_PREFIX\[@\]\}/);
   assert.match(script("bootstrap-linux.sh"), /\$\{#INSTALLER_ARGS\[@\]\}/);

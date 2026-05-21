@@ -12,6 +12,7 @@ import { externalOpenCodePlugins } from "./external-integrations.js";
 import { formatCommand, installGeminiExtension, updateGeminiExtensions } from "./extensions.js";
 import { flattenGeminiMd } from "./flatten.js";
 import { findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS, type HelpAction, type HelpCommand } from "./help-catalog.js";
+import { DISPLAY, GITHUB_REPO } from "./brand.js";
 import { migrateFromOgb, type MigrationReport } from "./migrate-from-ogb.js";
 import { cleanupHomeProjectArtifacts, printHomeCleanupReport } from "./home-cleanup.js";
 import { printInstallReport, runInstall } from "./install.js";
@@ -507,7 +508,7 @@ type UpdateCliOptions = {
 function addUpdateOptions(command: Command): Command {
   return command
     .description("Update OGB from the GitHub release pack and run the full post-update check")
-    .option("--repo <owner/repo>", "GitHub repo that publishes OGB releases", "augustocaruso/opencode-gemini-bridge")
+    .option("--repo <owner/repo>", "GitHub repo that publishes agentX releases", GITHUB_REPO)
     .option("--release <tag>", "Release tag to install; defaults to latest", "latest")
     .option("--prefix <path>", "Install prefix passed to the installer")
     .option("--rulesync <mode>", "Rulesync mode passed to first-run setup", "auto")
@@ -1453,8 +1454,8 @@ function announceMigration(report: MigrationReport): void {
   const renamed = report.renamedFiles.length > 0
     ? ` Renamed ${report.renamedFiles.length} legacy ogb-* file(s) to agentx-*.`
     : "";
-  process.stderr.write(`agentX: migrated state from the legacy ogb layout.${movedDir}${renamed}\n`);
-  for (const warning of report.warnings) process.stderr.write(`agentX migration warning: ${warning}\n`);
+  process.stderr.write(`${DISPLAY}: migrated state from the legacy ogb layout.${movedDir}${renamed}\n`);
+  for (const warning of report.warnings) process.stderr.write(`${DISPLAY} migration warning: ${warning}\n`);
 }
 
 function maybeMigrateFromOgb(): void {
@@ -1462,7 +1463,7 @@ function maybeMigrateFromOgb(): void {
     const report = migrateFromOgb({ homeDir: os.homedir(), projectRoot: process.cwd() });
     announceMigration(report);
   } catch (err) {
-    process.stderr.write(`agentX migration failed: ${(err as Error).message ?? String(err)}\n`);
+    process.stderr.write(`${DISPLAY} migration failed: ${(err as Error).message ?? String(err)}\n`);
   }
 }
 

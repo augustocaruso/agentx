@@ -9,12 +9,12 @@ Downloads the OpenCode Gemini Bridge release pack from GitHub and runs the
 bundled Linux installer.
 
 Examples:
-  curl -fsSL https://raw.githubusercontent.com/augustocaruso/opencode-gemini-bridge/main/scripts/bootstrap-linux.sh | bash -s -- --project "$PWD"
-  OGB_GITHUB_REPO=augustocaruso/opencode-gemini-bridge bash bootstrap-linux.sh --project "$PWD" --force
+  curl -fsSL https://raw.githubusercontent.com/augustocaruso/agentx/main/scripts/bootstrap-linux.sh | bash -s -- --project "$PWD"
+  OGB_GITHUB_REPO=augustocaruso/agentx bash bootstrap-linux.sh --project "$PWD" --force
 EOF
 }
 
-REPO="${OGB_GITHUB_REPO:-augustocaruso/opencode-gemini-bridge}"
+REPO="${OGB_GITHUB_REPO:-augustocaruso/agentx}"
 VERSION="${OGB_RELEASE_VERSION:-latest}"
 INSTALLER_ARGS=()
 INSTALLER_ARGS_PREFIX=()
@@ -71,9 +71,9 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "$VERSION" == "latest" ]]; then
-  RELEASE_URL="https://github.com/$REPO/releases/latest/download/opencode-gemini-bridge-pack.zip"
+  RELEASE_URL="https://github.com/$REPO/releases/latest/download/agentx-pack.zip"
 else
-  RELEASE_URL="https://github.com/$REPO/releases/download/$VERSION/opencode-gemini-bridge-pack.zip"
+  RELEASE_URL="https://github.com/$REPO/releases/download/$VERSION/agentx-pack.zip"
 fi
 
 echo "Downloading OGB from $RELEASE_URL..."

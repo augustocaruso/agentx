@@ -1,16 +1,16 @@
 {
-  "name": "opencode-gemini-bridge",
-  "version": "0.1.62",
+  "name": "agentx",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/augustocaruso/opencode-gemini-bridge.git"
+    "url": "git+https://github.com/augustocaruso/agentx.git"
   },
-  "homepage": "https://github.com/augustocaruso/opencode-gemini-bridge#readme",
+  "homepage": "https://github.com/augustocaruso/agentx#readme",
   "bugs": {
-    "url": "https://github.com/augustocaruso/opencode-gemini-bridge/issues"
+    "url": "https://github.com/augustocaruso/agentx/issues"
   },
   "files": [
     "dist/**/*.js",
@@ -24,7 +24,7 @@
     "LICENSE"
   ],
   "bin": {
-    "ogb": "dist/cli.js"
+    "agentx": "dist/cli.js"
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
