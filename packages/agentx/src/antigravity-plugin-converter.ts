@@ -159,6 +159,7 @@ function parsePluginConversionOutput(stdout: string): AntigravityPluginConversio
 interface PythonCommandResult {
   error?: Error;
   status: number | null;
+  stdout?: string | Buffer;
   stderr?: string | Buffer;
 }
 
@@ -171,10 +172,12 @@ export function isMissingPythonCommandResult(command: string, result: PythonComm
   if (errorCode === "ENOENT") return true;
   if (platform !== "win32") return false;
 
-  const text = String(result.stderr || result.error?.message || "");
+  const commandName = path.basename(command).replace(/\.(?:bat|cmd|com|exe)$/i, "");
+  const text = `${String(result.stderr || "")}\n${String(result.stdout || "")}\n${result.error?.message || ""}`;
+  if (result.status === 9009) return true;
+  if (/python was not found|can't find a default python|no python at/i.test(text) && /^python\d*$|^py$/i.test(commandName)) return true;
   if (!/not recognized/i.test(text)) return false;
 
-  const commandName = path.basename(command).replace(/\.(?:bat|cmd|com|exe)$/i, "");
   const commandPattern = new RegExp(`(?:^|['"\\s\\\\/])${escapeRegExp(commandName)}(?:\\.(?:bat|cmd|com|exe))?(?:$|['"\\s:,.])`, "i");
   return commandPattern.test(text);
 }

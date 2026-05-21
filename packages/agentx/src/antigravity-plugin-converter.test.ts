@@ -71,6 +71,18 @@ test("Antigravity converter treats Windows cmd not-recognized output as a missin
     ),
     true,
   );
+  assert.equal(
+    isMissingPythonCommandResult(
+      "python3",
+      {
+        error: undefined,
+        status: 9009,
+        stdout: "Python was not found; run without arguments to install from the Microsoft Store.",
+      },
+      "win32",
+    ),
+    true,
+  );
 });
 
 test("Antigravity converter uses bundled Python converter by default", () => {

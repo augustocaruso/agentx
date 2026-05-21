@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.10 - Windows Python fallback for Antigravity conversion
+
+- Treat the broken Windows `python3` App Installer alias (`exit 9009` / "Python was not found") as unavailable so agentX falls back to `python`.
+- Keep the Windows validation hardening from 0.2.9, including path normalization in brand-contract tests and explicit Python setup in CI.
+
 ## 0.2.9 - Windows validation for cargo-like install
 
 - Normaliza caminhos nos testes de contrato de brand para Windows (`\` vs `/`), mantendo a varredura que bloqueia vazamento público de marca legada/PT-BR.
