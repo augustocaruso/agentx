@@ -14,6 +14,7 @@ import {
   type NativeCapabilityEntry,
   type NativeCapabilityTarget,
   type NativeInstallSpec,
+  type NativeSetupSurface,
 } from "./native-capability-registry.js";
 import { globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { spawnCommandSync } from "./process.js";
@@ -47,6 +48,7 @@ export interface NativeCapabilityDecision {
   smoke: NativeCapabilitySmokeResult;
   portableSurfaces: NativeCapabilityEntry["portableSurfaces"];
   surfacesNeedingReview: NativeCapabilityEntry["surfacesNeedingReview"];
+  setupSurfaces: NativeSetupSurface[];
   managedPortPrefixes: string[];
   message: string;
 }
@@ -92,6 +94,7 @@ export interface ResolveNativeCapabilitiesOptions {
   sources: NativeCapabilitySource[];
   currentOpenCodePlugins?: string[];
   availableMcpServers?: string[];
+  previousReport?: NativeCapabilityReport;
   smoke?: (entry: NativeCapabilityEntry, action: Exclude<NativeCapabilityAction, "fallback_compat" | "blocked" | "replicate_compat">) => NativeCapabilitySmokeResult;
 }
 
@@ -157,9 +160,13 @@ export function detectNativeCapabilitySources(options: {
   projectRoot: string;
   homeDir: string;
   currentOpenCodePlugins?: string[];
+  ignoredGeminiSkillDirs?: Iterable<string>;
 }): NativeCapabilitySource[] {
   const sources: NativeCapabilitySource[] = [];
   const seen = new Set<string>();
+  const ignoredGeminiSkillDirs = new Set(
+    [...(options.ignoredGeminiSkillDirs ?? [])].map((dir) => path.resolve(dir)),
+  );
   const add = (source: NativeCapabilitySource) => {
     const key = `${source.entityId}:${source.sourceKind}:${source.sourceName}:${source.sourcePath ?? ""}`;
     if (seen.has(key)) return;
@@ -185,6 +192,7 @@ export function detectNativeCapabilitySources(options: {
     path.join(options.homeDir, ".gemini", "skills"),
   ]) {
     for (const dir of listDirs(root)) {
+      if (ignoredGeminiSkillDirs.has(path.resolve(dir))) continue;
       const name = path.basename(dir);
       const entityId = entityIdFromSkillName(name);
       if (entityId) add({ entityId, sourceKind: "gemini-skill", sourceName: name, sourcePath: dir });
@@ -225,6 +233,31 @@ function skippedSmoke(message: string): NativeCapabilitySmokeResult {
   return { status: "skipped", message };
 }
 
+function nativeInstallKey(install: NativeInstallSpec | undefined): string {
+  return JSON.stringify(install ?? null);
+}
+
+function reusablePreviousSmoke(options: {
+  previousReport?: NativeCapabilityReport;
+  entityId: NativeCapabilityEntityId;
+  nativeInstall?: NativeInstallSpec;
+  target: NativeCapabilityTarget;
+}): NativeCapabilitySmokeResult | undefined {
+  const previous = options.previousReport?.decisions.find((decision) =>
+    decision.entityId === options.entityId
+    && decision.target === options.target
+    && (decision.action === "install_native" || decision.action === "use_existing_native")
+    && decision.smoke.status === "passed"
+    && nativeInstallKey(decision.nativeInstall) === nativeInstallKey(options.nativeInstall)
+  );
+  if (!previous) return undefined;
+  return {
+    status: "passed",
+    message: `Reused previous native smoke evidence: ${previous.smoke.message}`,
+    command: previous.smoke.command,
+  };
+}
+
 export function resolveNativeCapabilities(options: ResolveNativeCapabilitiesOptions): NativeCapabilityReport {
   const grouped = groupedSources(options.sources);
   const currentPackages = new Set((options.currentOpenCodePlugins ?? []).map(pluginPackageName));
@@ -246,15 +279,21 @@ export function resolveNativeCapabilities(options: ResolveNativeCapabilitiesOpti
       sources,
       portableSurfaces: entry.portableSurfaces,
       surfacesNeedingReview: entry.surfacesNeedingReview,
+      setupSurfaces: entry.setupSurfaces ?? [],
       managedPortPrefixes: entry.managedPortPrefixes,
     };
 
     if (entry.nativeStatus !== "available" || !entry.nativeInstall) {
+      const canReplicateSetup = (entry.setupSurfaces?.length ?? 0) > 0;
       decisions.push({
         ...base,
-        action: "fallback_compat",
-        smoke: skippedSmoke("No validated native install is registered for this target."),
-        message: `${entry.displayName} has no validated native ${options.target} install; keeping compatibility projection.`,
+        action: canReplicateSetup ? "replicate_compat" : "fallback_compat",
+        smoke: skippedSmoke(canReplicateSetup
+          ? "No validated native install is registered for this target; setup surfaces will be replicated through compatibility resources."
+          : "No validated native install is registered for this target."),
+        message: canReplicateSetup
+          ? `${entry.displayName} has no native ${options.target} install; replicating setup through compatibility resources.`
+          : `${entry.displayName} has no validated native ${options.target} install; keeping compatibility projection.`,
       });
       continue;
     }
@@ -280,7 +319,11 @@ export function resolveNativeCapabilities(options: ResolveNativeCapabilitiesOpti
     const pluginPackage = pluginPackageName(entry.nativeInstall.plugin);
     const pluginAlreadyConfigured = currentPackages.has(pluginPackage);
     const intendedAction: "install_native" | "use_existing_native" = pluginAlreadyConfigured ? "use_existing_native" : "install_native";
-    const smoke = options.smoke?.(entry, intendedAction) ?? skippedSmoke("Native runtime smoke was not run.");
+    const smoke = pluginAlreadyConfigured
+      ? reusablePreviousSmoke({ previousReport: options.previousReport, entityId, nativeInstall: entry.nativeInstall, target: options.target })
+        ?? options.smoke?.(entry, intendedAction)
+        ?? skippedSmoke("Native runtime smoke was not run.")
+      : options.smoke?.(entry, intendedAction) ?? skippedSmoke("Native runtime smoke was not run.");
     if (smoke.status !== "passed") {
       const message = `${entry.displayName} native install was not confirmed: ${smoke.message}; keeping compatibility projection.`;
       warnings.push(message);
@@ -342,6 +385,7 @@ export function createOpenCodeNativeSmoke(options: {
   homeDir: string;
   env?: NodeJS.ProcessEnv;
 }): ResolveNativeCapabilitiesOptions["smoke"] {
+  const probes = new Map<string, { output: string; error?: string; status?: number | null; command: string[] }>();
   return (entry) => {
     const install = entry.nativeInstall;
     if (install?.kind !== "opencode-plugin") return { status: "passed", message: "No plugin runtime smoke required." };
@@ -350,26 +394,36 @@ export function createOpenCodeNativeSmoke(options: {
       return { status: "skipped", message: "OpenCode command was not found on PATH.", command: ["opencode", "debug", "info"] };
     }
     const args = install.smokeCommand?.slice(1) ?? ["debug", "info"];
-    const result = spawnCommandSync(command, args, {
-      cwd: options.projectRoot,
-      encoding: "utf8",
-      timeout: smokeTimeoutMs(options.env),
-      env: { ...process.env, ...(options.env ?? {}), NO_COLOR: "1", OGB_STARTUP_SYNC: "0" },
-    });
-    const output = `${result.stdout || ""}\n${result.stderr || ""}`;
-    if (result.error || result.status !== 0) {
+    const cacheKey = JSON.stringify({ command, args, cwd: options.projectRoot });
+    let probe = probes.get(cacheKey);
+    if (!probe) {
+      const result = spawnCommandSync(command, args, {
+        cwd: options.projectRoot,
+        encoding: "utf8",
+        timeout: smokeTimeoutMs(options.env),
+        env: { ...process.env, ...(options.env ?? {}), NO_COLOR: "1", OGB_STARTUP_SYNC: "0" },
+      });
+      probe = {
+        output: `${result.stdout || ""}\n${result.stderr || ""}`,
+        error: result.error?.message,
+        status: result.status,
+        command: [command, ...args],
+      };
+      probes.set(cacheKey, probe);
+    }
+    if (probe.error || probe.status !== 0) {
       return {
         status: "failed",
-        message: result.error?.message ?? (output.trim() || "opencode debug info failed."),
-        command: [command, ...args],
+        message: probe.error ?? (probe.output.trim() || "opencode debug info failed."),
+        command: probe.command,
       };
     }
     const hints = install.smokeOutputHints ?? [];
-    const hasHints = hints.length === 0 || hints.some((hint) => output.toLowerCase().includes(hint.toLowerCase()));
+    const hasHints = hints.length === 0 || hints.some((hint) => probe.output.toLowerCase().includes(hint.toLowerCase()));
     return {
       status: hasHints ? "passed" : "failed",
       message: hasHints ? "opencode debug info completed and matched native capability smoke hints." : `opencode debug info did not mention ${hints.join(", ")}.`,
-      command: [command, ...args],
+      command: probe.command,
     };
   };
 }

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { applyEdits, modify as modifyJsonc, parse as parseJsonc, type ParseError } from "jsonc-parser";
 import { convertGeminiCommandToAntigravitySkill } from "./antigravity-plugin-converter.js";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
@@ -35,11 +36,18 @@ import {
   type NativeCapabilityReport,
   type NativeCapabilitySummary,
 } from "./native-capability-resolver.js";
-import { entityIdFromGeminiExtensionName, entityIdFromSkillName, pluginPackageName } from "./native-capability-registry.js";
+import {
+  capabilityEntry,
+  entityIdFromGeminiExtensionName,
+  entityIdFromSkillName,
+  pluginPackageName,
+  type NativeCapabilityTarget,
+  type NativeSetupSurface,
+} from "./native-capability-registry.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import { ensureProjectConfig } from "./project-config.js";
 import { projectRulesyncProjection, type RulesyncMode, type RulesyncProjectionResult } from "./rulesync.js";
-import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState, type ManagedFileState } from "./sync-state.js";
+import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState, type ManagedFileKind, type ManagedFileState, type SyncResourceMarker } from "./sync-state.js";
 import { ensureTuiSidebar } from "./tui-sidebar.js";
 import { OGB_VERSION, type GeminiMcpServer } from "./types.js";
 import { sha256File, sha256Text } from "./file-hash.js";
@@ -79,6 +87,7 @@ export interface SyncReport {
   projectedAntigravityMcps: string[];
   removedAntigravityMcps: string[];
   projectedTuiFiles: string[];
+  projectedResourceMarkers?: SyncResourceMarker[];
   projectedExternalPlugins: string[];
   projectedExternalIntegrationFiles: string[];
   nativeCapabilities: NativeCapabilitySummary;
@@ -86,6 +95,40 @@ export interface SyncReport {
   backups: BackupRecord[];
   notes: string[];
   warnings: string[];
+  timing?: {
+    durationMs: number;
+    steps: Array<{ name: string; durationMs: number }>;
+  };
+}
+
+function projectedResource(
+  path: string,
+  kind: ManagedFileKind,
+  target: SyncResourceMarker["target"],
+  origin: string,
+  exclusive = false,
+): SyncResourceMarker {
+  return {
+    path,
+    kind,
+    target,
+    exclusive,
+    origin,
+  };
+}
+
+function projectedResources(
+  paths: string[],
+  kind: ManagedFileKind,
+  target: SyncResourceMarker["target"],
+  origin: string,
+  exclusive = false,
+): SyncResourceMarker[] {
+  return paths.map((resourcePath) => projectedResource(resourcePath, kind, target, origin, exclusive));
+}
+
+function openCodeExclusiveResource(path: string, kind: ManagedFileKind, origin: string): SyncResourceMarker {
+  return projectedResource(path, kind, "opencode", origin, true);
 }
 
 function generatedOpenCodeConfig(projectRoot: string, homeDir?: string) {
@@ -333,9 +376,42 @@ function projectedDirMatchesSource(options: { sourceDir: string; targetDir: stri
   return true;
 }
 
+function projectedSourceFileHash(sourcePath: string, sourceBaseDir: string): string {
+  if (!isTextProjectionFile(sourcePath)) return sha256File(sourcePath);
+  return sha256Text(resolveExtensionPlaceholders(fs.readFileSync(sourcePath, "utf8"), sourceBaseDir));
+}
+
+function sourceProjectionMatchesManagedState(options: {
+  state: ReturnType<typeof emptySyncState>;
+  sourceDir: string;
+  sourceBaseDir: string;
+  targetRoot: string;
+  reportDir: string;
+}): boolean {
+  const sourceFiles = listFilesRecursive(options.sourceDir).sort();
+  if (sourceFiles.length === 0) return false;
+
+  const expected = new Map<string, string>();
+  for (const sourcePath of sourceFiles) {
+    const relFile = toPosix(path.relative(options.sourceDir, sourcePath));
+    const reportPath = `${options.reportDir}/${relFile}`;
+    const targetPath = targetPathFromReportPath(options.targetRoot, reportPath);
+    if (!fileExists(targetPath)) return false;
+    expected.set(reportPath, projectedSourceFileHash(sourcePath, options.sourceBaseDir));
+  }
+
+  const managed = options.state.managedFiles.filter((file) =>
+    file.source === "ogb"
+    && file.path.startsWith(`${options.reportDir}/`)
+  );
+  if (managed.length !== expected.size) return false;
+  return managed.every((file) => expected.get(file.path) === file.sha256);
+}
+
 const GLOBAL_OPENCODE_PREFIX = ".config/opencode";
 const GLOBAL_ANTIGRAVITY_PREFIX = ".gemini/antigravity";
 const ANTIGRAVITY_MCP_CONFIG_REL_PATH = `${GLOBAL_ANTIGRAVITY_PREFIX}/mcp_config.json`;
+const SETUP_SURFACE_ORIGIN_SUFFIX = ":setup-surface";
 const GLOBAL_COMMAND_MARKER = "SOURCE_KIND: gemini-global-command";
 const GLOBAL_EXTENSION_COMMAND_MARKER = "SOURCE_KIND: gemini-global-extension-command";
 const GLOBAL_AGENT_MARKER = "SOURCE_KIND: gemini-global-agent";
@@ -1003,7 +1079,7 @@ function extensionMapEntry(options: {
     hooks: hookFiles.map((filePath) => ({
       source: relativeTo(extension.dir, filePath),
       projected: true,
-      target: "opencode-plugin:tool.execute.before,tool.execute.after",
+      target: "opencode-plugin:tool.execute.before,tool.execute.after,event.message.updated",
       reason: "Projected through the OGB OpenCode plugin.",
     })).sort((a, b) => a.source.localeCompare(b.source)),
     scripts: collectExtensionScripts(extension.dir),
@@ -1870,7 +1946,17 @@ function copyManagedSkillDir(options: {
 
   const previousHash = managedHashFor(options.state, reportSkillPath, "ogb");
   const currentSkillHash = fileExists(currentSkillFile) ? sha256File(currentSkillFile) : undefined;
-  if (dirExists(targetDir) && (!previousHash || currentSkillHash !== previousHash) && projectedDirMatchesSource({
+  if (dirExists(targetDir) && previousHash && currentSkillHash === previousHash && sourceProjectionMatchesManagedState({
+    state: options.state,
+    sourceDir: options.sourceDir,
+    sourceBaseDir: options.sourceBaseDir,
+    targetRoot: options.targetRoot,
+    reportDir: options.reportDir,
+  })) {
+    return { promoted: options.reportDir };
+  }
+
+  if (dirExists(targetDir) && projectedDirMatchesSource({
     sourceDir: options.sourceDir,
     targetDir,
     sourceBaseDir: options.sourceBaseDir,
@@ -2256,6 +2342,321 @@ function writeManagedAntigravityText(options: {
   return { promoted: options.reportPath };
 }
 
+function writeManagedCompatibilityText(options: {
+  state: ReturnType<typeof emptySyncState>;
+  root: string;
+  reportPath: string;
+  content: string;
+  kind: ManagedFileKind;
+  projection: NonNullable<ManagedFileState["projection"]>;
+  label: string;
+  origin: string;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): { promoted?: string; warning?: string } {
+  const targetPath = targetPathFromReportPath(options.root, options.reportPath);
+  if (options.dryRun) return { promoted: options.reportPath };
+
+  const repairWarning = repairNonDirectoryPathBlockers({
+    root: options.root,
+    targetDir: path.dirname(targetPath),
+    reportPath: options.reportPath,
+    label: options.label,
+    backupSession: options.backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  if (repairWarning) return { warning: repairWarning };
+
+  const desiredHash = sha256Text(options.content);
+  if (fileExists(targetPath) && sha256File(targetPath) === desiredHash) {
+    upsertManagedFile(options.state, {
+      path: options.reportPath,
+      sha256: desiredHash,
+      source: "ogb",
+      kind: options.kind,
+      projection: options.projection,
+      origin: options.origin,
+    });
+    return { promoted: options.reportPath };
+  }
+
+  const previousHash = managedHashFor(options.state, options.reportPath, "ogb");
+  if (fileExists(targetPath) && !options.force && !previousHash) {
+    return { warning: `${options.label} conflict: ${options.reportPath} exists and is not managed by ogb; use --force to overwrite` };
+  }
+  if (fileExists(targetPath) && !options.force && previousHash && sha256File(targetPath) !== previousHash) {
+    return { warning: `${options.label} conflict: ${options.reportPath} was edited manually; use --force to overwrite` };
+  }
+
+  if (fileExists(targetPath)) options.backupSession.backupExisting(targetPath);
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, options.content, "utf8");
+  upsertManagedFile(options.state, {
+    path: options.reportPath,
+    sha256: desiredHash,
+    source: "ogb",
+    kind: options.kind,
+    projection: options.projection,
+    origin: options.origin,
+  });
+  return { promoted: options.reportPath };
+}
+
+const NATIVE_SETUP_COMPATIBILITY_TARGETS: Array<{
+  capabilityTarget: NativeCapabilityTarget;
+  projection: "gemini" | "antigravity";
+  markerTarget: SyncResourceMarker["target"];
+  label: string;
+  reportPath: (skillName: string) => string;
+}> = [
+  {
+    capabilityTarget: "gemini-cli",
+    projection: "gemini",
+    markerTarget: "gemini",
+    label: "Gemini setup skill",
+    reportPath: (skillName) => `.gemini/skills/${safeGlobalSegment(skillName)}/SKILL.md`,
+  },
+  {
+    capabilityTarget: "antigravity-cli",
+    projection: "antigravity",
+    markerTarget: "antigravity",
+    label: "Antigravity setup skill",
+    reportPath: (skillName) => `${globalAntigravityRelPath(`skills/${safeGlobalSegment(skillName)}`)}/SKILL.md`,
+  },
+];
+
+interface NativeSetupCompatibilityProjection {
+  decision: NativeCapabilityReport["decisions"][number];
+  origin: string;
+  projection: "gemini" | "antigravity";
+  markerTarget: SyncResourceMarker["target"];
+  label: string;
+  skillName: string;
+  reportPath: string;
+  surfaces: NativeSetupSurface[];
+}
+
+function setupSurfaceKey(surface: NativeSetupSurface): string {
+  return [
+    surface.kind,
+    surface.name,
+    surface.command ?? "",
+    surface.path ?? "",
+    ...(surface.docs ?? []),
+    ...surface.notes,
+  ].join("\0");
+}
+
+function uniqueSetupSurfaces(surfaces: NativeSetupSurface[]): NativeSetupSurface[] {
+  const seen = new Set<string>();
+  const unique: NativeSetupSurface[] = [];
+  for (const surface of surfaces) {
+    const key = setupSurfaceKey(surface);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(surface);
+  }
+  return unique;
+}
+
+function setupSurfaceMarkdownLine(surface: NativeSetupSurface): string {
+  const details = [
+    surface.command ? `command \`${surface.command}\`` : undefined,
+    surface.path ? `path \`${surface.path}\`` : undefined,
+    surface.docs?.length ? `docs ${surface.docs.join(", ")}` : undefined,
+  ].filter((item): item is string => Boolean(item));
+  const notes = surface.notes.length > 0 ? ` ${surface.notes.join(" ")}` : "";
+  return `- ${surface.kind}: ${surface.name}${details.length > 0 ? ` (${details.join("; ")})` : ""}.${notes}`;
+}
+
+function setupSurfaceSkillMarkdown(options: {
+  displayName: string;
+  skillName: string;
+  surfaces: NativeSetupSurface[];
+}): string {
+  return [
+    "---",
+    `name: ${options.skillName}`,
+    `description: Configure ${options.displayName} on hosts without a native setup command.`,
+    "---",
+    "",
+    `# ${options.displayName} setup`,
+    "",
+    `Use this when the current host has no native ${options.displayName} setup command.`,
+    "",
+    "Known setup surfaces:",
+    ...options.surfaces.map(setupSurfaceMarkdownLine),
+    "",
+    "Secret boundary:",
+    "- Keep API keys, Authorization headers, credentials, and user-specific names in local secret/env state only.",
+    "- Do not paste or store secrets in generated OGB files.",
+    "",
+  ].join("\n");
+}
+
+function isValidatedNativeSetupDecision(decision: NativeCapabilityReport["decisions"][number]): boolean {
+  return (decision.action === "install_native" || decision.action === "use_existing_native")
+    && decision.smoke.status === "passed"
+    && decision.setupSurfaces.length > 0;
+}
+
+function nativeSetupCompatibilityProjections(nativeCapabilitiesReport: NativeCapabilityReport): NativeSetupCompatibilityProjection[] {
+  const projections: NativeSetupCompatibilityProjection[] = [];
+
+  for (const decision of nativeCapabilitiesReport.decisions.filter(isValidatedNativeSetupDecision)) {
+    const targetEntries = NATIVE_SETUP_COMPATIBILITY_TARGETS.flatMap((target) => {
+      const entry = capabilityEntry(decision.entityId, target.capabilityTarget);
+      if (
+        !entry
+        || entry.nativeStatus === "available"
+        || !(entry.setupSurfaces?.some((surface) => surface.kind === "minimal-skill") ?? false)
+      ) {
+        return [];
+      }
+      return [{ ...target, entry }];
+    });
+    if (targetEntries.length === 0) continue;
+
+    const surfaces = uniqueSetupSurfaces([
+      ...decision.setupSurfaces,
+      ...targetEntries.flatMap((target) => target.entry.setupSurfaces ?? []),
+    ]);
+    const origin = `${decision.entityId}${SETUP_SURFACE_ORIGIN_SUFFIX}`;
+
+    for (const target of targetEntries) {
+      const minimalSkills = target.entry.setupSurfaces?.filter((surface) => surface.kind === "minimal-skill") ?? [];
+      for (const skill of minimalSkills) {
+        projections.push({
+          decision,
+          origin,
+          projection: target.projection,
+          markerTarget: target.markerTarget,
+          label: target.label,
+          skillName: skill.name,
+          reportPath: target.reportPath(skill.name),
+          surfaces,
+        });
+      }
+    }
+  }
+
+  return projections;
+}
+
+function removeStaleNativeSetupSurfacesCompatibility(options: {
+  state: ReturnType<typeof emptySyncState>;
+  root: string;
+  keepPaths: Set<string>;
+  backupSession: BackupSession;
+  force?: boolean;
+}): { removed: string[]; warnings: string[] } {
+  const removed: string[] = [];
+  const warnings: string[] = [];
+
+  for (const file of [...options.state.managedFiles]) {
+    if (file.source !== "ogb") continue;
+    if (!file.origin?.endsWith(SETUP_SURFACE_ORIGIN_SUFFIX)) continue;
+    if (file.kind !== undefined && file.kind !== "skill") continue;
+    if (options.keepPaths.has(file.path)) continue;
+
+    const targetPath = targetPathFromReportPath(options.root, file.path);
+    if (!fileExists(targetPath)) {
+      options.state.managedFiles = options.state.managedFiles.filter((item) =>
+        !(item.path === file.path && item.source === "ogb")
+      );
+      continue;
+    }
+
+    if (!options.force && sha256File(targetPath) !== file.sha256) {
+      warnings.push(`Native setup skill conflict: ${file.path} was edited manually; leaving stale setup projection in place`);
+      continue;
+    }
+
+    options.backupSession.backupExisting(targetPath);
+    fs.rmSync(targetPath, { force: true });
+    const parentDir = path.dirname(targetPath);
+    if (dirExists(parentDir) && fs.readdirSync(parentDir).length === 0) fs.rmdirSync(parentDir);
+    options.state.managedFiles = options.state.managedFiles.filter((item) =>
+      !(item.path === file.path && item.source === "ogb")
+    );
+    removed.push(file.path);
+  }
+
+  return { removed, warnings };
+}
+
+function managedNativeSetupGeminiSkillDirs(options: {
+  state: ReturnType<typeof emptySyncState>;
+  homeDir: string;
+}): Set<string> {
+  const dirs = new Set<string>();
+  for (const file of options.state.managedFiles) {
+    if (file.source !== "ogb") continue;
+    if (!file.origin?.endsWith(SETUP_SURFACE_ORIGIN_SUFFIX)) continue;
+    if (!file.path.startsWith(".gemini/skills/")) continue;
+    if (!file.path.endsWith("/SKILL.md")) continue;
+    dirs.add(path.dirname(targetPathFromReportPath(options.homeDir, file.path)));
+  }
+  return dirs;
+}
+
+function projectNativeSetupSurfacesCompatibility(options: {
+  homeDir: string;
+  state: ReturnType<typeof emptySyncState>;
+  nativeCapabilitiesReport: NativeCapabilityReport;
+  backupSession: BackupSession;
+  dryRun?: boolean;
+  force?: boolean;
+}): { promoted: string[]; warnings: string[]; markers: SyncResourceMarker[] } {
+  const promoted: string[] = [];
+  const warnings: string[] = [];
+  const markers: SyncResourceMarker[] = [];
+
+  for (const projection of nativeSetupCompatibilityProjections(options.nativeCapabilitiesReport)) {
+    const content = setupSurfaceSkillMarkdown({
+      displayName: projection.decision.displayName,
+      skillName: projection.skillName,
+      surfaces: projection.surfaces,
+    });
+    const write = writeManagedCompatibilityText({
+      state: options.state,
+      root: options.homeDir,
+      reportPath: projection.reportPath,
+      content,
+      kind: "skill",
+      projection: projection.projection,
+      label: `${projection.decision.displayName} ${projection.label}`,
+      origin: projection.origin,
+      backupSession: options.backupSession,
+      dryRun: options.dryRun,
+      force: options.force,
+    });
+    if (write.warning) {
+      warnings.push(write.warning);
+      continue;
+    }
+    if (write.promoted) {
+      promoted.push(write.promoted);
+      markers.push(projectedResource(write.promoted, "skill", projection.markerTarget, projection.origin));
+    }
+  }
+
+  if (!options.dryRun) {
+    const stale = removeStaleNativeSetupSurfacesCompatibility({
+      state: options.state,
+      root: options.homeDir,
+      keepPaths: new Set(markers.map((marker) => marker.path)),
+      backupSession: options.backupSession,
+      force: options.force,
+    });
+    warnings.push(...stale.warnings);
+  }
+
+  return { promoted, warnings, markers };
+}
+
 function removeStaleManagedFiles(options: {
   state: ReturnType<typeof emptySyncState>;
   root: string;
@@ -2427,6 +2828,7 @@ function projectGlobalGeminiSkills(options: {
   backupSession: BackupSession;
   suppressedExtensionNames?: Set<string>;
   suppressedSkillNames?: Set<string>;
+  ignoredGeminiSkillDirs?: Iterable<string>;
   dryRun?: boolean;
   force?: boolean;
 }): ProjectSkillDirsResult {
@@ -2436,8 +2838,10 @@ function projectGlobalGeminiSkills(options: {
   const used = new Set<string>();
   const suppressedExtensionNames = options.suppressedExtensionNames ?? new Set<string>();
   const suppressedSkillNames = options.suppressedSkillNames ?? new Set<string>();
+  const ignoredGeminiSkillDirs = new Set([...(options.ignoredGeminiSkillDirs ?? [])].map((dir) => path.resolve(dir)));
 
   for (const skill of listGeminiGlobalSkillDirs(options.homeDir)) {
+    if (ignoredGeminiSkillDirs.has(path.resolve(skill.sourceDir))) continue;
     if (shouldSuppressNativeSkill({ skillName: skill.skillName, suppressedExtensionNames, suppressedSkillNames })) continue;
     const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
     used.add(targetName);
@@ -2503,6 +2907,8 @@ function projectGlobalAntigravitySkills(options: {
   homeDir: string;
   state: ReturnType<typeof emptySyncState>;
   backupSession: BackupSession;
+  ignoredGeminiSkillDirs?: Iterable<string>;
+  extraKeepSkillFiles?: Iterable<string>;
   dryRun?: boolean;
   force?: boolean;
 }): ProjectAntigravitySkillsResult {
@@ -2513,8 +2919,11 @@ function projectGlobalAntigravitySkills(options: {
   const keepSkillFiles = new Set<string>();
   const used = new Set<string>();
   let commandConversionFailed = false;
+  const ignoredGeminiSkillDirs = new Set([...(options.ignoredGeminiSkillDirs ?? [])].map((dir) => path.resolve(dir)));
+  for (const filePath of options.extraKeepSkillFiles ?? []) keepSkillFiles.add(filePath);
 
   for (const skill of listGeminiGlobalSkillDirs(options.homeDir)) {
+    if (ignoredGeminiSkillDirs.has(path.resolve(skill.sourceDir))) continue;
     const targetName = safeSkillTargetName(skill.skillName, used, "gemini");
     used.add(targetName);
     keepSkillFiles.add(`${globalAntigravityRelPath(`skills/${safeGlobalSegment(targetName)}`)}/SKILL.md`);
@@ -2969,13 +3378,20 @@ function projectBuiltInFiles(options: {
   relDir: ".opencode/agents" | ".opencode/commands";
   files: BuiltInTextFile[];
   label: "Agent" | "Command";
+  kind: ManagedFileKind;
+  origin: string;
   removedNames?: string[];
   backupSession: BackupSession;
-}): { promoted: string[]; removed: string[]; warnings: string[] } {
+}): { promoted: string[]; removed: string[]; warnings: string[]; markers: SyncResourceMarker[] } {
   const warnings: string[] = [];
   const promoted: string[] = [];
   const removed: string[] = [];
+  const markers: SyncResourceMarker[] = [];
   const state = readSyncState(options.projectRoot) ?? emptySyncState(OGB_VERSION);
+  const promote = (relPath: string) => {
+    promoted.push(relPath);
+    markers.push(openCodeExclusiveResource(relPath, options.kind, options.origin));
+  };
 
   for (const removedName of options.removedNames ?? []) {
     const relPath = `${options.relDir}/${removedName}.md`;
@@ -3017,7 +3433,7 @@ function projectBuiltInFiles(options: {
     const targetPath = path.join(options.projectRoot, options.relDir, `${file.name}.md`);
 
     if (options.dryRun) {
-      promoted.push(relPath);
+      promote(relPath);
       continue;
     }
 
@@ -3028,8 +3444,11 @@ function projectBuiltInFiles(options: {
         path: relPath,
         sha256: desiredHash,
         source: "ogb",
+        kind: options.kind,
+        projection: "opencode",
+        origin: options.origin,
       });
-      promoted.push(relPath);
+      promote(relPath);
       continue;
     }
     if (fs.existsSync(targetPath) && !options.force) {
@@ -3040,8 +3459,11 @@ function projectBuiltInFiles(options: {
           path: relPath,
           sha256: currentHash,
           source: "ogb",
+          kind: options.kind,
+          projection: "opencode",
+          origin: options.origin,
         });
-        promoted.push(relPath);
+        promote(relPath);
         continue;
       }
       if (previousHash !== currentHash) {
@@ -3071,15 +3493,28 @@ function projectBuiltInFiles(options: {
       path: relPath,
       sha256: sha256File(targetPath),
       source: "ogb",
+      kind: options.kind,
+      projection: "opencode",
+      origin: options.origin,
     });
-    promoted.push(relPath);
+    promote(relPath);
   }
 
   if (!options.dryRun) writeSyncState(state, options.projectRoot);
-  return { promoted, removed, warnings };
+  return { promoted, removed, warnings, markers };
 }
 
 function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, options: SyncOptions): SyncReport {
+  const syncStartedAt = performance.now();
+  const timingSteps: Array<{ name: string; durationMs: number }> = [];
+  function timed<T>(name: string, run: () => T): T {
+    const startedAt = performance.now();
+    try {
+      return run();
+    } finally {
+      timingSteps.push({ name, durationMs: Math.max(0, Math.round(performance.now() - startedAt)) });
+    }
+  }
   const globalRoot = globalOpenCodeConfigDir({ homeDir: paths.homeDir });
   const backupSession = createBackupSession({
     bridgeConfigDir: paths.bridgeConfigDir,
@@ -3098,6 +3533,7 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     thresholdPercent: ogbConfig.modelFallbacks?.routing?.thresholdPercent,
   });
   const state = readSyncState(paths.projectRoot, paths.homeDir) ?? emptySyncState(OGB_VERSION);
+  const ignoredGeminiSkillDirs = managedNativeSetupGeminiSkillDirs({ state, homeDir: paths.homeDir });
   const warnings: string[] = [];
   const mcpEnvStore = syncMcpEnvStore({
     projectRoot: paths.homeDir,
@@ -3133,7 +3569,9 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     projectRoot: paths.homeDir,
     homeDir: paths.homeDir,
     currentOpenCodePlugins: pluginSpecsFromConfig(globalConfigPath(globalRoot)),
+    ignoredGeminiSkillDirs,
   });
+  const previousNativeCapabilitiesReport = readJson(paths.nativeCapabilitiesPath) as NativeCapabilityReport | undefined;
   const plannedNativeCapabilities = resolveNativeCapabilities({
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
@@ -3156,11 +3594,12 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
       })
     : { mcpServers: [] };
   if (projectedConfig.warning) warnings.push(projectedConfig.warning);
-  const nativeCapabilitiesReport = resolveNativeCapabilities({
+  const nativeCapabilitiesReport = timed("native-resolve", () => resolveNativeCapabilities({
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
     target: "opencode",
     sources: nativeSources,
+    previousReport: previousNativeCapabilitiesReport,
     currentOpenCodePlugins: options.dryRun
       ? mergePluginSpecsByPackage(pluginSpecsFromConfig(globalConfigPath(globalRoot)), plannedNativeCapabilities.openCodePlugins)
       : pluginSpecsFromConfig(globalConfigPath(globalRoot)),
@@ -3168,10 +3607,11 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     smoke: options.dryRun
       ? undefined
       : createOpenCodeNativeSmoke({ projectRoot: paths.projectRoot, homeDir: paths.homeDir }),
-  });
+  }));
   warnings.push(...nativeCapabilitiesReport.warnings);
   const nativeSuppressedExtensionNames = new Set(nativeCapabilitiesReport.suppressedExtensionNames);
   const nativeSuppressedSkillNames = new Set(nativeCapabilitiesReport.suppressedSkillNames);
+  const nativeSetupKeepPaths = new Set(nativeSetupCompatibilityProjections(nativeCapabilitiesReport).map((projection) => projection.reportPath));
 
   const projectedCommands = projectGlobalGeminiCommands({
     homeDir: paths.homeDir,
@@ -3260,52 +3700,64 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
   extensionProjectionWarnings.push(...removedGlobalAgents.warnings);
   warnings.push(...removedGlobalAgents.warnings);
 
-  const projectedSkills = projectGlobalGeminiSkills({
+  const projectedSkills = timed("global-skills", () => projectGlobalGeminiSkills({
     homeDir: paths.homeDir,
     state,
     backupSession,
     suppressedExtensionNames: nativeSuppressedExtensionNames,
     suppressedSkillNames: nativeSuppressedSkillNames,
+    ignoredGeminiSkillDirs,
     dryRun: options.dryRun,
     force: options.force,
-  });
+  }));
   warnings.push(...projectedSkills.warnings);
 
-  const projectedAntigravitySkills = projectGlobalAntigravitySkills({
+  const projectedAntigravitySkills = timed("antigravity-skills", () => projectGlobalAntigravitySkills({
     homeDir: paths.homeDir,
     state,
     backupSession,
+    ignoredGeminiSkillDirs,
+    extraKeepSkillFiles: nativeSetupKeepPaths,
     dryRun: options.dryRun,
     force: options.force,
-  });
+  }));
   warnings.push(...projectedAntigravitySkills.warnings);
 
-  const projectedAntigravityAgents = projectGlobalAntigravityAgents({
+  const projectedAntigravityAgents = timed("antigravity-agents", () => projectGlobalAntigravityAgents({
     homeDir: paths.homeDir,
     state,
     backupSession,
     dryRun: options.dryRun,
     force: options.force,
-  });
+  }));
   warnings.push(...projectedAntigravityAgents.warnings);
 
-  const projectedAntigravityWorkflows = projectGlobalAntigravityWorkflows({
+  const projectedAntigravityWorkflows = timed("antigravity-workflows", () => projectGlobalAntigravityWorkflows({
     homeDir: paths.homeDir,
     state,
     backupSession,
     dryRun: options.dryRun,
     force: options.force,
-  });
+  }));
   warnings.push(...projectedAntigravityWorkflows.warnings);
 
-  const projectedAntigravityMcps = projectGlobalAntigravityMcps({
+  const projectedAntigravityMcps = timed("antigravity-mcps", () => projectGlobalAntigravityMcps({
     homeDir: paths.homeDir,
     state,
     backupSession,
     dryRun: options.dryRun,
     force: options.force,
-  });
+  }));
   warnings.push(...projectedAntigravityMcps.warnings);
+  const projectedNativeSetupSurfaces = timed("native-setup-surfaces", () => projectNativeSetupSurfacesCompatibility({
+    homeDir: paths.homeDir,
+    state,
+    nativeCapabilitiesReport,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  }));
+  warnings.push(...projectedNativeSetupSurfaces.warnings);
 
   const projectedExtensionMap = writeGlobalExtensionMap({
     paths,
@@ -3352,7 +3804,18 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     report: nativeCapabilitiesReport,
     dryRun: options.dryRun,
   });
-
+  const projectedResourceMarkers: SyncResourceMarker[] = [
+    ...projectedResources(projectedAgents.promoted, "agent", "opencode", "gemini:agent"),
+    ...projectedResources(projectedExtensionAgents.promoted, "agent", "opencode", "gemini:extension-agent"),
+    ...projectedResources(projectedCommands.promoted, "command", "opencode", "gemini:command"),
+    ...projectedResources(projectedExtensionCommands.promoted, "command", "opencode", "gemini:extension-command"),
+    ...projectedResources(projectedSkills.promoted, "skill", "opencode", "gemini:skill"),
+    ...projectedResources(projectedAntigravitySkills.promoted, "skill", "antigravity", "gemini:skill"),
+    ...projectedResources(projectedAntigravityAgents.promoted, "agent", "antigravity", "gemini:agent"),
+    ...projectedResources(projectedAntigravityWorkflows.promoted, "workflow", "antigravity", "gemini:workflow"),
+    ...projectedResources(projectedAntigravityMcps.promoted, "mcp", "antigravity", "gemini:mcp"),
+    ...projectedNativeSetupSurfaces.markers,
+  ];
   const report: SyncReport = {
     version: OGB_VERSION,
     projectRoot: paths.projectRoot,
@@ -3374,6 +3837,7 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
     projectedAntigravityMcps: projectedAntigravityMcps.promoted,
     removedAntigravityMcps: projectedAntigravityMcps.removed,
     projectedTuiFiles: [],
+    projectedResourceMarkers,
     projectedExternalPlugins: [],
     projectedExternalIntegrationFiles: [],
     nativeCapabilities,
@@ -3385,6 +3849,10 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
       ...projectedAntigravityWorkflows.notes,
     ])],
     warnings: [...new Set([...warnings, ...backupSession.retention.warnings])],
+    timing: {
+      durationMs: Math.max(0, Math.round(performance.now() - syncStartedAt)),
+      steps: timingSteps,
+    },
   };
 
   if (!options.silent) {
@@ -3459,11 +3927,15 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     homeDir: paths.homeDir,
     storedEnvKeys: options.dryRun ? mcpEnvStore.stored : [],
   }));
+  const previousSyncState = readSyncState(paths.projectRoot) ?? emptySyncState(OGB_VERSION);
+  const ignoredGeminiSkillDirs = managedNativeSetupGeminiSkillDirs({ state: previousSyncState, homeDir: paths.homeDir });
   const nativeSources = detectNativeCapabilitySources({
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
     currentOpenCodePlugins: mergePluginSpecsByPackage(pluginSpecsFromConfig(path.join(paths.projectRoot, "opencode.jsonc")), openCodePlugins),
+    ignoredGeminiSkillDirs,
   });
+  const previousNativeCapabilitiesReport = readJson(paths.nativeCapabilitiesPath) as NativeCapabilityReport | undefined;
   const plannedNativeCapabilities = resolveNativeCapabilities({
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
@@ -3487,6 +3959,9 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
       path: ".opencode/generated/opencode.generated.json",
       sha256: sha256File(paths.generatedOpenCodeConfigPath),
       source: "ogb",
+      kind: "config",
+      projection: "opencode",
+      origin: "ogb:generated-opencode-config",
     });
     writeSyncState(state, paths.projectRoot);
 
@@ -3510,6 +3985,7 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     homeDir: paths.homeDir,
     target: "opencode",
     sources: nativeSources,
+    previousReport: previousNativeCapabilitiesReport,
     currentOpenCodePlugins: effectiveOpenCodePlugins,
     availableMcpServers: Object.keys(mcp),
     smoke: options.dryRun
@@ -3519,6 +3995,7 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
   warnings.push(...nativeCapabilitiesReport.warnings);
   const nativeSuppressedExtensionNames = new Set(nativeCapabilitiesReport.suppressedExtensionNames);
   const nativeSuppressedSkillNames = new Set(nativeCapabilitiesReport.suppressedSkillNames);
+  const nativeSetupKeepPaths = new Set(nativeSetupCompatibilityProjections(nativeCapabilitiesReport).map((projection) => projection.reportPath));
 
   const projectedSkills = projectExtensionSkills({
     projectRoot: paths.projectRoot,
@@ -3536,6 +4013,8 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     homeDir: paths.homeDir,
     state: antigravityState,
     backupSession,
+    ignoredGeminiSkillDirs,
+    extraKeepSkillFiles: nativeSetupKeepPaths,
     dryRun: options.dryRun,
     force: options.force,
   });
@@ -3564,6 +4043,15 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     force: options.force,
   });
   warnings.push(...projectedAntigravityMcps.warnings);
+  const projectedNativeSetupSurfaces = projectNativeSetupSurfacesCompatibility({
+    homeDir: paths.homeDir,
+    state: antigravityState,
+    nativeCapabilitiesReport,
+    backupSession,
+    dryRun: options.dryRun,
+    force: options.force,
+  });
+  warnings.push(...projectedNativeSetupSurfaces.warnings);
   if (!options.dryRun) writeSyncState(antigravityState, paths.projectRoot);
 
   const projectedTui = ensureTuiSidebar({
@@ -3599,6 +4087,8 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     relDir: ".opencode/agents",
     files: BUILT_IN_AGENTS,
     label: "Agent",
+    kind: "agent",
+    origin: "ogb:built-in-agent",
     removedNames: REMOVED_BUILT_IN_AGENT_NAMES,
     backupSession,
   });
@@ -3611,6 +4101,8 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     relDir: ".opencode/commands",
     files: BUILT_IN_COMMANDS,
     label: "Command",
+    kind: "command",
+    origin: "ogb:built-in-command",
     removedNames: REMOVED_BUILT_IN_COMMAND_NAMES,
     backupSession,
   });
@@ -3638,6 +4130,22 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     report: nativeCapabilitiesReport,
     dryRun: options.dryRun,
   });
+  const projectedTuiFiles = [projectedTui.plugin, projectedTui.config]
+    .filter((item) => item.status === "created" || item.status === "updated" || item.status === "preview")
+    .map((item) => item.relPath);
+  const projectedResourceMarkers: SyncResourceMarker[] = [
+    ...projectedAgents.markers,
+    ...projectedCommands.markers,
+    ...projectedResources(projectedSkills.promoted, "skill", "opencode", "gemini:extension-skill"),
+    ...projectedResources(projectedExtensionCommands.projectedCommands, "command", "opencode", "gemini:extension-command"),
+    ...projectedResources(projectedExtensionCommands.projectedAgents, "agent", "opencode", "gemini:extension-agent"),
+    ...projectedResources(projectedAntigravitySkills.promoted, "skill", "antigravity", "gemini:skill"),
+    ...projectedResources(projectedAntigravityAgents.promoted, "agent", "antigravity", "gemini:agent"),
+    ...projectedResources(projectedAntigravityWorkflows.promoted, "workflow", "antigravity", "gemini:workflow"),
+    ...projectedResources(projectedAntigravityMcps.promoted, "mcp", "antigravity", "gemini:mcp"),
+    ...projectedNativeSetupSurfaces.markers,
+    ...projectedTuiFiles.map((relPath) => openCodeExclusiveResource(relPath, "tui", "ogb:tui-sidebar")),
+  ];
 
   const report: SyncReport = {
     version: OGB_VERSION,
@@ -3661,9 +4169,8 @@ export function syncToOpenCode(options: SyncOptions = {}): SyncReport {
     removedAntigravityWorkflows: projectedAntigravityWorkflows.removed,
     projectedAntigravityMcps: projectedAntigravityMcps.promoted,
     removedAntigravityMcps: projectedAntigravityMcps.removed,
-    projectedTuiFiles: [projectedTui.plugin, projectedTui.config]
-      .filter((item) => item.status === "created" || item.status === "updated" || item.status === "preview")
-      .map((item) => item.relPath),
+    projectedTuiFiles,
+    projectedResourceMarkers,
     projectedExternalPlugins: [...new Set([...projectedExternalIntegrations.openCodePlugins, ...projectedExternalIntegrations.tuiPlugins])],
     projectedExternalIntegrationFiles: projectedExternalIntegrations.writes
       .filter((item) => item.status === "created" || item.status === "updated" || item.status === "preview")

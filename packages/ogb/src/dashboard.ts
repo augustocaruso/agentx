@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { runDoctor } from "./doctor.js";
+import { runDoctor, type DoctorReport } from "./doctor.js";
 import { resolveProjectPaths } from "./paths.js";
+import { formatDashboard } from "./presentation/dashboard.js";
 import { readStateRecord, writeStateRecord, type StateStoreOptions } from "./state-store.js";
 import { telemetryStatus, type TelemetryStatus } from "./telemetry.js";
 import { OGB_VERSION, type StatusCounts } from "./types.js";
@@ -11,6 +12,7 @@ export interface DashboardOptions {
   homeDir?: string;
   json?: boolean;
   refresh?: boolean;
+  doctorReport?: Pick<DoctorReport, "version" | "projectRoot" | "warnings" | "errors"> & Partial<DoctorReport>;
   silent?: boolean;
   writeOnly?: boolean;
   strict?: boolean;
@@ -182,10 +184,6 @@ function asCounts(value: unknown): StatusCounts {
     error: Number(input.error ?? 0),
     needs_review: Number(input.needs_review ?? 0),
   };
-}
-
-function total(counts: StatusCounts): number {
-  return counts.ok + counts.warning + counts.error + counts.needs_review;
 }
 
 function firstFailedReportDetail(kind: "validation" | "security", report: Record<string, any>): string | undefined {
@@ -371,21 +369,6 @@ function pluginStateStatus(state: string): "pass" | "warn" | "fail" | "missing" 
   return "missing";
 }
 
-function formatMs(value: number | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "tempo desconhecido";
-  if (value < 1000) return `${Math.round(value)}ms`;
-  return `${(value / 1000).toFixed(1)}s`;
-}
-
-function statusLabel(status: string): string {
-  return status.toUpperCase();
-}
-
-function firstLines(items: string[], max = 6): string[] {
-  if (items.length <= max) return items;
-  return [...items.slice(0, max), `...mais ${items.length - max}`];
-}
-
 function compactLine(value: unknown, max = 220): string | undefined {
   if (typeof value !== "string") return undefined;
   const line = value.trim().split(/\r?\n/).find(Boolean);
@@ -457,7 +440,7 @@ function buildNextSteps(report: DashboardReport): string[] {
     steps.push("Rode `ogb security-check` antes de empacotar ou publicar.");
   }
   if (report.extensionCompatibility.scripts > 0) {
-    steps.push("Scripts soltos de Gemini Extensions continuam como superficie de revisao; hooks BeforeTool/AfterTool compativeis de settings/extensoes rodam pelo plugin OGB.");
+    steps.push("Scripts soltos de Gemini Extensions continuam como superficie de revisao; hooks BeforeTool/AfterTool/BeforeAgent compativeis de settings/extensoes rodam pelo plugin OGB.");
   }
   if (report.runtimeFallback.configured && (!report.runtimeFallback.pluginActive || !report.runtimeFallback.configExists)) {
     steps.push("Rode `ogb sync` para alinhar o plugin/config do runtime fallback externo.");
@@ -470,70 +453,14 @@ function buildNextSteps(report: DashboardReport): string[] {
   return steps;
 }
 
-export function formatDashboard(report: DashboardReport): string {
-  const startup = report.startupSync.lastState === "unknown"
-    ? "sem execucao registrada"
-    : `${statusLabel(report.startupSync.lastState)}${report.startupSync.lastFinishedAt ? ` em ${report.startupSync.lastFinishedAt}` : ""}${report.startupSync.lastDurationMs ? ` (${formatMs(report.startupSync.lastDurationMs)})` : ""}${report.startupSync.nextRetryAfter ? `, retry after ${report.startupSync.nextRetryAfter}` : ""}`;
-  const modelRouting = report.extensionCompatibility.modelRoutingReport
-    ? `OGB ${report.extensionCompatibility.modelRoutingEnabled ? "active" : "disabled"}, ${report.extensionCompatibility.modelRoutingDecisions} decision(s)${report.extensionCompatibility.modelRoutingRouted > 0 ? `, ${report.extensionCompatibility.modelRoutingRouted} routed` : ""}${report.extensionCompatibility.modelRoutingSkipped > 0 ? `, ${report.extensionCompatibility.modelRoutingSkipped} skipped` : ""}`
-    : "missing - run `ogb sync`";
-  const update = report.update.exists
-    ? `${statusLabel(report.update.status)}${report.update.latestTag ? ` ${report.update.latestTag}` : ""}${report.update.restartRequired ? " - restart OpenCode" : ""}`
-    : "MISSING - checked on next startup";
-  const telemetry = report.telemetry.ready
-    ? `READY - ${report.telemetry.payloadLevel}, outbox ${report.telemetry.outboxCount}, sent runs ${report.telemetry.sentRunCount}`
-    : report.telemetry.enabled
-      ? `ENABLED but not ready - outbox ${report.telemetry.outboxCount}`
-      : `DISABLED${report.telemetry.outboxCount > 0 ? ` - outbox ${report.telemetry.outboxCount}` : ""}`;
-
-  const lines = [
-    "OpenCode Gemini Bridge Dashboard",
-    `Project: ${report.projectRoot}`,
-    `Outcome: ${statusLabel(report.outcome)}`,
-    "",
-    "Resumo:",
-    `- Gemini context: ${report.resources.geminiFiles} GEMINI.md, context ${report.generated.contextVersion ?? "missing"}, config ${report.generated.configVersion ?? "missing"}`,
-    `- OpenCode: ${total(report.resources.mcps)} MCPs, ${total(report.resources.skills)} skills, ${total(report.resources.agents)} agent(s), ${total(report.resources.commands)} commands`,
-    `- Extensions: ${report.extensionCompatibility.extensions} extension(s), ${report.extensionCompatibility.projectedCommands} command(s), ${report.extensionCompatibility.availableAgents} agent(s) mapped`,
-    `- Model routing: ${report.extensionCompatibility.modelFallbacks} configured agent(s), ${modelRouting}`,
-    `- Runtime fallback: ${report.runtimeFallback.configured ? `${report.runtimeFallback.pluginActive ? "plugin active" : "plugin missing"}, config ${report.runtimeFallback.configExists ? "present" : "missing"}, ${report.runtimeFallback.agentFallbacks} agent chain(s), retries ${report.runtimeFallback.maxRetries ?? "n/a"}, cooldown ${report.runtimeFallback.cooldownMs ?? "n/a"}ms` : "disabled"}`,
-    `- Model resolution: ${report.modelResolution.message}`,
-    `- Extension hooks/scripts: ${report.extensionCompatibility.hooks} hook file(s) synced by OGB when compatible, ${report.extensionCompatibility.scripts} script(s) review-only`,
-    `- Rulesync: ${report.rulesync.available ? `available${report.rulesync.version ? ` ${report.rulesync.version}` : ""}` : "unavailable"}${report.rulesync.lastStatus ? `, last ${report.rulesync.lastStatus}` : ""}`,
-    `- Startup sync: ${startup}`,
-    `- OGB update: ${update}`,
-    `- Telemetry: ${telemetry}`,
-    `- Usage limits: ${report.limits.exists ? `${statusLabel(report.limits.status)} - ${report.limits.providers} provider(s), OpenUsage ${report.limits.openusage}, OpenAI ${report.limits.openaiChatGPT}, Claude ${report.limits.anthropicClaude}, Gemini ${report.limits.geminiCodeAssist}` : "MISSING - run `ogb limits` or `/bridge`"}`,
-    "",
-    "Checks:",
-    `- Doctor: ${statusLabel(report.reports.doctor.status)} - ${report.reports.doctor.message}`,
-    `- Validation: ${statusLabel(report.reports.validation.status)} - ${report.reports.validation.message}`,
-    `- Security: ${statusLabel(report.reports.security.status)} - ${report.reports.security.message}`,
-  ];
-
-  if (report.warnings.length > 0) {
-    lines.push("", "Avisos:");
-    for (const warning of firstLines(report.warnings)) lines.push(`- ${warning}`);
-  }
-
-  if (report.errors.length > 0) {
-    lines.push("", "Erros:");
-    for (const error of firstLines(report.errors)) lines.push(`- ${error}`);
-  }
-
-  lines.push("", "Proximos passos:");
-  for (const step of report.nextSteps) lines.push(`- ${step}`);
-
-  return `${lines.join("\n")}\n`;
-}
-
 export function runDashboard(options: DashboardOptions = {}): DashboardReport {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
   const refresh = options.refresh !== false;
   const warnings: string[] = [];
   const errors: string[] = [];
+  const stateOptions = { projectRoot: paths.projectRoot, homeDir: paths.homeDir };
 
-  if (refresh) {
+  if (refresh && !options.doctorReport) {
     try {
       runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true });
     } catch (error) {
@@ -541,8 +468,7 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
     }
   }
 
-  const stateOptions = { projectRoot: paths.projectRoot, homeDir: paths.homeDir };
-  const doctor = readStateRecord<Record<string, any>>("doctor", stateOptions).data;
+  const doctor = (options.doctorReport as Record<string, any> | undefined) ?? readStateRecord<Record<string, any>>("doctor", stateOptions).data;
   const validation = readStateRecord<Record<string, any>>("validation", stateOptions).data;
   const security = readStateRecord<Record<string, any>>("security", stateOptions).data;
   const limits = readJson(paths.limitsPath);
@@ -732,11 +658,6 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
   fs.writeFileSync(paths.telemetryStatusPath, `${JSON.stringify(report.telemetry, null, 2)}\n`, "utf8");
   writeStateRecord("dashboard", report as unknown as Record<string, unknown>, stateOptions);
   fs.writeFileSync(paths.dashboardMarkdownPath, markdown, "utf8");
-
-  if (!options.silent && !options.writeOnly) {
-    if (options.json) console.log(JSON.stringify(report, null, 2));
-    else console.log(markdown.trimEnd());
-  }
 
   if (options.strict && outcome !== "pass") process.exitCode = outcome === "fail" ? 2 : 1;
   return report;

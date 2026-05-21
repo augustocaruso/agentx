@@ -26,6 +26,7 @@ export interface ValidationOptions {
   silent?: boolean;
   doctorReport?: Pick<DoctorReport, "warnings" | "errors">;
   skipOpenCodeDebugConfig?: boolean;
+  skipToolVersionChecks?: boolean;
 }
 
 export interface ValidationCheck {
@@ -226,10 +227,29 @@ function addToolCheck(checks: ValidationCheck[], command: string, args: string[]
   });
 }
 
-function validateOgbGlobal(checks: ValidationCheck[], projectRoot: string, homeDir: string): void {
-  const resolved = resolveCommand("ogb", { homeDir });
+function addToolPathCheck(checks: ValidationCheck[], command: string, homeDir: string): void {
+  const resolved = resolveCommand(command, { homeDir, includeNpmPrefix: false });
+  checks.push({
+    name: `${command} executable`,
+    status: resolved ? "pass" : "warn",
+    message: resolved ? `${command} resolves to ${resolved}.` : `${command} is not available on PATH.`,
+    details: resolved ? { resolved } : undefined,
+  });
+}
+
+function validateOgbGlobal(checks: ValidationCheck[], projectRoot: string, homeDir: string, options: { skipVersionCheck?: boolean } = {}): void {
+  const resolved = resolveCommand("ogb", { homeDir, includeNpmPrefix: !options.skipVersionCheck });
   if (!resolved) {
     checks.push({ name: "ogb global binary", status: "warn", message: "ogb is not available on PATH." });
+    return;
+  }
+  if (options.skipVersionCheck) {
+    checks.push({
+      name: "ogb global binary",
+      status: "pass",
+      message: `ogb resolves to ${resolved}.`,
+      details: { resolved, expectedVersion: OGB_VERSION },
+    });
     return;
   }
   const result = run(resolved, ["--version"], projectRoot, 15000);
@@ -671,9 +691,12 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
     details: { warnings: doctor.warnings, errors: doctor.errors },
   });
 
-  addToolCheck(checks, "node", ["--version"], paths.projectRoot, paths.homeDir);
-  addToolCheck(checks, "npm", ["--version"], paths.projectRoot, paths.homeDir);
-  addToolCheck(checks, "gemini", ["--version"], paths.projectRoot, paths.homeDir);
+  const addTool = options.skipToolVersionChecks
+    ? (command: string) => addToolPathCheck(checks, command, paths.homeDir)
+    : (command: string) => addToolCheck(checks, command, ["--version"], paths.projectRoot, paths.homeDir);
+  addTool("node");
+  addTool("npm");
+  addTool("gemini");
   if (options.skipOpenCodeDebugConfig) {
     checks.push({
       name: "opencode executable",
@@ -683,7 +706,7 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
   } else {
     addToolCheck(checks, "opencode", ["--version"], paths.projectRoot, paths.homeDir);
   }
-  validateOgbGlobal(checks, paths.projectRoot, paths.homeDir);
+  validateOgbGlobal(checks, paths.projectRoot, paths.homeDir, { skipVersionCheck: options.skipToolVersionChecks });
 
   if (paths.homeMode) {
     validateHomeGlobalFiles(paths, checks);
@@ -717,17 +740,6 @@ export function runValidation(options: ValidationOptions = {}): ValidationReport
   };
 
   writeStateRecord("validation", report as unknown as Record<string, unknown>, { projectRoot: paths.projectRoot, homeDir: paths.homeDir });
-
-  if (options.silent) {
-    // Report is written to disk for callers such as ogb check.
-  } else if (options.json) {
-    console.log(JSON.stringify(report, null, 2));
-  } else {
-    console.log("OpenCode Gemini Bridge Validation");
-    console.log(`Project: ${report.projectRoot}`);
-    console.log(`Outcome: ${report.outcome}`);
-    for (const check of checks) console.log(`- ${check.status.toUpperCase()} ${check.name}: ${check.message}`);
-  }
 
   if (options.strict && outcome !== "pass") process.exitCode = outcome === "fail" ? 2 : 1;
   return report;

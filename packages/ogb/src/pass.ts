@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { runDashboard, type DashboardReport } from "./dashboard.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
@@ -121,7 +120,7 @@ export interface PassReport {
 }
 
 function actionForWarning(warning: string): string {
-  if (/^Hook needs review:/.test(warning)) return "Hooks `BeforeTool`/`AfterTool` ja sincronizam automaticamente; para eventos sem equivalente OpenCode, revise o recurso e use hash legado so se quiser silenciar a auditoria.";
+  if (/^Hook needs review:/.test(warning)) return "Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` ja sincronizam automaticamente; para eventos sem equivalente OpenCode, revise o recurso e use hash legado so se quiser silenciar a auditoria.";
   if (/Duplicate name/i.test(warning)) return "Rode `ogb check --json` ou abra `.opencode/generated/ogb-inventory.json` para ver os paths duplicados; mantenha uma copia.";
   if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Ative o fallback gerado ou desative `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc`.";
   if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Instale `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, rode `ogb sync` e reinicie o OpenCode.";
@@ -233,56 +232,8 @@ function acceptCurrentHooks(projectRoot: string, homeDir: string, dryRun?: boole
   return accepted.sort();
 }
 
-function statusText(status: PassStep["status"] | PassReport["outcome"] | PassBlocker["severity"]): string {
-  if (status === "pass") return "OK";
-  if (status === "fail") return "FAIL";
-  return "WARN";
-}
-
-function stepStatusDetail(step: PassStep): string {
-  return step.detail ? `  ${step.detail}` : "";
-}
-
-function relativeReportPath(projectRoot: string, filePath: string): string {
-  const rel = path.relative(projectRoot, filePath);
-  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return filePath;
-  return rel;
-}
-
-function plural(count: number, singular: string, pluralText = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : pluralText}`;
-}
-
 function durationMsSince(startedAt: number): number {
   return Math.max(0, Math.round(performance.now() - startedAt));
-}
-
-function formatDuration(durationMs: number): string {
-  if (durationMs < 1000) return `${durationMs}ms`;
-  return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
-}
-
-function rulesyncTimingDetail(sync: PassSyncSummary): string {
-  const features = sync.rulesyncFeatures ?? [];
-  const parts = [
-    sync.rulesyncPromoted > 0 ? `${sync.rulesyncPromoted} promoted` : undefined,
-    sync.rulesyncDurationMs !== undefined ? formatDuration(sync.rulesyncDurationMs) : undefined,
-    features.length > 0
-      ? features.map((feature) => `${feature.feature}${feature.status === "error" ? " error" : ""} ${formatDuration(feature.durationMs)}`).join(", ")
-      : undefined,
-  ].filter(Boolean);
-  return parts.length > 0 ? `, ${parts.join("; ")}` : "";
-}
-
-function syncSummaryLine(sync: PassSyncSummary): string {
-  const parts = [
-    plural(sync.builtInAgents, "agent"),
-    plural(sync.extensionAgents, "subagent"),
-    plural(sync.builtInCommands, "comando"),
-    plural(sync.extensionCommands, "comando de extensao", "comandos de extensao"),
-    plural(sync.skills, "skill"),
-  ].filter((item) => !item.startsWith("0 "));
-  return parts.length > 0 ? parts.join(", ") : "sem arquivos projetados";
 }
 
 type CheckProgressKey = keyof typeof CHECK_PROGRESS_STEPS;
@@ -295,65 +246,6 @@ function emitCheckProgress(
 ): void {
   const step = CHECK_PROGRESS_STEPS[key];
   emitRitualProgress(sink, { ...step, status, message });
-}
-
-function friendlyBlockerMessage(item: PassBlocker): string {
-  if (/opencode-auto-fallback.*plugin is not active/i.test(item.message)) {
-    return "Auto fallback esta ligado, mas o plugin externo nao carregou.";
-  }
-  if (item.source === "validation" && item.severity === "warn") return "Validation encontrou avisos.";
-  if (item.source === "security" && item.severity === "warn") return "Security-check encontrou avisos.";
-  if (item.source === "dashboard" && item.severity === "warn") return "Dashboard herdou avisos dos checks anteriores.";
-  if (item.source === "patch" && item.severity === "warn") return "Um patch OGB precisa de revisao.";
-  return item.message;
-}
-
-export function formatPassReport(report: PassReport): string {
-  const lines = [
-    `OGB check ${statusText(report.outcome)}`,
-    `Project   ${report.projectRoot}`,
-    ...(report.timing ? [`Duration  ${formatDuration(report.timing.durationMs)}`] : []),
-    "",
-    "Checks",
-    ...report.steps.map((step) => `  ${statusText(step.status).padEnd(5)} ${step.name}${stepStatusDetail(step)}`),
-  ];
-
-  if (report.sync) {
-    lines.push(
-      "",
-      "Sync",
-      `  ${syncSummaryLine(report.sync)}`,
-      `  rulesync: ${report.sync.rulesyncStatus}${rulesyncTimingDetail(report.sync)}`,
-    );
-  }
-
-  if ((report.sync?.notes.length ?? 0) > 0) {
-    lines.push("", "Notes");
-    for (const note of report.sync!.notes) lines.push(`- ${note}`);
-  }
-
-  if (report.acceptedHooks.length > 0) {
-    lines.push("", "Trusted Hooks");
-    for (const hook of report.acceptedHooks) lines.push(`- ${hook}`);
-  }
-
-  if (report.blockers.length > 0) {
-    lines.push("", "Needs Attention");
-    for (const item of report.blockers) {
-      lines.push(`  ${statusText(item.severity).padEnd(5)} ${item.source}: ${friendlyBlockerMessage(item)}`);
-      lines.push(`        fix: ${item.action}`);
-    }
-  } else {
-    lines.push("", "No pending fixes.");
-  }
-
-  lines.push(
-    "",
-    "Files",
-    `  report:    ${relativeReportPath(report.projectRoot, report.files.pass)}`,
-    `  dashboard: ${relativeReportPath(report.projectRoot, report.files.dashboard)}`,
-  );
-  return `${lines.join("\n")}\n`;
 }
 
 function statusFromFindings(fail: boolean, warn: boolean): PassStep["status"] {
@@ -705,6 +597,7 @@ export function runPass(options: PassOptions = {}): PassReport {
         windows: options.windows,
         doctorReport: doctor,
         skipOpenCodeDebugConfig: true,
+        skipToolVersionChecks: true,
       });
     } catch (error) {
       emitCheckProgress(options.onProgress, "validate", "fail", error instanceof Error ? error.message : String(error));
@@ -743,7 +636,7 @@ export function runPass(options: PassOptions = {}): PassReport {
     const dashboardStartedAt = performance.now();
     emitCheckProgress(options.onProgress, "dashboard", "running");
     try {
-      dashboard = runDashboard({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true, refresh: false });
+      dashboard = runDashboard({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true, refresh: false, doctorReport: doctor });
     } catch (error) {
       emitCheckProgress(options.onProgress, "dashboard", "fail", error instanceof Error ? error.message : String(error));
       throw error;
@@ -876,10 +769,6 @@ export function runPass(options: PassOptions = {}): PassReport {
   };
 
   if (!options.dryRun) writeStateRecord("check", report as unknown as Record<string, unknown>, { projectRoot: paths.projectRoot, homeDir: paths.homeDir });
-  if (!options.silent) {
-    if (options.json) console.log(JSON.stringify(report, null, 2));
-    else console.log(formatPassReport(report).trimEnd());
-  }
   if (options.setExitCode !== false) process.exitCode = outcome === "fail" ? 2 : outcome === "warn" ? 1 : 0;
   return report;
 }

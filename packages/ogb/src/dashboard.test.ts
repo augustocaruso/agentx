@@ -143,6 +143,38 @@ test("runDashboard combines generated reports into JSON and Markdown", () => {
   assert.match(markdown, /2 MCPs/);
 });
 
+test("runDashboard can consume a doctor report already produced by check", () => {
+  const projectRoot = tempProject();
+  const paths = resolveProjectPaths(projectRoot);
+
+  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+
+  const report = runDashboard({
+    projectRoot,
+    refresh: true,
+    silent: true,
+    doctorReport: {
+      version: OGB_VERSION,
+      projectRoot,
+      warnings: ["precomputed doctor warning"],
+      errors: [],
+      counts: {
+        geminiFiles: 1,
+        imports: { ok: 1, warning: 0, error: 0, needs_review: 0 },
+        mcps: { ok: 0, warning: 0, error: 0, needs_review: 0 },
+        skills: { ok: 0, warning: 0, error: 0, needs_review: 0 },
+        agents: { ok: 0, warning: 0, error: 0, needs_review: 0 },
+        commands: { ok: 0, warning: 0, error: 0, needs_review: 0 },
+        extensions: { ok: 0, warning: 0, error: 0, needs_review: 0 },
+      },
+    },
+  } as Parameters<typeof runDashboard>[0] & { doctorReport: Record<string, unknown> });
+
+  assert.equal(report.reports.doctor.exists, true);
+  assert.equal(report.warnings.includes("precomputed doctor warning"), true);
+});
+
 test("runDashboard keeps a clean bridge passing when only OpenCode restart is pending", () => {
   const projectRoot = tempProject();
   const paths = resolveProjectPaths(projectRoot);

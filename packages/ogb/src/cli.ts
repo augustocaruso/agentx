@@ -10,8 +10,7 @@ import { runDoctor } from "./doctor.js";
 import { externalOpenCodePlugins } from "./external-integrations.js";
 import { formatCommand, installGeminiExtension, updateGeminiExtensions } from "./extensions.js";
 import { flattenGeminiMd } from "./flatten.js";
-import { findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS } from "./help-catalog.js";
-import { renderInteractiveHelp, type InteractiveHelpSelection } from "./help-ui.js";
+import { findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS, type HelpAction, type HelpCommand } from "./help-catalog.js";
 import { cleanupHomeProjectArtifacts, printHomeCleanupReport } from "./home-cleanup.js";
 import { printInstallReport, runInstall } from "./install.js";
 import { buildInventory, writeInventory } from "./inventory.js";
@@ -23,6 +22,11 @@ import { readOgbConfig } from "./ogb-config.js";
 import { runPass } from "./pass.js";
 import { formatPatchLifecycleReport, inspectPatches } from "./patches.js";
 import { defaultGeminiInput, isHomeProject, resolveProjectPaths } from "./paths.js";
+import { printDashboard } from "./presentation/dashboard.js";
+import { printDoctorReport } from "./presentation/doctor.js";
+import { printPassReport } from "./presentation/pass.js";
+import { printSecurityReport } from "./presentation/security.js";
+import { printValidationReport } from "./presentation/validation.js";
 import { spawnCommand, spawnCommandSync } from "./process.js";
 import { ensureProjectConfig } from "./project-config.js";
 import { printResetReport, ResetConfirmationError, ResetNotHomeError, runReset } from "./reset.js";
@@ -38,7 +42,7 @@ import { disableTelemetry, enableTelemetry, previewTelemetryEnvelope, printTelem
 import { runTrustExtension, runTrustReview } from "./trust.js";
 import { OGB_VERSION } from "./types.js";
 import { runValidation } from "./validation.js";
-import { ritualViewModel, runWithRitualProcessUi, shouldUseRitualUi } from "./ritual-ui.js";
+import { ritualViewModel, shouldUseRitualUi } from "./ritual-view-model.js";
 import {
   checkProgressSteps,
   createRitualId,
@@ -57,6 +61,12 @@ export const program = new Command();
 export const LEGACY_PASS_WARNING = "warning: ogb pass is deprecated; use ogb check.";
 export const LEGACY_SELF_UPDATE_WARNING = "warning: ogb self-update is deprecated; use ogb update.";
 export const LEGACY_UPGRADE_WARNING = "warning: ogb upgrade-ogb is deprecated; use ogb update.";
+
+type InteractiveHelpSelection = {
+  command: HelpCommand;
+  action: HelpAction;
+  args: string[];
+};
 
 function normalizeRulesyncMode(raw: unknown): RulesyncMode {
   if (raw === false) return "off";
@@ -180,6 +190,7 @@ async function runRitualProgressJson<TReport>(options: {
 
 async function runRitualProcessUi(kind: RitualKind, subtitle: string, steps: RitualProgressDefinition[]): Promise<void> {
   const child = currentCliInvocationWithProgressJson();
+  const { runWithRitualProcessUi } = await import("./ui/ink/ritual-ui.js");
   const result = await runWithRitualProcessUi({
     kind,
     subtitle,
@@ -261,7 +272,7 @@ function runImportWorkflow(opts: { dryRun?: boolean; force?: boolean; rulesync?:
   });
   if (opts.dryRun) console.log("Dry-run import complete");
   else {
-    runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir });
+    printDoctorReport(runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir }));
     runDashboard({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true, refresh: false });
   }
 }
@@ -277,7 +288,7 @@ function maybePostExtensionSync(opts: { dryRun?: boolean; skipSync?: boolean; sk
 
   if (!opts.skipSync) syncToOpenCode({ projectRoot: paths.projectRoot, force: opts.force });
   if (!opts.skipDoctor) {
-    runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir });
+    printDoctorReport(runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir }));
     runDashboard({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true, refresh: false });
   }
 }
@@ -471,6 +482,7 @@ async function runCheckCli(opts: CheckCliOptions, workflow: "check" | "pass", le
       onProgress,
     });
     const report = opts.progressJson ? await runRitualProgressJson({ kind: "check", steps, run }) : run();
+    if (!opts.progressJson && !("error" in report)) printPassReport(report, opts.json);
     return report;
   });
 }
@@ -604,6 +616,7 @@ program.command("help")
     }
 
     if (shouldUseRitualUi({ plain: opts.plain })) {
+      const { renderInteractiveHelp } = await import("./ui/ink/help-ui.js");
       const selection = await renderInteractiveHelp(HELP_COMMANDS);
       if (selection) runInteractiveHelpSelection(selection);
       return;
@@ -745,7 +758,9 @@ program.command("doctor")
   .action(async (opts) => {
     await withWorkflowTelemetry("doctor", () => {
       const { project } = commonProjectOptions();
-      return runDoctor({ projectRoot: project, json: opts.json, strict: opts.strict });
+      const report = runDoctor({ projectRoot: project, json: opts.json, strict: opts.strict });
+      printDoctorReport(report, opts.json);
+      return report;
     });
   });
 
@@ -774,13 +789,15 @@ program.command("dashboard")
       if (opts.refresh !== false) {
         await refreshLimits({ projectRoot: project });
       }
-      return runDashboard({
+      const report = runDashboard({
         projectRoot: project,
         json: opts.json,
         refresh: opts.refresh,
         writeOnly: opts.writeOnly,
         strict: opts.strict,
       });
+      if (!opts.writeOnly) printDashboard(report, opts.json);
+      return report;
     });
   });
 
@@ -1009,13 +1026,15 @@ program.command("validate")
   .action(async (opts) => {
     await withWorkflowTelemetry("validate", () => {
       const { project } = commonProjectOptions();
-      return runValidation({
+      const report = runValidation({
         projectRoot: project,
         json: opts.json,
         strict: opts.strict,
         windows: opts.windows,
         opencodeRun: opts.opencodeRun,
       });
+      printValidationReport(report, opts.json);
+      return report;
     });
   });
 
@@ -1026,7 +1045,9 @@ program.command("security-check")
   .action(async (opts) => {
     await withWorkflowTelemetry("security-check", () => {
       const { project } = commonProjectOptions();
-      return runSecurityCheck({ projectRoot: project, json: opts.json, strict: opts.strict });
+      const report = runSecurityCheck({ projectRoot: project, json: opts.json, strict: opts.strict });
+      printSecurityReport(report, opts.json);
+      return report;
     });
   });
 
@@ -1091,7 +1112,7 @@ program.command("launch")
       runImportWorkflow({ rulesync: opts.rulesync });
     }
     if (!paths.homeMode) {
-      runDoctor({ projectRoot: paths.projectRoot, strict: opts.doctor === "strict" });
+      printDoctorReport(runDoctor({ projectRoot: paths.projectRoot, strict: opts.doctor === "strict" }));
     }
     const args = buildOpenCodeLaunchArgs({ agent: opts.agent, yolo: opts.yolo });
     const child = spawnCommand("opencode", args, {

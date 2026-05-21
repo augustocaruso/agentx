@@ -350,17 +350,6 @@ export function runSecurityCheck(options: SecurityOptions = {}): SecurityReport 
 
   writeStateRecord("security", report as unknown as Record<string, unknown>, { projectRoot: paths.projectRoot, homeDir: paths.homeDir });
 
-  if (options.silent) {
-    // Report is written to disk for callers such as ogb check.
-  } else if (options.json) {
-    console.log(JSON.stringify(report, null, 2));
-  } else {
-    console.log("OpenCode Gemini Bridge Security Check");
-    console.log(`Project: ${report.projectRoot}`);
-    console.log(`Outcome: ${report.outcome}`);
-    for (const finding of findings) console.log(`- ${finding.status.toUpperCase()} ${finding.name}: ${finding.message}`);
-  }
-
   if (options.strict && outcome !== "pass") process.exitCode = outcome === "fail" ? 2 : 1;
   return report;
 }

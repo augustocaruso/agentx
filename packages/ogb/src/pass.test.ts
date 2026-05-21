@@ -5,7 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import { runDoctor } from "./doctor.js";
 import { buildInstallerPlan } from "./installer-planner.js";
-import { formatPassReport, runPass, type PassReport } from "./pass.js";
+import { runPass, type PassReport } from "./pass.js";
+import { formatPassReport } from "./presentation/pass.js";
 import type { OgbPatch } from "./patches.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
 import { STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
@@ -33,7 +34,7 @@ function writeHookSettings(projectRoot: string): void {
   fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
     hooks: {
-      BeforeTool: [{ command: "echo ok" }],
+      UserPromptSubmit: [{ command: "echo ok" }],
     },
   }, null, 2), "utf8");
 }
@@ -339,13 +340,13 @@ test("runPass carries the first validation failure into blocker copy and next ac
   process.exitCode = oldExitCode;
 });
 
-test("trusted Gemini hooks require review again after settings change", () => {
+test("trusted unsupported Gemini hooks require review again after settings change", () => {
   const projectRoot = tempRoot();
   const oldExitCode = process.exitCode;
   fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
     hooks: {
-      BeforeAgent: [{ command: "echo ok" }],
+      UserPromptSubmit: [{ command: "echo ok" }],
     },
   }, null, 2), "utf8");
   runPass({
@@ -360,7 +361,7 @@ test("trusted Gemini hooks require review again after settings change", () => {
 
   fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
     hooks: {
-      BeforeAgent: [{ command: "echo changed" }],
+      UserPromptSubmit: [{ command: "echo changed" }],
     },
   }, null, 2), "utf8");
 
@@ -386,7 +387,7 @@ test("trusted Gemini hooks survive unrelated settings changes", () => {
 
   fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
     hooks: {
-      BeforeTool: [{ command: "echo ok" }],
+      UserPromptSubmit: [{ command: "echo ok" }],
     },
     mcpServers: {
       demo: { command: "node", args: ["server.js"] },

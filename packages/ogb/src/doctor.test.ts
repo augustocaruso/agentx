@@ -176,6 +176,20 @@ test("runDoctor treats the global extension map as review inventory, not permane
   assert.equal(report.warnings.some((warning) => warning.includes("Missing gemini-extension.json")), false);
 });
 
+test("runDoctor treats BeforeAgent hooks as compatible projection without trust opt-in", () => {
+  const projectRoot = tempRoot();
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    hooks: {
+      BeforeAgent: [{ command: "echo before-agent" }],
+    },
+  }, null, 2), "utf8");
+
+  const report = runDoctor({ projectRoot, homeDir: projectRoot, silent: true });
+
+  assert.equal(report.warnings.some((warning) => warning.startsWith("Hook needs review: BeforeAgent")), false);
+});
+
 test("runDoctor reports native capability decisions from sync", () => {
   const projectRoot = tempRoot();
   const homeDir = tempRoot();
@@ -202,6 +216,81 @@ test("runDoctor reports native capability decisions from sync", () => {
     assert.equal(report.nativeCapabilities.validatedNative.includes("superpowers"), true);
     assert.equal(report.nativeCapabilities.fallbackCompat.includes("superpowers"), false);
     assert.equal(report.warnings.some((warning) => /Native capability.*missing/i.test(warning)), false);
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test("runDoctor reports native setup projections replicated to hosts without native setup", () => {
+  const projectRoot = tempRoot();
+  const homeDir = tempRoot();
+  const binDir = path.join(tempRoot(), "bin");
+  fs.writeFileSync(path.join(projectRoot, "opencode.jsonc"), JSON.stringify({
+    plugin: ["@honcho-ai/opencode-honcho"],
+  }, null, 2), "utf8");
+  writeFakeOpenCode(binDir, `
+    if (process.argv[2] === "debug" && process.argv[3] === "info") {
+      console.log("honcho plugin loaded");
+      process.exit(0);
+    }
+  `);
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const report = runDoctor({ projectRoot, homeDir, silent: true });
+
+    assert.deepEqual(report.nativeCapabilities.setupCompatibilityProjections.map((projection) => projection.path).sort(), [
+      ".gemini/antigravity/skills/honcho-setup/SKILL.md",
+      ".gemini/skills/honcho-setup/SKILL.md",
+    ]);
+    assert.deepEqual(report.nativeCapabilities.setupCompatibilityProjections.map((projection) => projection.target).sort(), [
+      "antigravity",
+      "gemini",
+    ]);
+    assert.equal(report.nativeCapabilities.setupCompatibilityProjections.every((projection) => projection.entityId === "honcho"), true);
+    assert.equal(report.nativeCapabilities.setupCompatibilityProjections.every((projection) => projection.status === "active"), true);
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test("runDoctor marks preserved setup projections stale when the native setup source is no longer validated", () => {
+  const projectRoot = tempRoot();
+  const homeDir = tempRoot();
+  const binDir = path.join(tempRoot(), "bin");
+  const projectConfigPath = path.join(projectRoot, "opencode.jsonc");
+  fs.writeFileSync(projectConfigPath, JSON.stringify({
+    plugin: ["@honcho-ai/opencode-honcho"],
+  }, null, 2), "utf8");
+  writeFakeOpenCode(binDir, `
+    if (process.argv[2] === "debug" && process.argv[3] === "info") {
+      console.log("honcho plugin loaded");
+      process.exit(0);
+    }
+  `);
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const geminiSetupSkill = path.join(homeDir, ".gemini", "skills", "honcho-setup", "SKILL.md");
+    fs.appendFileSync(geminiSetupSkill, "\nManual local setup note.\n", "utf8");
+    fs.writeFileSync(projectConfigPath, JSON.stringify({ plugin: [] }, null, 2), "utf8");
+    syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+
+    const report = runDoctor({ projectRoot, homeDir, silent: true });
+    const staleProjection = report.nativeCapabilities.setupCompatibilityProjections.find((projection) =>
+      projection.path === ".gemini/skills/honcho-setup/SKILL.md"
+    );
+
+    assert.equal(staleProjection?.status, "stale");
+    assert.equal(report.warnings.some((warning) =>
+      warning.includes("honcho")
+      && warning.includes("setup projection")
+      && warning.includes("no validated native source")
+    ), true);
   } finally {
     process.env.PATH = previousPath;
   }

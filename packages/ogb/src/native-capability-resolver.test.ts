@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
@@ -9,7 +11,11 @@ import {
   nativeCapabilityEntriesForTarget,
   pluginPackageName,
 } from "./native-capability-registry.js";
-import { resolveNativeCapabilities } from "./native-capability-resolver.js";
+import { createOpenCodeNativeSmoke, resolveNativeCapabilities } from "./native-capability-resolver.js";
+
+function tempRoot(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-native-capability-"));
+}
 
 test("native capability registry exposes known native and portable capabilities", () => {
   const superpowers = capabilityEntry("superpowers", "opencode");
@@ -29,6 +35,23 @@ test("native capability registry exposes known native and portable capabilities"
 
   assert.equal(honcho?.nativeInstall?.kind, "opencode-plugin");
   assert.equal(honcho?.nativeInstall?.plugin, "@honcho-ai/opencode-honcho");
+  assert.ok(honcho?.setupSurfaces?.some((surface) =>
+    surface.kind === "operator-command"
+    && surface.command === "/honcho:setup"
+    && surface.replicateAs?.includes("minimal-skill")
+  ));
+  assert.ok(honcho?.setupSurfaces?.some((surface) =>
+    surface.kind === "shared-config"
+    && surface.path === "~/.honcho/config.json"
+  ));
+  assert.ok(capabilityEntry("honcho", "gemini-cli")?.setupSurfaces?.some((surface) =>
+    surface.kind === "minimal-skill"
+    && surface.name === "honcho-setup"
+  ));
+  assert.ok(capabilityEntry("honcho", "antigravity-cli")?.setupSurfaces?.some((surface) =>
+    surface.kind === "minimal-skill"
+    && surface.name === "honcho-setup"
+  ));
   assert.equal(anki?.nativeInstall?.kind, "opencode-mcp");
   assert.equal(anki?.nativeInstall?.mcpName, "anki");
   assert.equal(playwright?.nativeInstall?.kind, "opencode-mcp");
@@ -90,7 +113,12 @@ test("resolveNativeCapabilities installs validated native plugins and marks MCP 
   assert.deepEqual(report.suppressedExtensionNames, ["superpowers"]);
   assert.deepEqual(report.suppressedSkillNames, []);
   assert.equal(report.decisions.find((decision) => decision.entityId === "superpowers")?.action, "install_native");
-  assert.equal(report.decisions.find((decision) => decision.entityId === "honcho")?.action, "use_existing_native");
+  const honchoDecision = report.decisions.find((decision) => decision.entityId === "honcho");
+  assert.equal(honchoDecision?.action, "use_existing_native");
+  assert.ok(honchoDecision?.setupSurfaces.some((surface) =>
+    surface.kind === "operator-command"
+    && surface.command === "/honcho:setup"
+  ));
   assert.equal(report.decisions.find((decision) => decision.entityId === "anki")?.action, "use_existing_native");
   assert.equal(report.decisions.find((decision) => decision.entityId === "playwright-mcp")?.action, "use_existing_native");
   assert.equal(report.decisions.find((decision) => decision.entityId === "notion-mcp")?.action, "use_existing_native");
@@ -113,4 +141,99 @@ test("resolveNativeCapabilities keeps compatibility ports when native smoke fail
   assert.deepEqual(report.suppressedExtensionNames, []);
   assert.equal(report.decisions[0].action, "fallback_compat");
   assert.match(report.decisions[0].message, /native.*not.*confirmed|plugin did not load/i);
+});
+
+test("resolveNativeCapabilities replicates Honcho setup surfaces to targets without native plugins", () => {
+  const sources = [
+    { entityId: "honcho" as const, sourceKind: "opencode-plugin" as const, sourceName: "@honcho-ai/opencode-honcho" },
+  ];
+
+  const gemini = resolveNativeCapabilities({
+    projectRoot: "/tmp/project",
+    homeDir: "/tmp/home",
+    target: "gemini-cli",
+    sources,
+  });
+  const antigravity = resolveNativeCapabilities({
+    projectRoot: "/tmp/project",
+    homeDir: "/tmp/home",
+    target: "antigravity-cli",
+    sources,
+  });
+
+  assert.equal(gemini.decisions[0].action, "replicate_compat");
+  assert.deepEqual(gemini.replicatedCompat, ["honcho"]);
+  assert.ok(gemini.decisions[0].setupSurfaces.some((surface) =>
+    surface.kind === "minimal-skill"
+    && surface.name === "honcho-setup"
+  ));
+  assert.equal(antigravity.decisions[0].action, "replicate_compat");
+  assert.deepEqual(antigravity.replicatedCompat, ["honcho"]);
+  assert.ok(antigravity.decisions[0].setupSurfaces.some((surface) =>
+    surface.kind === "minimal-skill"
+    && surface.name === "honcho-setup"
+  ));
+});
+
+test("resolveNativeCapabilities reuses previous passed native smoke evidence", () => {
+  const previous = resolveNativeCapabilities({
+    projectRoot: "/tmp/project",
+    homeDir: "/tmp/home",
+    target: "opencode",
+    sources: [
+      { entityId: "superpowers", sourceKind: "gemini-extension", sourceName: "superpowers" },
+    ],
+    currentOpenCodePlugins: ["superpowers@git+https://github.com/obra/superpowers.git"],
+    smoke: () => ({ status: "passed", message: "previous smoke" }),
+  });
+  let smokeCalls = 0;
+
+  const report = resolveNativeCapabilities({
+    projectRoot: "/tmp/project",
+    homeDir: "/tmp/home",
+    target: "opencode",
+    sources: [
+      { entityId: "superpowers", sourceKind: "gemini-extension", sourceName: "superpowers" },
+    ],
+    currentOpenCodePlugins: ["superpowers@git+https://github.com/obra/superpowers.git"],
+    previousReport: previous,
+    smoke: () => {
+      smokeCalls += 1;
+      return { status: "failed", message: "should not run" };
+    },
+  } as Parameters<typeof resolveNativeCapabilities>[0] & { previousReport: typeof previous });
+
+  assert.equal(smokeCalls, 0);
+  assert.deepEqual(report.validatedNative, ["superpowers"]);
+  assert.match(report.decisions[0].smoke.message, /previous native smoke/i);
+});
+
+test("createOpenCodeNativeSmoke reuses identical OpenCode debug probes", () => {
+  const root = tempRoot();
+  const binDir = path.join(root, "bin");
+  const marker = path.join(root, "opencode-debug-calls.txt");
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, "opencode"), `#!/usr/bin/env sh\necho call >> "${marker}"\necho "superpowers honcho plugin loaded"\n`, { mode: 0o755 });
+
+  const env = { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` };
+  const smoke = createOpenCodeNativeSmoke({ projectRoot: root, homeDir: root, env });
+  assert.ok(smoke);
+  const superpowers = smoke({
+    nativeInstall: {
+      kind: "opencode-plugin",
+      plugin: "superpowers@git+https://github.com/obra/superpowers.git",
+      smokeOutputHints: ["superpowers"],
+    },
+  } as any, "use_existing_native");
+  const honcho = smoke({
+    nativeInstall: {
+      kind: "opencode-plugin",
+      plugin: "@honcho-ai/opencode-honcho",
+      smokeOutputHints: ["honcho"],
+    },
+  } as any, "use_existing_native");
+
+  assert.equal(superpowers.status, "passed");
+  assert.equal(honcho.status, "passed");
+  assert.equal(fs.readFileSync(marker, "utf8").trim().split(/\r?\n/).length, 1);
 });

@@ -91,6 +91,39 @@ test("runValidation can skip the expensive OpenCode debug probe inside pass", ()
   }
 });
 
+test("runValidation can use fast PATH-only tool checks inside pass", () => {
+  const homeDir = tempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-validation-project-"));
+  const binDir = path.join(homeDir, "bin");
+  const marker = path.join(homeDir, "tool-version-invoked");
+  fs.mkdirSync(binDir, { recursive: true });
+  for (const command of ["node", "npm", "gemini", "ogb", "opencode"]) {
+    fs.writeFileSync(path.join(binDir, command), `#!/usr/bin/env sh\necho ${command} >> "${marker}"\nexit 0\n`, { mode: 0o755 });
+  }
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${originalPath ?? ""}`;
+  try {
+    const report = runValidation({
+      projectRoot,
+      homeDir,
+      silent: true,
+      doctorReport: {
+        warnings: [],
+        errors: [],
+      },
+      skipOpenCodeDebugConfig: true,
+      skipToolVersionChecks: true,
+    } as Parameters<typeof runValidation>[0] & { skipToolVersionChecks: boolean });
+
+    assert.equal(fs.existsSync(marker), false);
+    assert.equal(report.checks.find((check) => check.name === "gemini executable")?.status, "pass");
+    assert.equal(report.checks.find((check) => check.name === "ogb global binary")?.status, "pass");
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
 test("runValidation repairs the exact OpenCode mkdir EEXIST path and retries debug config", () => {
   const homeDir = tempHome();
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-validation-project-"));

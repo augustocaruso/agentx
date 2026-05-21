@@ -69,7 +69,7 @@ function parseConverterOutput(stdout: string): AntigravityCommandSkill {
   };
 }
 
-export function convertGeminiCommandToAntigravitySkill(input: AntigravityCommandSkillInput): AntigravityCommandSkill {
+function convertWithExternalPython(input: AntigravityCommandSkillInput): AntigravityCommandSkill {
   const script = converterScriptPath();
   if (!fs.existsSync(script)) throw new Error(`Antigravity converter not found: ${script}`);
   const args = [
@@ -105,4 +105,130 @@ export function convertGeminiCommandToAntigravitySkill(input: AntigravityCommand
     break;
   }
   throw new Error(`Antigravity converter failed: ${lastFailure}`);
+}
+
+function safeSegment(value: string): string {
+  const normalized = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "command";
+}
+
+function commandSegments(sourceRelPath: string): string[] {
+  const normalized = sourceRelPath.replace(/[\\/]+/g, "/");
+  const withoutCommands = normalized.startsWith("commands/") ? normalized.slice("commands/".length) : normalized;
+  const suffix = path.extname(withoutCommands);
+  const withoutSuffix = suffix ? withoutCommands.slice(0, -suffix.length) : withoutCommands;
+  return withoutSuffix.split("/").filter(Boolean).map(safeSegment);
+}
+
+function slugForCommand(sourceRelPath: string): string {
+  return commandSegments(sourceRelPath).join("-") || "command";
+}
+
+function publicNameForCommand(sourceRelPath: string): string {
+  const segments = commandSegments(sourceRelPath);
+  if (segments.length > 1) return `${segments.slice(0, -1).join(":")}:${segments.at(-1)}`;
+  return segments[0] ?? "command";
+}
+
+function parseQuotedValue(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('"')) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      return typeof parsed === "string" ? parsed : trimmed;
+    } catch {
+      return trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed.slice(1);
+    }
+  }
+  if (trimmed.startsWith("'")) return trimmed.endsWith("'") ? trimmed.slice(1, -1) : trimmed.slice(1);
+  return trimmed;
+}
+
+function parseTomlCommand(text: string): { description?: string; prompt: string; warnings: string[] } {
+  const warnings: string[] = [];
+  const descriptionMatch = text.match(/^\s*description\s*=\s*(?<value>"[^"\n]*(?:\\.[^"\n]*)*"|'[^'\n]*'|[^\n#]+)/m);
+  const blockMatch = text.match(/^\s*prompt\s*=\s*(?<quote>"""|''')\r?\n?(?<value>[\s\S]*?)\r?\n?\k<quote>/m);
+  const linePromptMatch = text.match(/^\s*prompt\s*=\s*(?<value>"[^"\n]*(?:\\.[^"\n]*)*"|'[^'\n]*'|[^\n#]+)/m);
+  const description = parseQuotedValue(descriptionMatch?.groups?.value)?.trim();
+  let prompt = blockMatch?.groups?.value ?? parseQuotedValue(linePromptMatch?.groups?.value);
+
+  if (!description) warnings.push("Missing description");
+  if (!prompt?.trim()) {
+    warnings.push("Missing prompt; copied raw TOML as fallback");
+    prompt = text.trim();
+  }
+
+  return { description: description || undefined, prompt: prompt.trim(), warnings };
+}
+
+function parseMarkdownCommand(text: string, fallbackDescription: string): { description: string; prompt: string; warnings: string[] } {
+  const match = text.match(/^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) return { description: fallbackDescription, prompt: text.trim(), warnings: [] };
+
+  const frontmatter = match.groups?.frontmatter ?? "";
+  let description = fallbackDescription;
+  const descriptionMatch = frontmatter.match(/^\s*description\s*:\s*(?<value>"[^"\n]*(?:\\.[^"\n]*)*"|'[^'\n]*'|[^\n]+)/m);
+  const rawDescription = descriptionMatch?.groups?.value?.trim();
+  if (rawDescription) description = parseQuotedValue(rawDescription) ?? description;
+
+  return { description, prompt: text.slice(match[0].length).trim(), warnings: [] };
+}
+
+function normalizeCommandPrompt(prompt: string, extensionDir?: string): string {
+  let output = prompt.replace(/\{\{\s*args\s*\}\}/g, "$ARGUMENTS");
+  if (extensionDir) output = output.replace(/\$\{extensionPath\}/g, extensionDir).replace(/\$\{\/\}/g, path.sep);
+  return output.trim();
+}
+
+function renderCommandSkill(input: AntigravityCommandSkillInput, description: string, prompt: string): AntigravityCommandSkill {
+  const publicName = publicNameForCommand(input.sourceRelPath);
+  const slug = slugForCommand(input.sourceRelPath);
+  const sourceLines = input.extensionName
+    ? [
+      `<!-- Source extension: ${input.extensionName} -->`,
+      `<!-- Source command: ${input.sourceRelPath} -->`,
+    ]
+    : [`<!-- Source command: ${input.sourceRelPath} -->`];
+  const markdown = [
+    "---",
+    `name: ${JSON.stringify(publicName)}`,
+    `description: ${JSON.stringify(`Use when the user invokes /${publicName}. ${description}`)}`,
+    "---",
+    "",
+    `# /${publicName}`,
+    "",
+    "<!-- GENERATED BY OpenCode Gemini Bridge. DO NOT EDIT. -->",
+    "<!-- SOURCE_KIND: gemini-antigravity-command-skill -->",
+    ...sourceLines,
+    `<!-- Source file: ${input.sourcePath} -->`,
+    "",
+    "This skill is the Antigravity launcher generated from a Gemini CLI command.",
+    `When the user invokes /${publicName}, treat the text after the command as $ARGUMENTS.`,
+    "",
+    "## Launcher Instructions",
+    "",
+    normalizeCommandPrompt(prompt, input.extensionDir),
+    "",
+  ].join("\n");
+
+  return { slug, publicName, description, markdown, warnings: [] };
+}
+
+function convertNatively(input: AntigravityCommandSkillInput): AntigravityCommandSkill {
+  const text = fs.readFileSync(input.sourcePath, "utf8");
+  const parsed = path.extname(input.sourcePath).toLowerCase() === ".toml"
+    ? parseTomlCommand(text)
+    : parseMarkdownCommand(text, `Gemini command: ${input.sourceRelPath}`);
+  const description = parsed.description ?? `Gemini command: ${input.sourceRelPath}`;
+  return {
+    ...renderCommandSkill(input, description, parsed.prompt),
+    warnings: parsed.warnings,
+  };
+}
+
+export function convertGeminiCommandToAntigravitySkill(input: AntigravityCommandSkillInput): AntigravityCommandSkill {
+  if (process.env.OGB_ANTIGRAVITY_CONVERTER || process.env.OGB_PYTHON_BIN) return convertWithExternalPython(input);
+  return convertNatively(input);
 }

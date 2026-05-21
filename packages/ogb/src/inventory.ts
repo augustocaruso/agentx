@@ -306,7 +306,7 @@ function collectHooks(projectRoot: string, homeDir: string, homeMode: boolean): 
     const hookRoot = parsed?.hooks;
     if (!hookRoot || typeof hookRoot !== "object") continue;
     for (const name of Object.keys(hookRoot).sort()) {
-      const autoSynced = name === "BeforeTool" || name === "AfterTool";
+      const autoSynced = name === "BeforeTool" || name === "AfterTool" || name === "BeforeAgent";
       hooks.push({
         name,
         source: settingsPath,

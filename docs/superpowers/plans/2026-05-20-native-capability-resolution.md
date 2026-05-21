@@ -4,7 +4,7 @@
 
 **Goal:** Add a native capability resolver so OGB prefers known validated native installs, falls back to managed compatibility ports, and can model cross-target entity replication such as Honcho.
 
-**Architecture:** Add a static capability registry and resolver before projection. `sync` asks the resolver which OpenCode plugins to enable and which compatibility ports to suppress or remove; `doctor` reports native/fallback decisions. Honcho cross-target support starts as explicit registry/adapter data and pure projection decisions, without writing Gemini or Antigravity files until those target modes exist.
+**Architecture:** Add a static capability registry and resolver before projection. `sync` asks the resolver which OpenCode plugins to enable and which compatibility ports to suppress or remove; `doctor` reports native/fallback decisions. Honcho cross-target support starts as explicit registry/adapter data plus managed setup-skill projection for Gemini and Antigravity when the OpenCode native plugin is validated.
 
 **Tech Stack:** TypeScript ESM, `node:test`, `jsonc-parser`, existing OGB sync state/backups, OpenCode `opencode.jsonc` plugin array.
 
@@ -18,9 +18,9 @@ This plan covers one implementation slice:
 - OpenCode-native plugin preference for known entities, starting with Superpowers.
 - Safe compatibility-port suppression/removal for OGB-managed projections.
 - Doctor/check reporting.
-- Honcho as a cross-target adapter model, with pure decisions and MCP surface metadata, not default filesystem writes to Gemini/Antigravity.
+- Honcho as a cross-target adapter model, with setup surface metadata and a minimal managed setup skill for Gemini/Antigravity targets that lack native setup commands.
 
-Writing Gemini CLI or Antigravity CLI target files for Honcho is intentionally deferred until OGB has explicit target modes for those ecosystems.
+Full Gemini CLI or Antigravity CLI target modes are still future work. The current implemented slice writes only the explicit `honcho-setup` compatibility skill and preserves secrets/config in shared local state, not in generated files.
 
 ## File Structure
 

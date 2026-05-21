@@ -619,6 +619,64 @@ function geminiHookCommands(bridgeCwd, hookCwd, eventName, toolName) {
   ];
 }
 
+function geminiExtensionAgentHookCommands(cwd, eventName) {
+  const map = readExtensionMap(cwd);
+  const commands = [];
+  for (const extension of Array.isArray(map.extensions) ? map.extensions : []) {
+    if (!extension || typeof extension.path !== "string") continue;
+    for (const hookRef of Array.isArray(extension.hooks) ? extension.hooks : []) {
+      const { hookPath, parsed } = readGeminiHookFile(extension, hookRef);
+      for (const entry of hookEntriesForEvent(parsed, eventName)) {
+        for (const hook of commandHooksFromEntry(entry)) {
+          if (hook.type && hook.type !== "command") continue;
+          if (typeof hook.command !== "string" || !hook.command.trim()) continue;
+          commands.push({
+            extensionName: String(extension.name || path.basename(extension.path)),
+            extensionPath: extension.path,
+            cwd: extension.path,
+            hookPath,
+            eventName,
+            name: String(hook.name || hook.command),
+            command: expandExtensionHookCommand(hook.command, extension.path),
+            timeout: Number.isFinite(Number(hook.timeout)) ? Math.max(100, Math.trunc(Number(hook.timeout))) : 10_000,
+          });
+        }
+      }
+    }
+  }
+  return commands;
+}
+
+function geminiSettingsAgentHookCommands(cwd, eventName) {
+  const commands = [];
+  for (const settingsPath of geminiSettingsHookFiles(cwd)) {
+    const parsed = readGeminiSettingsHookFile(settingsPath);
+    for (const entry of hookEntriesForEvent(parsed, eventName)) {
+      for (const hook of commandHooksFromEntry(entry)) {
+        if (hook.type && hook.type !== "command") continue;
+        if (typeof hook.command !== "string" || !hook.command.trim()) continue;
+        commands.push({
+          extensionName: "gemini-settings",
+          cwd,
+          hookPath: settingsPath,
+          eventName,
+          name: String(hook.name || hook.command),
+          command: hook.command,
+          timeout: Number.isFinite(Number(hook.timeout)) ? Math.max(100, Math.trunc(Number(hook.timeout))) : 10_000,
+        });
+      }
+    }
+  }
+  return commands;
+}
+
+function geminiAgentHookCommands(bridgeCwd, hookCwd, eventName) {
+  return [
+    ...geminiSettingsAgentHookCommands(hookCwd, eventName),
+    ...geminiExtensionAgentHookCommands(bridgeCwd, eventName),
+  ];
+}
+
 function compactToolOutput(value) {
   if (!value || typeof value !== "object") return {};
   if (typeof value.output === "string") return { output: value.output };
@@ -651,6 +709,65 @@ function geminiHookPayload(cwd, eventName, input, output) {
     tool: { name: openCodeToolName },
     tool_input: toolInput,
     tool_response: eventName === "AfterTool" ? compactToolOutput(output) : undefined,
+  };
+}
+
+function eventMessage(event) {
+  return event?.message || event?.properties?.message || event?.data?.message || event?.payload?.message || {};
+}
+
+function textFromPromptValue(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map((part) => textFromPromptValue(part)).filter(Boolean).join("");
+  }
+  if (!value || typeof value !== "object") return "";
+  if (typeof value.text === "string") return value.text;
+  if (typeof value.content === "string") return value.content;
+  if (Array.isArray(value.content)) return textFromPromptValue(value.content);
+  if (Array.isArray(value.parts)) return textFromPromptValue(value.parts);
+  return "";
+}
+
+function beforeAgentPromptFromEvent(event) {
+  if (String(event?.type || "") !== "message.updated") return undefined;
+  const message = eventMessage(event);
+  const role = String(message?.role || message?.author?.role || event?.role || event?.properties?.role || "").toLowerCase();
+  if (role === "assistant" || role === "system" || role === "tool") return undefined;
+  const prompt = textFromPromptValue(
+    message?.content
+    ?? message?.text
+    ?? message?.parts
+    ?? event?.content
+    ?? event?.prompt
+    ?? event?.properties?.content
+    ?? event?.properties?.text,
+  ).trim();
+  return prompt || undefined;
+}
+
+function eventSessionId(event) {
+  return String(event?.sessionID || event?.sessionId || event?.session_id || event?.properties?.sessionID || event?.properties?.sessionId || event?.properties?.session_id || "");
+}
+
+function eventMessageId(event) {
+  const message = eventMessage(event);
+  return String(message?.id || message?.messageID || message?.messageId || message?.message_id || event?.messageID || event?.messageId || event?.message_id || event?.id || event?.properties?.messageID || event?.properties?.messageId || event?.properties?.message_id || "");
+}
+
+function beforeAgentEventKey(event, prompt) {
+  const sessionId = eventSessionId(event);
+  const messageId = eventMessageId(event);
+  return [sessionId, messageId || prompt].join("\\0");
+}
+
+function geminiAgentHookPayload(cwd, eventName, event, prompt) {
+  return {
+    hook_event_name: eventName,
+    session_id: eventSessionId(event),
+    message_id: eventMessageId(event),
+    cwd,
+    prompt,
   };
 }
 
@@ -750,6 +867,52 @@ async function runGeminiExtensionToolHooks(cwd, client, eventName, input, output
     const rewrittenInput = hookOutput?.hookSpecificOutput?.tool_input;
     if (eventName === "BeforeTool" && rewrittenInput && typeof rewrittenInput === "object" && output?.args && typeof output.args === "object") {
       Object.assign(output.args, rewrittenInput);
+    }
+  }
+}
+
+async function runGeminiExtensionAgentHooks(cwd, client, eventName, event, seenEvents) {
+  const prompt = beforeAgentPromptFromEvent(event);
+  if (!prompt) return;
+  const key = beforeAgentEventKey(event, prompt);
+  if (seenEvents.has(key)) return;
+  seenEvents.add(key);
+  const commands = geminiAgentHookCommands(cwd, cwd, eventName);
+  for (const command of commands) {
+    const payload = geminiAgentHookPayload(cwd, eventName, event, prompt);
+    const result = await runHookCommand(command, payload);
+    const hookOutput = parseHookJson(result.stdout);
+    if (result.code === 2) {
+      throw new Error(String(result.stderr || hookOutput.reason || (command.extensionName + "/" + command.name + " blocked agent turn")));
+    }
+    if (result.timedOut || result.code !== 0) {
+      await log(client, {
+        service: "ogb-extension-hooks",
+        level: "warn",
+        message: "Gemini extension agent hook failed open.",
+        extension: command.extensionName,
+        hook: command.name,
+        event: eventName,
+        code: result.code,
+        timedOut: Boolean(result.timedOut),
+        stderr: tail(result.stderr),
+      });
+      continue;
+    }
+    const decision = String(hookOutput.decision || "").toLowerCase();
+    if (decision === "deny" || decision === "block" || hookOutput.continue === false) {
+      throw new Error(String(hookOutput.reason || (command.extensionName + "/" + command.name + " denied agent turn")));
+    }
+    const additionalContext = hookOutput?.hookSpecificOutput?.additionalContext;
+    if (typeof additionalContext === "string" && additionalContext.trim()) {
+      await log(client, {
+        service: "ogb-extension-hooks",
+        level: "warn",
+        message: "BeforeAgent additionalContext was produced, but OpenCode has no compatible prompt-injection hook; validation/blocking still ran.",
+        extension: command.extensionName,
+        hook: command.name,
+        event: eventName,
+      });
     }
   }
 }
@@ -1421,6 +1584,7 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
   const enabled = process.env.OGB_STARTUP_SYNC !== "0" && plan.enabled !== false;
   const lockPath = startupLockPath(cwd);
   const startupEvents = new Set(["session.created"]);
+  const beforeAgentHookEvents = new Set();
   const config = readConfig(cwd);
   const configuredBackoff = Number(config.failureBackoffMs ?? DEFAULT_FAILURE_BACKOFF_MS);
   const failureBackoffMs = Number.isFinite(configuredBackoff) && configuredBackoff >= 0 ? configuredBackoff : DEFAULT_FAILURE_BACKOFF_MS;
@@ -1551,6 +1715,7 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
     event: async ({ event }) => {
       const type = String(event?.type || "");
       if (startupEvents.has(type)) scheduleStartup(type, 0);
+      if (type === "message.updated") await runGeminiExtensionAgentHooks(cwd, client, "BeforeAgent", event, beforeAgentHookEvents);
     },
     "session.created": async () => {
       if (process.env.OGB_SYNC_ON_SESSION_CREATED === "1") {

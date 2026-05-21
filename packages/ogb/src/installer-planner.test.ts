@@ -104,5 +104,6 @@ test("planner contract builds update and check delegation commands", () => {
 
   assert.deepEqual(update.delegation.args, ["--project", projectRoot, "update", "--release", "v1.2.3", "--prefix", "/tmp/prefix"]);
   assert.deepEqual(update.steps.map((step) => step.id), ["download-release-pack", "run-post-update-check"]);
+  assert.deepEqual(update.steps[1]?.command?.args, ["--project", projectRoot, "check", "--force", "--no-extension-update"]);
   assert.deepEqual(check.delegation.args, ["--project", projectRoot, "check", "--dry-run"]);
 });

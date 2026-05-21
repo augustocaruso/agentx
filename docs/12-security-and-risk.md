@@ -29,7 +29,7 @@ fazem parte do comportamento instalado da configuração Gemini.
 Mitigação:
 
 - `ogb sync` registra hooks/scripts de extensões em `.opencode/generated/ogb-extension-map.json`.
-- Hooks `BeforeTool`/`AfterTool` de `settings.json` e extensões rodam pelo plugin OGB do OpenCode.
+- Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json` e extensões rodam pelo plugin OGB do OpenCode.
 - Scripts soltos e eventos sem equivalente OpenCode ficam apenas inventariados.
 - `ogb security-check` confirma a projeção esperada e continua verificando hashes legados.
 - Nunca baixar e executar script remoto sem revisão.

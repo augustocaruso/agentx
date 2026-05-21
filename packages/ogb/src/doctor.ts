@@ -100,6 +100,13 @@ export interface DoctorReport {
   };
   nativeCapabilities: NativeCapabilitySummary & {
     reportExists: boolean;
+    setupCompatibilityProjections: Array<{
+      entityId: string;
+      target: "gemini" | "antigravity";
+      path: string;
+      origin: string;
+      status: "active" | "stale";
+    }>;
   };
   modelResolution: {
     checked: boolean;
@@ -263,6 +270,38 @@ function listConfiguredPlugins(projectRoot: string, homeDir: string): string[] {
 function hasConfiguredPlugin(plugins: string[], expected: string): boolean {
   const expectedName = pluginPackageName(expected);
   return plugins.some((plugin) => pluginPackageName(plugin) === expectedName);
+}
+
+const NATIVE_SETUP_SURFACE_ORIGIN_SUFFIX = ":setup-surface";
+
+function nativeSetupCompatibilityProjectionsFromState(
+  state: ReturnType<typeof readSyncState>,
+  validatedNative: readonly string[],
+): DoctorReport["nativeCapabilities"]["setupCompatibilityProjections"] {
+  if (!state) return [];
+  const activeEntities = new Set(validatedNative);
+  return state.managedFiles
+    .filter((file) =>
+      file.source === "ogb"
+      && file.kind === "skill"
+      && (file.projection === "gemini" || file.projection === "antigravity")
+      && typeof file.origin === "string"
+      && file.origin.endsWith(NATIVE_SETUP_SURFACE_ORIGIN_SUFFIX)
+    )
+    .flatMap((file) => {
+      const origin = file.origin;
+      if (typeof origin !== "string") return [];
+      const entityId = origin.slice(0, -NATIVE_SETUP_SURFACE_ORIGIN_SUFFIX.length);
+      const status: "active" | "stale" = activeEntities.has(entityId) ? "active" : "stale";
+      return [{
+        entityId,
+        target: file.projection as "gemini" | "antigravity",
+        path: file.path,
+        origin,
+        status,
+      }];
+    })
+    .sort((a, b) => `${a.entityId}:${a.target}:${a.path}`.localeCompare(`${b.entityId}:${b.target}:${b.path}`));
 }
 
 function readRuntimeFallback(projectRoot: string, homeDir: string) {
@@ -510,9 +549,11 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   };
   const runtimeFallback = readRuntimeFallback(paths.projectRoot, paths.homeDir);
   const configuredPlugins = listConfiguredPlugins(paths.projectRoot, paths.homeDir);
+  const nativeCapabilitySummary = summarizeNativeCapabilityReport(nativeCapabilityReport, paths.nativeCapabilitiesPath);
   const nativeCapabilities = {
-    ...summarizeNativeCapabilityReport(nativeCapabilityReport, paths.nativeCapabilitiesPath),
+    ...nativeCapabilitySummary,
     reportExists: fs.existsSync(paths.nativeCapabilitiesPath),
+    setupCompatibilityProjections: nativeSetupCompatibilityProjectionsFromState(state, nativeCapabilitySummary.validatedNative),
   };
   const modelResolution = resolveOpenCodeModels(paths.projectRoot, paths.homeDir, modelRouting);
   warnings.push(...diagnoseOpenCodeMcpConfig(opencodeConfigObject?.mcp, inv.mcps, {
@@ -622,6 +663,11 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
       warnings.push(`Native capability warning: ${decision.displayName ?? decision.entityId} expects OpenCode plugin ${plugin}, but it is not configured. Run ogb sync.`);
     }
   }
+  for (const projection of nativeCapabilities.setupCompatibilityProjections) {
+    if (projection.status === "stale") {
+      warnings.push(`Native setup projection warning: ${projection.entityId} setup projection ${projection.path} remains managed, but no validated native source is active. Review local edits, then run ogb sync --force if it is safe to remove stale generated setup.`);
+    }
+  }
   for (const warning of nativeCapabilities.warnings) warnings.push(`Native capability warning: ${warning}`);
   for (const model of modelResolution.unresolved) warnings.push(`Model resolution warning: ${model} was not found in opencode models.`);
 
@@ -676,33 +722,6 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
 
   fs.mkdirSync(path.dirname(paths.doctorPath), { recursive: true });
   fs.writeFileSync(paths.doctorPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-
-  if (options.silent) {
-    // No terminal output; callers use the structured report.
-  } else if (options.json) {
-    console.log(JSON.stringify(report, null, 2));
-  } else {
-    console.log("OpenCode Gemini Bridge Doctor");
-    console.log(`Project: ${report.projectRoot}`);
-    console.log(`GEMINI.md files: ${report.counts.geminiFiles}`);
-    console.log(`Imports: ${report.counts.imports.ok} ok, ${report.counts.imports.warning} warning`);
-    console.log(`Skills: ${report.counts.skills.ok} ok, ${report.counts.skills.warning} warning`);
-    console.log(`MCPs: ${report.counts.mcps.ok} ok, ${report.counts.mcps.needs_review} needs review`);
-    console.log(`Agents: ${report.counts.agents.ok} ok, ${report.counts.agents.needs_review} needs review`);
-    console.log(`Commands: ${report.counts.commands.ok} ok, ${report.counts.commands.needs_review} needs review`);
-    console.log(`Extension commands: ${report.extensionCompatibility.projectedCommands} projected`);
-    console.log(`Model routing: ${report.extensionCompatibility.modelRoutingReport ? `${report.extensionCompatibility.modelRoutingDecisions} decision(s), ${report.extensionCompatibility.modelRoutingRouted} routed` : "missing"}`);
-    console.log(`Runtime fallback: ${report.runtimeFallback.configured ? `${report.runtimeFallback.pluginActive ? "plugin active" : "plugin missing"}, config ${report.runtimeFallback.configExists ? "present" : "missing"}, ${report.runtimeFallback.agentFallbacks} agent chain(s)` : "disabled"}`);
-    console.log(`Native capabilities: ${report.nativeCapabilities.reportExists ? `${report.nativeCapabilities.validatedNative.length} native, ${report.nativeCapabilities.fallbackCompat.length} fallback` : "missing"}`);
-    console.log(`Model resolution: ${report.modelResolution.message}`);
-    console.log(`Generated files: ${report.generated.expandedGeminiVersion ?? "missing context"}, ${report.generated.generatedConfigVersion ?? "missing config"}`);
-    console.log(`Startup sync: project ${report.startupSync.projectPlugin && report.startupSync.projectConfig ? "installed" : "missing"}, global ${report.startupSync.globalPlugin && report.startupSync.globalConfig ? "installed" : "missing"}${report.startupSync.lastState ? `, last ${report.startupSync.lastState}` : ""}`);
-    console.log(`Rulesync: ${report.rulesync.available ? `available${report.rulesync.version ? ` (${report.rulesync.version})` : ""}` : "unavailable"}`);
-    if (warnings.length > 0) {
-      console.log("Warnings:");
-      for (const warning of warnings) console.log(`- ${warning}`);
-    }
-  }
 
   if (options.strict && warnings.length > 0) process.exitCode = 1;
   if (errors.length > 0) process.exitCode = 2;

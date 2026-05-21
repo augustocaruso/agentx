@@ -201,7 +201,7 @@ Executam código arbitrário.
 
 ### Solução
 
-- Ativar automaticamente hooks `BeforeTool`/`AfterTool` de `settings.json` e extensão via plugin OGB.
+- Ativar automaticamente hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json` e extensão via plugin OGB.
 - Converter para scripts/plugins apenas após revisão.
 - Doctor lista hooks e scripts.
 

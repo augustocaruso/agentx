@@ -88,7 +88,7 @@ ogb trust-report
 
 ## Segurança de hooks/scripts
 
-Por padrao, hooks `BeforeTool`/`AfterTool` de `settings.json` e extensoes
+Por padrao, hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json` e extensoes
 Gemini sincronizam e rodam pelo plugin OGB do OpenCode. Eles fazem parte do
 comportamento instalado da configuracao Gemini.
 

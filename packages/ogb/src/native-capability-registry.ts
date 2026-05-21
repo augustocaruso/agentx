@@ -9,6 +9,8 @@ export type NativeCapabilityEntityId =
   | "superpowers";
 export type NativeCapabilityStatus = "available" | "not_available" | "experimental" | "blocked";
 export type NativeSurface = "agents" | "commands" | "config" | "hooks" | "mcp" | "prompts" | "skills";
+export type NativeSetupSurfaceKind = "agent-tool" | "mcp-server" | "minimal-skill" | "operator-command" | "shared-config";
+export type NativeSetupReplicationKind = "mcp-server" | "minimal-skill" | "mini-cli";
 
 export interface OpenCodePluginNativeInstall {
   kind: "opencode-plugin";
@@ -27,6 +29,17 @@ export interface OpenCodeMcpNativeInstall {
 
 export type NativeInstallSpec = OpenCodePluginNativeInstall | OpenCodeMcpNativeInstall;
 
+export interface NativeSetupSurface {
+  kind: NativeSetupSurfaceKind;
+  name: string;
+  command?: string;
+  path?: string;
+  docs?: string[];
+  notes: string[];
+  replicateAs?: NativeSetupReplicationKind[];
+  reviewRequired?: boolean;
+}
+
 export interface NativeCapabilityEntry {
   entityId: NativeCapabilityEntityId;
   displayName: string;
@@ -40,6 +53,7 @@ export interface NativeCapabilityEntry {
   skillAliases: string[];
   mcpAliases: string[];
   pluginAliases: string[];
+  setupSurfaces?: NativeSetupSurface[];
   docs: string[];
   notes: string[];
 }
@@ -84,6 +98,41 @@ export const NATIVE_CAPABILITY_REGISTRY: readonly NativeCapabilityEntry[] = [
     skillAliases: ["honcho"],
     mcpAliases: ["honcho", "honcho-mcp"],
     pluginAliases: ["@honcho-ai/opencode-honcho"],
+    setupSurfaces: [
+      {
+        kind: "shared-config",
+        name: "Honcho shared config",
+        path: "~/.honcho/config.json",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/opencode#configuration"],
+        notes: ["Shared across Honcho hosts; preserve apiKey, peerName, baseUrl, and host-scoped settings."],
+        replicateAs: ["mini-cli", "minimal-skill"],
+      },
+      {
+        kind: "operator-command",
+        name: "Honcho first-time setup",
+        command: "/honcho:setup",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/opencode#step-3-run-setup-in-opencode"],
+        notes: ["Interactive OpenCode setup for cloud/local endpoint and API key."],
+        replicateAs: ["minimal-skill", "mini-cli"],
+      },
+      {
+        kind: "operator-command",
+        name: "Honcho runtime status",
+        command: "/honcho:status",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/opencode#operator-commands"],
+        notes: ["Runtime verification command after setup."],
+        replicateAs: ["minimal-skill"],
+      },
+      {
+        kind: "agent-tool",
+        name: "honcho_setup",
+        command: "honcho_setup",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/opencode#agent-tools"],
+        notes: ["Tool surface that validates setup and persists shared credentials or endpoint settings."],
+        replicateAs: ["mini-cli"],
+        reviewRequired: true,
+      },
+    ],
     docs: ["https://docs.honcho.dev/v3/guides/integrations/opencode"],
     notes: ["OpenCode is the richest known Honcho host; other targets need explicit adapter data."],
   },
@@ -209,6 +258,28 @@ export const NATIVE_CAPABILITY_REGISTRY: readonly NativeCapabilityEntry[] = [
     skillAliases: ["honcho"],
     mcpAliases: ["honcho", "honcho-mcp"],
     pluginAliases: ["@honcho-ai/opencode-honcho"],
+    setupSurfaces: [
+      {
+        kind: "minimal-skill",
+        name: "honcho-setup",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/mcp"],
+        notes: ["Replicate the OpenCode /honcho:setup intent as a minimal Gemini CLI skill that guides shared config and MCP setup without storing secrets in generated files."],
+        reviewRequired: true,
+      },
+      {
+        kind: "mcp-server",
+        name: "honcho",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/mcp#codex"],
+        notes: ["Use mcp-remote against https://mcp.honcho.dev with Authorization and X-Honcho-User-Name supplied from local secret/env state."],
+      },
+      {
+        kind: "shared-config",
+        name: "Honcho shared config",
+        path: "~/.honcho/config.json",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/opencode#configuration"],
+        notes: ["Read or create the shared Honcho config used by other hosts; generated compatibility files must not inline API keys."],
+      },
+    ],
     docs: ["https://docs.honcho.dev/v3/guides/integrations/mcp"],
     notes: ["Use MCP metadata first; prompt, command, and hook projection require explicit adapter tests."],
   },
@@ -224,6 +295,28 @@ export const NATIVE_CAPABILITY_REGISTRY: readonly NativeCapabilityEntry[] = [
     skillAliases: ["honcho"],
     mcpAliases: ["honcho", "honcho-mcp"],
     pluginAliases: ["@honcho-ai/opencode-honcho"],
+    setupSurfaces: [
+      {
+        kind: "minimal-skill",
+        name: "honcho-setup",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/mcp"],
+        notes: ["Replicate the OpenCode /honcho:setup intent as a minimal Antigravity skill until a native Antigravity setup command exists."],
+        reviewRequired: true,
+      },
+      {
+        kind: "mcp-server",
+        name: "honcho",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/mcp"],
+        notes: ["Use Honcho MCP as the portable setup surface when Antigravity has no native Honcho plugin."],
+      },
+      {
+        kind: "shared-config",
+        name: "Honcho shared config",
+        path: "~/.honcho/config.json",
+        docs: ["https://honcho.dev/docs/v3/guides/integrations/opencode#configuration"],
+        notes: ["Preserve the same shared config boundary used by the OpenCode plugin."],
+      },
+    ],
     docs: ["https://docs.honcho.dev/v3/guides/integrations/mcp"],
     notes: ["Keep compatibility data explicit until a native Antigravity CLI plugin exists and passes smoke."],
   },

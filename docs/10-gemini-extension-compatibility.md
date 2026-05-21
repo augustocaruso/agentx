@@ -127,7 +127,7 @@ Esse instalador:
 8. Registra hashes/source map em `.opencode/generated/ogb-sync-state.json`.
 9. Roda doctor.
 
-O instalador deve ativar hooks `BeforeTool`/`AfterTool` compatíveis de
+O instalador deve ativar hooks `BeforeTool`/`AfterTool`/`BeforeAgent` compatíveis de
 `settings.json` e extensões por meio do plugin OGB. Scripts soltos continuam
 fora do runtime automático.
 Agentes de Gemini Extensions são projetados como subagentes OpenCode, mas com
@@ -207,7 +207,7 @@ Nesse modo, o bridge deve deixar claro que a extensão linkada é desenvolviment
 | `agents/` | `.opencode/agents/<agent>.md` com permissões de arquivo liberadas e `bash: ask` |
 | `commands/` | `.opencode/commands/<path>/<command>.md`; prefixa/renomeia só em colisão |
 | `mcpServers` | `mcp` config |
-| `settings.json` e `hooks/hooks.json` | `BeforeTool`/`AfterTool` via plugin OGB do OpenCode; eventos sem equivalente ficam no mapa |
+| `settings.json` e `hooks/hooks.json` | `BeforeTool`/`AfterTool`/`BeforeAgent` via plugin OGB do OpenCode; eventos sem equivalente ficam no mapa |
 | `scripts/` | manter dentro da extensão; referenciar por caminho gerenciado; scripts soltos ficam em revisão |
 | `docs/` | referências para skills, agents e generated context |
 | `policies/` | OpenCode permissions/plugin guardrails, sempre com revisão |
@@ -318,7 +318,7 @@ Esta extensão parece não ser auto-updatable. Para auto-update, instale por Git
 
 ## Regras de segurança
 
-- Hooks `BeforeTool`/`AfterTool` de `settings.json` e extensões instaladas devem sincronizar automaticamente para OpenCode.
+- Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json` e extensões instaladas devem sincronizar automaticamente para OpenCode.
 - Scripts soltos devem continuar marcados como superfície de revisão.
 - `ogb trust-report` continua disponível para auditoria/hash legado de hooks/scripts.
 - Settings sensíveis da extensão não devem ser copiadas para `opencode.jsonc`.
@@ -332,7 +332,7 @@ ogb sync
 ogb security-check
 ```
 
-O modo padrao e sincronizar: hooks `BeforeTool`/`AfterTool` de `settings.json`
+O modo padrao e sincronizar: hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json`
 e extensões rodam pelo plugin OGB do OpenCode sem etapa manual. Scripts soltos
 e eventos Gemini sem hook OpenCode equivalente permanecem inventariados para
 revisão.

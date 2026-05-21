@@ -12,6 +12,7 @@ import { isHomeProject } from "./paths.js";
 import { createProfileWriter, type ProfileWriteReason, type ProfileWriteStatus, type ProfileWriter } from "./profile-writer.js";
 import { checkPluginSyntax, STARTUP_SYNC_PLUGIN_SOURCE, startupConfigSource } from "./setup-opencode.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
+import type { ManagedFileKind, ManagedProjection } from "./sync-state.js";
 import { ensureGlobalTuiSidebar, TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar.js";
 import { OGB_VERSION } from "./types.js";
 import { UX_PROFILE_PRESET } from "./ux-profile.generated.js";
@@ -69,6 +70,20 @@ export interface SetupUxWrite {
   status: ProfileWriteStatus;
   backup?: string;
   reason?: ProfileWriteReason;
+  kind?: ManagedFileKind;
+  target?: ManagedProjection | "gemini";
+  exclusive?: boolean;
+  origin?: string;
+}
+
+function markOpenCodeExclusive(write: SetupUxWrite, kind: ManagedFileKind, origin: string): SetupUxWrite {
+  return {
+    ...write,
+    kind,
+    target: "opencode",
+    exclusive: true,
+    origin,
+  };
 }
 
 export interface SetupUxCommand {
@@ -820,7 +835,10 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
       pluginSource: tuiSidebarPluginSourceText,
       configDefaults: UX_PROFILE_PRESET.tuiConfig,
     });
-    writes.push(globalTui.plugin, globalTui.config);
+    writes.push(
+      markOpenCodeExclusive(globalTui.plugin, "tui", "ogb:global-tui-sidebar"),
+      markOpenCodeExclusive(globalTui.config, "tui", "ogb:global-tui-sidebar"),
+    );
     if (globalTui.plugin.status === "updated") {
       notices.push("Global TUI sidebar updated; restart OpenCode to load it.");
     } else if (globalTui.plugin.status === "created") {
@@ -838,20 +856,20 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   });
   writes.push(startupConfigWrite);
   for (const [command, content] of Object.entries(UX_PROFILE_PRESET.files.commands)) {
-    writes.push(profileWriter.writeText({
+    writes.push(markOpenCodeExclusive(profileWriter.writeText({
       filePath: adapter.join(commandsDir, `${command}.md`),
       text: content,
-    }));
+    }), "command", "ogb:global-command-profile"));
   }
   for (const command of REMOVED_GLOBAL_UX_COMMANDS) {
     const removed = profileWriter.removeFileIfExists(adapter.join(commandsDir, `${command}.md`));
     if (removed) writes.push(removed);
   }
   for (const [agent, content] of Object.entries(UX_PROFILE_PRESET.files.agents)) {
-    writes.push(profileWriter.writeText({
+    writes.push(markOpenCodeExclusive(profileWriter.writeText({
       filePath: adapter.join(agentsDir, `${agent}.md`),
       text: content,
-    }));
+    }), "agent", "ogb:global-agent-profile"));
   }
   for (const [skill, files] of Object.entries(UX_PROFILE_PRESET.files.skills ?? {})) {
     for (const [relPath, content] of Object.entries(files)) {
@@ -861,10 +879,10 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
       }));
     }
   }
-  writes.push(profileWriter.writeText({
+  writes.push(markOpenCodeExclusive(profileWriter.writeText({
     filePath: adapter.join(root, "AGENTS.md"),
     text: UX_PROFILE_PRESET.files.globalAgentsMd,
-  }));
+  }), "context", "ogb:global-agents-md"));
 
   if (ogbConfigPath && options.writeProjectProfile !== false) {
     writes.push(profileWriter.writeText({

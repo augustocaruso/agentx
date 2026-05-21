@@ -442,7 +442,7 @@ function extensionMapEntry(extension: ExtensionRoot): GeminiExtensionMapEntry {
     hooks: hookFiles.map((filePath) => ({
       source: relativeTo(extension.dir, filePath),
       projected: true,
-      target: "opencode-plugin:tool.execute.before,tool.execute.after",
+      target: "opencode-plugin:tool.execute.before,tool.execute.after,event.message.updated",
       reason: "Projected through the OGB OpenCode plugin.",
     })),
     scripts: collectScripts(extension.dir),

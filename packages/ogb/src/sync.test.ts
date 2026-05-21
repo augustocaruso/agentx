@@ -62,6 +62,31 @@ test("syncToOpenCode writes bridge-native generated config without Rulesync", ()
   assert.equal(projectConfig.default_agent, "YOLO");
   assert.ok(report.projectedTuiFiles.includes(TUI_SIDEBAR_PLUGIN_PATH));
   assert.ok(report.projectedTuiFiles.includes(TUI_CONFIG_PATH));
+  assert.ok(report.projectedResourceMarkers?.some((resource) =>
+    resource.path === TUI_SIDEBAR_PLUGIN_PATH
+    && resource.kind === "tui"
+    && resource.target === "opencode"
+    && resource.exclusive === true
+  ));
+  assert.ok(report.projectedResourceMarkers?.some((resource) =>
+    resource.path === TUI_CONFIG_PATH
+    && resource.kind === "tui"
+    && resource.target === "opencode"
+    && resource.exclusive === true
+  ));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+    file.path === TUI_SIDEBAR_PLUGIN_PATH
+    && file.kind === "tui"
+    && file.projection === "opencode"
+    && file.origin === "ogb:tui-sidebar"
+  ));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+    file.path === TUI_CONFIG_PATH
+    && file.kind === "tui"
+    && file.projection === "opencode"
+    && file.origin === "ogb:tui-sidebar"
+  ));
   assert.equal(report.warnings.includes("Rulesync disabled"), false);
   assert.deepEqual(tuiConfig.plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
 });
@@ -134,7 +159,7 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.equal(extensionMap.modelFallbacks.length, 0);
   assert.equal(routing.decisions.length, 0);
   assert.equal(extensionMap.extensions[0].hooks[0].projected, true);
-  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after");
+  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after,event.message.updated");
   assert.equal(extensionMap.extensions[0].scripts.some((script: { source: string }) => script.source === "bin/run.sh"), true);
   assert.match(helperAgent, /mode: subagent/);
   assert.match(helperAgent, /read: allow/);
@@ -348,10 +373,37 @@ test("syncToOpenCode projects built-in YOLO agent", () => {
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   const yoloPath = path.join(projectRoot, ".opencode", "agents", "YOLO.md");
   const yolo = fs.readFileSync(yoloPath, "utf8");
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
 
   assert.ok(report.projectedAgents.includes(".opencode/agents/YOLO.md"));
   assert.ok(report.projectedAgents.includes(".opencode/agents/YOLO-worker.md"));
   assert.equal(report.projectedAgents.length, 2);
+  assert.ok(report.projectedResourceMarkers?.some((resource) =>
+    resource.path === ".opencode/agents/YOLO.md"
+    && resource.kind === "agent"
+    && resource.target === "opencode"
+    && resource.exclusive === true
+    && resource.origin === "ogb:built-in-agent"
+  ));
+  assert.ok(report.projectedResourceMarkers?.some((resource) =>
+    resource.path === ".opencode/agents/YOLO-worker.md"
+    && resource.kind === "agent"
+    && resource.target === "opencode"
+    && resource.exclusive === true
+    && resource.origin === "ogb:built-in-agent"
+  ));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+    file.path === ".opencode/agents/YOLO.md"
+    && file.kind === "agent"
+    && file.projection === "opencode"
+    && file.origin === "ogb:built-in-agent"
+  ));
+  assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+    file.path === ".opencode/agents/YOLO-worker.md"
+    && file.kind === "agent"
+    && file.projection === "opencode"
+    && file.origin === "ogb:built-in-agent"
+  ));
   assert.match(yolo, /description: Execucao direta com minima friccao em workspace confiavel\./);
   assert.doesNotMatch(yolo, /description: YOLO:/);
   assert.match(yolo, /mode: primary/);
@@ -584,6 +636,145 @@ test("syncToOpenCode keeps Superpowers skill port when native plugin smoke fails
   }
 });
 
+test("syncToOpenCode replicates Honcho setup as managed Gemini and Antigravity setup skills", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-bin-"));
+  fs.writeFileSync(path.join(projectRoot, "opencode.jsonc"), JSON.stringify({
+    plugin: ["@honcho-ai/opencode-honcho"],
+  }, null, 2));
+
+  writeFakeOpenCode(binDir, "OpenCode debug info\nhoncho plugin loaded\n");
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const geminiSkillPath = path.join(homeDir, ".gemini", "skills", "honcho-setup", "SKILL.md");
+    const antigravitySkillPath = path.join(homeDir, ".gemini", "antigravity", "skills", "honcho-setup", "SKILL.md");
+    const geminiSkill = fs.readFileSync(geminiSkillPath, "utf8");
+    const antigravitySkill = fs.readFileSync(antigravitySkillPath, "utf8");
+    const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+
+    assert.match(geminiSkill, /\/honcho:setup/);
+    assert.match(geminiSkill, /~\/\.honcho\/config\.json/);
+    assert.match(geminiSkill, /honcho_setup/);
+    assert.match(geminiSkill, /https:\/\/mcp\.honcho\.dev/);
+    assert.equal(antigravitySkill, geminiSkill);
+    assert.ok(report.projectedResourceMarkers?.some((resource) =>
+      resource.path === ".gemini/skills/honcho-setup/SKILL.md"
+      && resource.kind === "skill"
+      && resource.target === "gemini"
+      && resource.origin === "honcho:setup-surface"
+    ));
+    assert.ok(report.projectedResourceMarkers?.some((resource) =>
+      resource.path === ".gemini/antigravity/skills/honcho-setup/SKILL.md"
+      && resource.kind === "skill"
+      && resource.target === "antigravity"
+      && resource.origin === "honcho:setup-surface"
+    ));
+    assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+      file.path === ".gemini/skills/honcho-setup/SKILL.md"
+      && file.kind === "skill"
+      && file.projection === "gemini"
+      && file.origin === "honcho:setup-surface"
+    ));
+    assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+      file.path === ".gemini/antigravity/skills/honcho-setup/SKILL.md"
+      && file.kind === "skill"
+      && file.projection === "antigravity"
+      && file.origin === "honcho:setup-surface"
+    ));
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test("syncToOpenCode removes stale Honcho setup skills when native setup source is no longer valid", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-bin-"));
+  const projectConfigPath = path.join(projectRoot, "opencode.jsonc");
+  fs.writeFileSync(projectConfigPath, JSON.stringify({
+    plugin: ["@honcho-ai/opencode-honcho"],
+  }, null, 2));
+
+  writeFakeOpenCode(binDir, "OpenCode debug info\nhoncho plugin loaded\n");
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const geminiSkillPath = path.join(homeDir, ".gemini", "skills", "honcho-setup", "SKILL.md");
+    const antigravitySkillPath = path.join(homeDir, ".gemini", "antigravity", "skills", "honcho-setup", "SKILL.md");
+    assert.equal(fs.existsSync(geminiSkillPath), true);
+    assert.equal(fs.existsSync(antigravitySkillPath), true);
+
+    fs.writeFileSync(projectConfigPath, JSON.stringify({
+      plugin: [],
+    }, null, 2));
+    const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+    const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+
+    assert.equal(fs.existsSync(geminiSkillPath), false);
+    assert.equal(fs.existsSync(antigravitySkillPath), false);
+    assert.equal(report.projectedResourceMarkers?.some((resource) => resource.origin === "honcho:setup-surface"), false);
+    assert.equal(state.managedFiles.some((file: { origin?: string }) => file.origin === "honcho:setup-surface"), false);
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
+test("syncToOpenCode replicates Honcho setup surfaces during global sync", () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-bin-"));
+  const globalRoot = path.join(homeDir, ".config", "opencode");
+  fs.mkdirSync(globalRoot, { recursive: true });
+  fs.writeFileSync(path.join(globalRoot, "opencode.json"), JSON.stringify({
+    plugin: ["@honcho-ai/opencode-honcho"],
+  }, null, 2));
+
+  writeFakeOpenCode(binDir, "OpenCode debug info\nhoncho plugin loaded\n");
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  try {
+    const report = syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
+    const geminiSkillPath = path.join(homeDir, ".gemini", "skills", "honcho-setup", "SKILL.md");
+    const antigravitySkillPath = path.join(homeDir, ".gemini", "antigravity", "skills", "honcho-setup", "SKILL.md");
+    const geminiSkill = fs.readFileSync(geminiSkillPath, "utf8");
+    const state = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-sync-state.json"), "utf8"));
+
+    assert.match(geminiSkill, /\/honcho:setup/);
+    assert.match(geminiSkill, /\/honcho:status/);
+    assert.match(geminiSkill, /honcho_setup/);
+    assert.equal(fs.readFileSync(antigravitySkillPath, "utf8"), geminiSkill);
+    assert.ok(report.projectedResourceMarkers?.some((resource) =>
+      resource.path === ".gemini/skills/honcho-setup/SKILL.md"
+      && resource.kind === "skill"
+      && resource.target === "gemini"
+      && resource.origin === "honcho:setup-surface"
+    ));
+    assert.ok(report.projectedResourceMarkers?.some((resource) =>
+      resource.path === ".gemini/antigravity/skills/honcho-setup/SKILL.md"
+      && resource.kind === "skill"
+      && resource.target === "antigravity"
+      && resource.origin === "honcho:setup-surface"
+    ));
+    assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+      file.path === ".gemini/skills/honcho-setup/SKILL.md"
+      && file.kind === "skill"
+      && file.projection === "gemini"
+      && file.origin === "honcho:setup-surface"
+    ));
+    assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
+      file.path === ".gemini/antigravity/skills/honcho-setup/SKILL.md"
+      && file.kind === "skill"
+      && file.projection === "antigravity"
+      && file.origin === "honcho:setup-surface"
+    ));
+  } finally {
+    process.env.PATH = previousPath;
+  }
+});
+
 test("syncToOpenCode repairs a legacy global skills file blocking home-mode projection", () => {
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
@@ -752,6 +943,19 @@ test("syncToOpenCode projects Gemini skills to global Antigravity skills", () =>
     && file.kind === "skill"
     && file.projection === "antigravity"
   ));
+});
+
+test("syncToOpenCode does not recopy unchanged managed Antigravity skills", () => {
+  const projectRoot = tempProject();
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
+  const globalSkillDir = path.join(homeDir, ".gemini", "skills", "study-notes");
+  fs.mkdirSync(globalSkillDir, { recursive: true });
+  fs.writeFileSync(path.join(globalSkillDir, "SKILL.md"), "---\nname: study-notes\ndescription: Study notes.\n---\n# Study\n");
+
+  syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+  const second = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
+
+  assert.equal(second.backups.some((backup) => backup.source.includes(path.join(".gemini", "antigravity", "skills"))), false);
 });
 
 test("syncToOpenCode projects Gemini commands to Antigravity launcher skills", () => {
@@ -1005,6 +1209,13 @@ test("syncToOpenCode projects global Gemini MCPs to Antigravity mcp_config", () 
 
   assert.ok(report.projectedAntigravityMcps.includes(".gemini/antigravity/mcp_config.json#mcpServers/anki-mcp"));
   assert.ok(report.projectedAntigravityMcps.includes(".gemini/antigravity/mcp_config.json#mcpServers/study-pack"));
+  assert.ok(report.projectedResourceMarkers?.some((resource) =>
+    resource.path === ".gemini/antigravity/mcp_config.json#mcpServers/study-pack"
+    && resource.kind === "mcp"
+    && resource.target === "antigravity"
+    && resource.exclusive === false
+    && resource.origin === "gemini:mcp"
+  ));
   assert.deepEqual(config.mcpServers.manual, { command: "node", args: ["manual.js"] });
   assert.deepEqual(config.mcpServers["anki-mcp"], { command: "uvx", args: ["anki-mcp"] });
   assert.deepEqual(config.mcpServers["study-pack"], {
@@ -1234,8 +1445,22 @@ test("syncToOpenCode projects Gemini extension TOML commands and maps risky reso
   assert.equal(extensionMap.extensions[0].agents[0].projected, true);
   assert.equal(extensionMap.extensions[0].agents[0].target, ".opencode/agents/helper.md");
   assert.equal(extensionMap.extensions[0].hooks[0].projected, true);
-  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after");
+  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after,event.message.updated");
   assert.equal(extensionMap.extensions[0].scripts.some((script: { source: string }) => script.source === "bin/run.sh"), true);
+  assert.ok(report.projectedResourceMarkers?.some((resource) =>
+    resource.path === ".opencode/commands/notes/review.md"
+    && resource.kind === "command"
+    && resource.target === "opencode"
+    && resource.exclusive === false
+    && resource.origin === "gemini:extension-command"
+  ));
+  assert.ok(report.projectedResourceMarkers?.some((resource) =>
+    resource.path === ".opencode/agents/helper.md"
+    && resource.kind === "agent"
+    && resource.target === "opencode"
+    && resource.exclusive === false
+    && resource.origin === "gemini:extension-agent"
+  ));
 });
 
 test("syncToOpenCode keeps extension subagent bash conservative when YOLO is not the default agent", () => {

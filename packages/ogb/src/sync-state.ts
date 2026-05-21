@@ -8,8 +8,19 @@ export interface ManagedFileState {
   sha256: string;
   source: "ogb" | "rulesync";
   kind?: "agent" | "command" | "config" | "context" | "mcp" | "skill" | "tui" | "unknown" | "workflow";
-  projection?: "opencode" | "antigravity" | "rulesync";
+  projection?: "gemini" | "opencode" | "antigravity" | "rulesync";
   origin?: string;
+}
+
+export type ManagedFileKind = NonNullable<ManagedFileState["kind"]>;
+export type ManagedProjection = NonNullable<ManagedFileState["projection"]>;
+
+export interface SyncResourceMarker {
+  path: string;
+  kind: ManagedFileKind;
+  target: ManagedProjection | "gemini";
+  exclusive: boolean;
+  origin: string;
 }
 
 export interface SyncState {

@@ -209,6 +209,40 @@ test("runSelfUpdate forwards post-update check progress in canonical order", () 
   ]);
 });
 
+test("runSelfUpdate caps slow OpenCode model lookup during the post-update check", () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-update-fast-post-check-"));
+  let postUpdateEnv: NodeJS.ProcessEnv | undefined;
+
+  const report = runSelfUpdate({
+    projectRoot,
+    stdio: "pipe",
+    runCommand: (spec) => ({
+      ok: true,
+      command: spec.command,
+      args: spec.args ?? [],
+      status: 0,
+      signal: null,
+      stdout: "bootstrap ok",
+      stderr: "",
+    }),
+    runPostUpdateCommand: (spec) => {
+      postUpdateEnv = spec.env;
+      return {
+        ok: true,
+        command: spec.command,
+        args: spec.args ?? [],
+        status: 0,
+        signal: null,
+        stdout: "",
+        stderr: "",
+      };
+    },
+  });
+
+  assert.equal(report.status, "applied");
+  assert.equal(postUpdateEnv?.OGB_OPENCODE_MODELS_TIMEOUT_MS, "5000");
+});
+
 test("runSelfUpdate surfaces post-update progress summary instead of raw NDJSON", () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-update-post-check-summary-"));
   const progress = [
@@ -264,8 +298,9 @@ test("runSelfUpdate surfaces post-update progress summary instead of raw NDJSON"
     }),
   });
 
-  assert.equal(report.status, "error");
+  assert.equal(report.status, "applied");
   assert.equal(report.postUpdate?.status, "fail");
+  assert.match(report.message, /Post-update check needs attention/);
   assert.match(report.message, /Validation falhou: OpenCode resolved config/);
   assert.match(report.postUpdate?.message ?? "", /Validation falhou: OpenCode resolved config/);
   assert.doesNotMatch(report.postUpdate?.stdoutTail ?? "", /schemaVersion/);
@@ -352,14 +387,15 @@ test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   assert.doesNotMatch(saved.message, /old failure/);
 });
 
-test("buildPostUpdateRitualCommand runs a full forced check once after update", () => {
+test("buildPostUpdateRitualCommand runs a focused forced check once after update", () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-post-update-"));
   const command = buildPostUpdateRitualCommand({ projectRoot }, "win32");
 
-  assert.equal(command.slice(-5)[0], "--project");
-  assert.equal(command.slice(-4)[0], projectRoot);
-  assert.equal(command.slice(-3)[0], "check");
-  assert.equal(command.slice(-2)[0], "--force");
+  assert.equal(command.slice(-6)[0], "--project");
+  assert.equal(command.slice(-5)[0], projectRoot);
+  assert.equal(command.slice(-4)[0], "check");
+  assert.equal(command.slice(-3)[0], "--force");
+  assert.equal(command.slice(-2)[0], "--no-extension-update");
   assert.equal(command.slice(-1)[0], "--windows");
 });
 

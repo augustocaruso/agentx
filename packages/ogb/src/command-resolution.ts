@@ -25,6 +25,18 @@ function pathExists(filePath: string): boolean {
   }
 }
 
+const npmPrefixCache = new Map<string, string>();
+
+function npmPrefixCacheKey(adapter: PlatformAdapter, env: NodeJS.ProcessEnv): string {
+  return JSON.stringify({
+    platform: adapter.platform,
+    homeDir: adapter.homeDir,
+    path: env.PATH ?? env.Path ?? "",
+    appData: env.APPDATA ?? "",
+    npmConfigPrefix: env.npm_config_prefix ?? env.NPM_CONFIG_PREFIX ?? "",
+  });
+}
+
 function isPathLike(command: string, platform: NodeJS.Platform): boolean {
   command = normalizeCommandInput(command);
   return path.isAbsolute(command)
@@ -44,12 +56,20 @@ function lookupCandidates(command: string, adapter: PlatformAdapter, env: NodeJS
   return lines.flatMap((line) => adapter.commandVariants(line));
 }
 
-function npmPrefixCandidates(command: string, adapter: PlatformAdapter, env: NodeJS.ProcessEnv): string[] {
+function npmGlobalPrefix(adapter: PlatformAdapter, env: NodeJS.ProcessEnv): string {
+  const key = npmPrefixCacheKey(adapter, env);
+  if (npmPrefixCache.has(key)) return npmPrefixCache.get(key) ?? "";
   const result = spawnCommandSync("npm", ["prefix", "-g"], {
     encoding: "utf8",
     env: { ...process.env, ...env },
   });
   const prefix = !result.error && result.status === 0 ? normalizeCommandInput(String(result.stdout || "")) : "";
+  npmPrefixCache.set(key, prefix);
+  return prefix;
+}
+
+function npmPrefixCandidates(command: string, adapter: PlatformAdapter, env: NodeJS.ProcessEnv): string[] {
+  const prefix = npmGlobalPrefix(adapter, env);
   if (!prefix) return [];
   const roots = adapter.platform === "win32" ? [prefix, adapter.join(prefix, "bin")] : [adapter.join(prefix, "bin"), prefix];
   return roots.flatMap((root) => adapter.commandVariants(adapter.join(root, command)));

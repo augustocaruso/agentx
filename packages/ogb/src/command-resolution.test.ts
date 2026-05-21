@@ -46,6 +46,22 @@ test("resolveCommand searches the Windows AppData npm directory", () => {
   );
 });
 
+test("resolveCommand reuses npm global prefix lookup for the same environment", () => {
+  const root = tempRoot();
+  const binDir = path.join(root, "bin");
+  const prefixDir = path.join(root, "npm-prefix");
+  const marker = path.join(root, "npm-prefix-calls.txt");
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(prefixDir, { recursive: true });
+  fs.writeFileSync(path.join(binDir, "npm"), `#!/bin/sh\necho call >> "${marker}"\necho "${prefixDir}"\n`, { mode: 0o755 });
+
+  const env = { PATH: binDir };
+
+  assert.equal(resolveCommand("missing-one", { homeDir: root, env, includeLookup: false }), undefined);
+  assert.equal(resolveCommand("missing-two", { homeDir: root, env, includeLookup: false }), undefined);
+  assert.equal(fs.readFileSync(marker, "utf8").trim().split(/\r?\n/).length, 1);
+});
+
 test("resolveCommand strips accidental quotes from Windows command paths", () => {
   const root = tempRoot();
   const shim = path.join(root, "quoted opencode");

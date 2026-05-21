@@ -335,7 +335,7 @@ export function buildPostUpdateRitualCommand(options: SelfUpdateOptions = {}, pl
   const adapter = createPlatformAdapter({ platform, homeDir: options.projectRoot ?? process.cwd() });
   const projectRoot = adapter.resolvePath(options.projectRoot ?? process.cwd());
   const ogb = resolveCommand("ogb", { homeDir: projectRoot, platform: adapter.platform, env: adapter.env }) ?? "ogb";
-  const args = ["--project", projectRoot, "check", "--force"];
+  const args = ["--project", projectRoot, "check", "--force", "--no-extension-update"];
   if (platform === "win32") args.push("--windows");
   return [ogb, ...args];
 }
@@ -412,6 +412,7 @@ export function runPostUpdateRitual(options: SelfUpdateOptions = {}): PostUpdate
     env: {
       ...process.env,
       NO_COLOR: process.env.NO_COLOR ?? "1",
+      OGB_OPENCODE_MODELS_TIMEOUT_MS: process.env.OGB_OPENCODE_MODELS_TIMEOUT_MS ?? "5000",
     },
   });
   replayPostUpdateProgress(result.stdout, options.onProgress);
@@ -702,22 +703,14 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       // Updating dashboard status must never turn a successful bootstrap into a failed self-update.
     }
   }
-  const postUpdateFailed = postUpdate?.status === "fail" || postUpdate?.status === "error";
-  if (postUpdateFailed) {
-    return persistSelfUpdateError(options, {
-      status: "error",
-      command,
-      plan,
-      postUpdate,
-      message: `OGB bootstrap completed, but the post-update check did not finish cleanly: ${postUpdate.message}`,
-    });
-  }
   return {
     status: "applied",
     command,
     plan,
     postUpdate,
-    message: postUpdate?.status === "warn"
+    message: postUpdate?.status === "fail" || postUpdate?.status === "error"
+      ? `OGB bootstrap completed. Post-update check needs attention: ${postUpdate.message}`
+      : postUpdate?.status === "warn"
       ? "OGB bootstrap completed. Full bridge check ran with warnings; see ogb check/dashboard for details."
       : postUpdate?.status === "skipped"
         ? "OGB bootstrap completed. Post-update check was skipped because setup was disabled."
@@ -829,9 +822,7 @@ export async function runAutoUpdate(options: AutoUpdateOptions = {}): Promise<Au
     report.postUpdate = postUpdate;
     report.selfUpdate = { ...selfUpdate, postUpdate };
     if (postUpdate.status === "fail" || postUpdate.status === "error") {
-      report.status = "error";
-      report.restartRequired = false;
-      report.message = `OGB updated, but the post-update check did not finish cleanly: ${postUpdate.message}`;
+      report.message = `OGB updated. Post-update check needs attention: ${postUpdate.message}`;
     }
     if (options.write !== false) writeUpdateReport(options.projectRoot, report);
   }

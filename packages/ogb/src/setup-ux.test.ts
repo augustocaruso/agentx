@@ -78,6 +78,27 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(report.writes.some((write) => pathEndsWith(write.path, "agents/YOLO.md") && write.status === "created"), true);
   assert.equal(report.writes.some((write) => pathEndsWith(write.path, "agents/YOLO-worker.md") && write.status === "created"), true);
   assert.equal(report.writes.some((write) => pathEndsWith(write.path, ".opencode/ogb.config.jsonc") && write.status === "created"), true);
+  assert.ok(report.writes.some((write) =>
+    pathEndsWith(write.path, "agents/YOLO.md")
+    && write.kind === "agent"
+    && write.target === "opencode"
+    && write.exclusive === true
+    && write.origin === "ogb:global-agent-profile"
+  ));
+  assert.ok(report.writes.some((write) =>
+    pathEndsWith(write.path, "AGENTS.md")
+    && write.kind === "context"
+    && write.target === "opencode"
+    && write.exclusive === true
+    && write.origin === "ogb:global-agents-md"
+  ));
+  assert.ok(report.writes.some((write) =>
+    pathEndsWith(write.path, "tui-plugins/ogb-sidebar.js")
+    && write.kind === "tui"
+    && write.target === "opencode"
+    && write.exclusive === true
+    && write.origin === "ogb:global-tui-sidebar"
+  ));
 
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.deepEqual(globalConfig.plugin, expectedGlobalPlugins(configDir));

@@ -180,7 +180,7 @@ ogb check --progress-json
 O comando executa setup local, update de Gemini Extensions, sync, doctor,
 validation, security-check e dashboard. O update de extensões roda antes do
 sync; se falhar, vira warning e o sync continua. `--no-extension-update` pula
-essa etapa. Hooks `BeforeTool`/`AfterTool` de `settings.json` e extensões
+essa etapa. Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json` e extensões
 Gemini entram no runtime do OpenCode pelo plugin OGB durante o sync.
 
 Para automações que precisam de progresso em tempo real, `--progress-json`
@@ -487,7 +487,7 @@ de hook/script revisado mudou.
 ### `ogb trust-extension`
 
 Comando legado de auditoria: registra hash de hook/script já revisado. Não é
-necessário para ativar `BeforeTool`/`AfterTool`, que sincronizam automaticamente
+necessário para ativar `BeforeTool`/`AfterTool`/`BeforeAgent`, que sincronizam automaticamente
 pelo plugin OGB.
 
 ```bash

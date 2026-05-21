@@ -760,6 +760,100 @@ process.stdin.on("end", () => {
   }
 });
 
+test("startup plugin projects Gemini BeforeAgent settings hooks onto OpenCode message events", async () => {
+  const root = tempProject();
+  const projectRoot = path.join(root, "project");
+  const pluginDir = path.join(root, "plugin");
+  const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
+  const hookLog = path.join(root, "before-agent-hook-log.jsonl");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.mkdirSync(path.join(pluginDir), { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+    version: 1,
+    enabled: false,
+    autoUpdate: false,
+    command: "ogb",
+    baseArgs: [],
+    syncArgs: ["startup-sync"],
+  }, null, 2) + "\n");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), JSON.stringify({
+    _generated: { tool: "ogb", version: "test", warning: "test" },
+    projectRoot,
+    generatedAt: new Date().toISOString(),
+    extensions: [],
+    projectedCommands: [],
+    projectedAgents: [],
+    modelFallbacks: [],
+    removedCommands: [],
+    removedAgents: [],
+    warnings: [],
+  }, null, 2) + "\n");
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    hooks: {
+      BeforeAgent: [{
+        hooks: [{
+          name: "before-agent-guard",
+          type: "command",
+          command: "node ./before-agent-hook-runner.mjs",
+          timeout: 2000,
+        }],
+      }],
+    },
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(projectRoot, "before-agent-hook-runner.mjs"), `
+import fs from "node:fs";
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => input += chunk);
+process.stdin.on("end", () => {
+  const payload = JSON.parse(input || "{}");
+  fs.appendFileSync(process.env.OGB_TEST_HOOK_LOG, JSON.stringify(payload) + "\\n");
+  if (payload.prompt === "block me") {
+    process.stderr.write("blocked by before-agent hook");
+    process.exit(2);
+  }
+});
+`, "utf8");
+
+  const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
+  const previousHookLog = process.env.OGB_TEST_HOOK_LOG;
+  process.env.OGB_STARTUP_DELAY_MS = "600000";
+  process.env.OGB_TEST_HOOK_LOG = hookLog;
+  try {
+    const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}-before-agent-hooks`);
+    const plugin = await mod.default({
+      directory: projectRoot,
+      worktree: projectRoot,
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async () => undefined },
+      },
+    });
+
+    await plugin.event({ event: { type: "message.updated", sessionID: "s1", message: { id: "m1", role: "user", content: "please plan" } } });
+    await plugin.event({ event: { type: "message.updated", sessionID: "s1", message: { id: "m1", role: "user", content: "please plan" } } });
+    await assert.rejects(
+      () => plugin.event({ event: { type: "message.updated", sessionID: "s1", message: { id: "m2", role: "user", content: "block me" } } }),
+      /blocked by before-agent hook/,
+    );
+
+    const records = fs.readFileSync(hookLog, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    assert.equal(records.length, 2);
+    assert.equal(records[0].hook_event_name, "BeforeAgent");
+    assert.equal(records[0].session_id, "s1");
+    assert.equal(records[0].prompt, "please plan");
+    assert.equal(records[1].prompt, "block me");
+  } finally {
+    if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
+    else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+    if (previousHookLog === undefined) delete process.env.OGB_TEST_HOOK_LOG;
+    else process.env.OGB_TEST_HOOK_LOG = previousHookLog;
+  }
+});
+
 test("startup plugin runs once for a burst of startup events", async () => {
   const root = tempProject();
   const projectRoot = path.join(root, "project");

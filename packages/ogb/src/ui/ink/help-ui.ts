@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, useApp, useInput, type Instance } from "ink";
-import { filterHelpCommands, formatHelpRunLine, helpActionsForCommand, type HelpAction, type HelpCommand } from "./help-catalog.js";
+import { filterHelpCommands, formatHelpRunLine, helpActionsForCommand, type HelpAction, type HelpCommand } from "../../help-catalog.js";
 
 export interface InteractiveHelpSelection {
   command: HelpCommand;
