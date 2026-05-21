@@ -21,6 +21,9 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: packages/agentx/package-lock.json
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.12"
       - name: Install
         working-directory: packages/agentx
         run: npm ci

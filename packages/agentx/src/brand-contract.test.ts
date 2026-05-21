@@ -265,7 +265,7 @@ test("public source copy does not leak legacy brand or PT-BR remediation text", 
   const violations: string[] = [];
 
   for (const file of scanned) {
-    const relFile = path.relative(repoRoot, file);
+    const relFile = path.relative(repoRoot, file).replace(/\\/g, "/");
     const text = fs.readFileSync(file, "utf8");
     text.split(/\r?\n/).forEach((line, index) => {
       if (!forbidden.some((pattern) => pattern.test(line))) return;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.9 - Windows validation for cargo-like install
+
+- Normaliza caminhos nos testes de contrato de brand para Windows (`\` vs `/`), mantendo a varredura que bloqueia vazamento público de marca legada/PT-BR.
+- Prepara Python no workflow `Validate agentX`, cobrindo a conversão Antigravity usada pela suíte Windows antes dos smokes de instalador.
+
 ## 0.2.8 - Cargo-like install/update cleanup
 
 - Treat Gemini `AfterAgent` and `Notification` hooks as compatibility notes instead of install/check blockers; compatible `BeforeTool`/`AfterTool`/`BeforeAgent` hooks still run through the OpenCode startup plugin.
