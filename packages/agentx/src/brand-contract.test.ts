@@ -43,6 +43,9 @@ test("release workflow centralizes branded artifact names", () => {
   assert.match(workflow, /zip -r "\$RELEASE_ASSET"/);
   assert.match(workflow, /name: \$\{\{ env\.PACKAGE_NAME \}\}-pack/);
   assert.match(workflow, /path:\s*\$\{\{ env\.RELEASE_ASSET \}\}/);
+  assert.match(workflow, /TELEMETRY_LEGACY_DEFAULTS_SCHEMA:\s+opencode-gemini-bridge\.telemetry-defaults\.v1/);
+  assert.match(workflow, /j\.schema === process\.env\.TELEMETRY_LEGACY_DEFAULTS_SCHEMA/);
+  assert.match(workflow, /j\.schema = process\.env\.TELEMETRY_DEFAULTS_SCHEMA/);
   assert.doesNotMatch(workflow, /opencode-gemini-bridge-pack\.zip/);
   assert.doesNotMatch(workflow, /opencode-gemini-bridge-\*\.tgz/);
   assert.doesNotMatch(workflow, /npm pack/);
@@ -96,6 +99,7 @@ const allowedBrandLiteralReferences: Record<string, RegExp[]> = {
     /^\s*PACKAGE_DIR: packages\/agentx\s*$/,
     /^\s*RELEASE_ASSET: agentx-pack\.zip\s*$/,
     /^\s*TELEMETRY_DEFAULTS_SCHEMA: agentx\.telemetry-defaults\.v2\s*$/,
+    /^\s*TELEMETRY_LEGACY_DEFAULTS_SCHEMA: opencode-gemini-bridge\.telemetry-defaults\.v1\s*$/,
     /OGB_TELEMETRY_DEFAULTS_JSON/,
     /\$\{\{\s*env\.PACKAGE_NAME\s*\}\}/,
     /\$\{\{\s*env\.PACKAGE_DIR\s*\}\}/,
@@ -181,6 +185,13 @@ test("validation release/install summaries interpolate brand constants", () => {
   assert.doesNotMatch(validation, /agentx CLI/);
   assert.doesNotMatch(validation, /ogb CLI/);
   assert.doesNotMatch(validation, /agentX installer/);
+});
+
+test("CLI setup command help interpolates the binary brand", () => {
+  const cli = readRepoFile("packages", "agentx", "src", "cli.ts");
+
+  assert.match(cli, /Command used by the startup plugin instead of the current \$\{BINARY\} CLI/);
+  assert.doesNotMatch(cli, /current (?:ogb|agentx) CLI/i);
 });
 
 test("self-update bootstrap temp names use the brand reference", () => {

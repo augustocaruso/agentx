@@ -14,6 +14,7 @@ env:
   PACKAGE_DIR: packages/agentx
   RELEASE_ASSET: agentx-pack.zip
   TELEMETRY_DEFAULTS_SCHEMA: agentx.telemetry-defaults.v2
+  TELEMETRY_LEGACY_DEFAULTS_SCHEMA: opencode-gemini-bridge.telemetry-defaults.v1
 
 jobs:
   package:
@@ -39,7 +40,18 @@ jobs:
           umask 077
           TELEMETRY_DEFAULTS_FILE="$PACKAGE_DIR/telemetry.defaults.json"
           printf '%s\n' "$OGB_TELEMETRY_DEFAULTS_JSON" > "$TELEMETRY_DEFAULTS_FILE"
-          TELEMETRY_DEFAULTS_FILE="$TELEMETRY_DEFAULTS_FILE" node -e "const fs=require('node:fs'); const p=process.env.TELEMETRY_DEFAULTS_FILE; const j=JSON.parse(fs.readFileSync(p,'utf8')); if (j.schema !== process.env.TELEMETRY_DEFAULTS_SCHEMA || j.enabled !== true || !j.endpoint_url || !j.auth_token) throw new Error('invalid telemetry defaults secret');"
+          TELEMETRY_DEFAULTS_FILE="$TELEMETRY_DEFAULTS_FILE" node <<'NODE'
+          const fs = require("node:fs");
+          const p = process.env.TELEMETRY_DEFAULTS_FILE;
+          const j = JSON.parse(fs.readFileSync(p, "utf8"));
+          if (j.schema === process.env.TELEMETRY_LEGACY_DEFAULTS_SCHEMA) {
+            j.schema = process.env.TELEMETRY_DEFAULTS_SCHEMA;
+          }
+          if (j.schema !== process.env.TELEMETRY_DEFAULTS_SCHEMA || j.enabled !== true || !j.endpoint_url || !j.auth_token) {
+            throw new Error("invalid telemetry defaults secret");
+          }
+          fs.writeFileSync(p, `${JSON.stringify(j, null, 2)}\n`, { mode: 0o600 });
+          NODE
       - name: Build
         working-directory: ${{ env.PACKAGE_DIR }}
         run: npm run build

@@ -72,6 +72,29 @@ function parseConverterOutput(stdout: string): AntigravityCommandSkill {
   };
 }
 
+interface PythonCommandResult {
+  error?: Error;
+  status: number | null;
+  stderr?: string | Buffer;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function isMissingPythonCommandResult(command: string, result: PythonCommandResult, platform: NodeJS.Platform = process.platform): boolean {
+  const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
+  if (errorCode === "ENOENT") return true;
+  if (platform !== "win32") return false;
+
+  const text = String(result.stderr || result.error?.message || "");
+  if (!/not recognized/i.test(text)) return false;
+
+  const commandName = path.basename(command).replace(/\.(?:bat|cmd|com|exe)$/i, "");
+  const commandPattern = new RegExp(`(?:^|['"\\s\\\\/])${escapeRegExp(commandName)}(?:\\.(?:bat|cmd|com|exe))?(?:$|['"\\s:,.])`, "i");
+  return commandPattern.test(text);
+}
+
 function convertWithExternalPython(input: AntigravityCommandSkillInput): AntigravityCommandSkill {
   const script = converterScriptPath();
   if (!fs.existsSync(script)) throw new Error(`Antigravity converter not found: ${script}`);
@@ -102,8 +125,10 @@ function convertWithExternalPython(input: AntigravityCommandSkillInput): Antigra
       maxBuffer: 1024 * 1024,
     });
     if (!result.error && result.status === 0) return parseConverterOutput(String(result.stdout || ""));
-    lastFailure = String(result.stderr || result.error?.message || `exit code ${String(result.status ?? "unknown")}`).trim();
-    const missingCommand = (result.error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+    const missingCommand = isMissingPythonCommandResult(command, result);
+    lastFailure = missingCommand
+      ? `${command} not found on PATH`
+      : String(result.stderr || result.error?.message || `exit code ${String(result.status ?? "unknown")}`).trim();
     if (missingCommand && command === "python3" && !readEnvAgentx("PYTHON_BIN")) continue;
     break;
   }
