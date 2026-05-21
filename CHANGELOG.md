@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.15 - Gemini hook projections run in OpenCode
+
+- Run compatible Gemini hooks through the agentX OpenCode plugin: `SessionStart`, `AfterAgent`, `Notification`, and `SessionEnd` now join the existing tool and prompt hooks.
+- Mark known Gemini hooks as automatic projections in inventory/doctor/check instead of compatibility warnings.
+- Update extension hook maps to show the OpenCode plugin events used for these projections.
+- Replace the interactive install/update panel with cargo-like live progress lines; `--plain` remains the classic full text report.
+
 ## 0.2.14 - Gemini session hooks are compatibility notes
 
 - Treat Gemini `SessionStart` and `SessionEnd` hooks like other Gemini-only lifecycle hooks during install/check: visible in inventory, but not install/update blockers.
@@ -31,7 +38,7 @@
 
 ## 0.2.8 - Cargo-like install/update cleanup
 
-- Treat Gemini `AfterAgent` and `Notification` hooks as compatibility notes instead of install/check blockers; compatible `BeforeTool`/`AfterTool`/`BeforeAgent` hooks still run through the OpenCode startup plugin.
+- Treat Gemini `AfterAgent` and `Notification` hooks as compatibility notes instead of install/check blockers; compatible Gemini hooks still run through the OpenCode startup plugin.
 - Make update progress present the product workflow (`fetch release -> install release -> verify bridge`) instead of exposing bootstrap internals.
 - Make bootstrap installers delegate to `agentx install --force` so managed repairs happen automatically, while keeping `--reset-global` behind explicit force/home-sync behavior.
 - Keep `agentx --version` and help side-effect free even when legacy project files still exist.
@@ -200,7 +207,7 @@
 
 ## 0.1.38 - Hooks Gemini sem opt-in
 
-- Faz hooks Gemini `BeforeTool`/`AfterTool` de `settings.json` e extensões rodarem automaticamente pelo plugin OGB do OpenCode durante o fluxo normal de sync.
+- Faz hooks Gemini `BeforeTool`/`AfterTool` de `settings.json` e extensões rodarem automaticamente pelo plugin agentX do OpenCode durante o fluxo normal de sync.
 - Mapeia nomes de ferramentas entre OpenCode e Gemini, incluindo `bash`/`run_shell_command`, e respeita `decision: "deny"`/`"block"`, exit code `2` e reescrita de `tool_input`.
 - Mantém scripts soltos e eventos sem equivalente OpenCode como superfície de auditoria, sem bloquear o caminho normal de `ogb sync`.
 - Atualiza o `AGENTS.md` global distribuído para orientação de terminal neutra ao sistema operacional.

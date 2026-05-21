@@ -38,8 +38,8 @@ ogb security-check
 
 ## Hooks/scripts de Gemini Extensions
 
-Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json` e Gemini Extensions
-sincronizam e rodam pelo plugin OGB do OpenCode no fluxo normal de `ogb sync`.
+Hooks Gemini conhecidos de `settings.json` e Gemini Extensions sincronizam e
+rodam pelo plugin agentX do OpenCode no fluxo normal de `agentx sync`.
 
 Para auditar a superfície:
 

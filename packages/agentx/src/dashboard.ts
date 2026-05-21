@@ -441,7 +441,7 @@ function buildNextSteps(report: DashboardReport): string[] {
     steps.push(`Run \`${BINARY} security-check\` before packaging or publishing.`);
   }
   if (report.extensionCompatibility.scripts > 0) {
-    steps.push(`Standalone Gemini Extension scripts remain review-only; compatible BeforeTool/AfterTool/BeforeAgent hooks run through the ${DISPLAY} plugin.`);
+    steps.push(`Known Gemini hooks run through the ${DISPLAY} OpenCode plugin; standalone scripts remain review-only.`);
   }
   if (report.runtimeFallback.configured && (!report.runtimeFallback.pluginActive || !report.runtimeFallback.configExists)) {
     steps.push(`Run \`${BINARY} sync\` to align the external runtime fallback plugin/config.`);

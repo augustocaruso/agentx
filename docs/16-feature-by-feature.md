@@ -201,7 +201,7 @@ Executam código arbitrário.
 
 ### Solução
 
-- Ativar automaticamente hooks `BeforeTool`/`AfterTool`/`BeforeAgent` de `settings.json` e extensão via plugin OGB.
+- Ativar automaticamente hooks Gemini conhecidos de `settings.json` e extensão via plugin agentX.
 - Converter para scripts/plugins apenas após revisão.
 - Doctor lista hooks e scripts.
 

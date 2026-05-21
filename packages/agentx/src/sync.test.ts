@@ -164,7 +164,7 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.equal(extensionMap.modelFallbacks.length, 0);
   assert.equal(routing.decisions.length, 0);
   assert.equal(extensionMap.extensions[0].hooks[0].projected, true);
-  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after,event.message.updated");
+  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after,permission.ask,event.message.updated,event.session.next.text.ended,event.session.idle,event.session.created,event.global.disposed,event.server.instance.disposed");
   assert.equal(extensionMap.extensions[0].scripts.some((script: { source: string }) => script.source === "bin/run.sh"), true);
   assert.match(helperAgent, /mode: subagent/);
   assert.match(helperAgent, /read: allow/);
@@ -1457,7 +1457,7 @@ test("syncToOpenCode projects Gemini extension TOML commands and maps risky reso
   assert.equal(extensionMap.extensions[0].agents[0].projected, true);
   assert.equal(extensionMap.extensions[0].agents[0].target, ".opencode/agents/helper.md");
   assert.equal(extensionMap.extensions[0].hooks[0].projected, true);
-  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after,event.message.updated");
+  assert.equal(extensionMap.extensions[0].hooks[0].target, "opencode-plugin:tool.execute.before,tool.execute.after,permission.ask,event.message.updated,event.session.next.text.ended,event.session.idle,event.session.created,event.global.disposed,event.server.instance.disposed");
   assert.equal(extensionMap.extensions[0].scripts.some((script: { source: string }) => script.source === "bin/run.sh"), true);
   assert.ok(report.projectedResourceMarkers?.some((resource) =>
     resource.path === ".opencode/commands/notes/review.md"

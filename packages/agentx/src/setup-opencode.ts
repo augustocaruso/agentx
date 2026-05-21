@@ -715,7 +715,7 @@ function geminiHookPayload(cwd, eventName, input, output) {
 }
 
 function eventMessage(event) {
-  return event?.message || event?.properties?.message || event?.data?.message || event?.payload?.message || {};
+  return event?.message || event?.properties?.message || event?.properties?.info || event?.data?.message || event?.data?.info || event?.payload?.message || event?.payload?.info || {};
 }
 
 function textFromPromptValue(value) {
@@ -752,6 +752,10 @@ function eventSessionId(event) {
   return String(event?.sessionID || event?.sessionId || event?.session_id || event?.properties?.sessionID || event?.properties?.sessionId || event?.properties?.session_id || "");
 }
 
+function inputSessionId(input) {
+  return String(input?.sessionID || input?.sessionId || input?.session_id || "");
+}
+
 function eventMessageId(event) {
   const message = eventMessage(event);
   return String(message?.id || message?.messageID || message?.messageId || message?.message_id || event?.messageID || event?.messageId || event?.message_id || event?.id || event?.properties?.messageID || event?.properties?.messageId || event?.properties?.message_id || "");
@@ -770,6 +774,56 @@ function geminiAgentHookPayload(cwd, eventName, event, prompt) {
     message_id: eventMessageId(event),
     cwd,
     prompt,
+  };
+}
+
+function eventText(event) {
+  const value = event?.text
+    ?? event?.content
+    ?? event?.properties?.text
+    ?? event?.properties?.content
+    ?? event?.data?.text
+    ?? event?.data?.content
+    ?? event?.payload?.text
+    ?? event?.payload?.content;
+  return textFromPromptValue(value).trim();
+}
+
+function assistantResponseFromEvent(event) {
+  if (String(event?.type || "") === "session.next.text.ended") return eventText(event);
+  const message = eventMessage(event);
+  const role = String(message?.role || message?.author?.role || event?.role || event?.properties?.role || "").toLowerCase();
+  if (role && role !== "assistant" && role !== "model") return "";
+  return textFromPromptValue(message?.content ?? message?.text ?? message?.parts ?? event?.content ?? event?.properties?.content ?? event?.properties?.text).trim();
+}
+
+function lifecycleEventKey(eventName, event, extra = "") {
+  const sessionId = eventSessionId(event);
+  const eventId = String(event?.id || event?.eventID || event?.eventId || "");
+  return [eventName, sessionId || "global", eventId || String(event?.type || ""), extra].join("\\0");
+}
+
+function geminiLifecycleHookPayload(cwd, eventName, event, fields = {}) {
+  return {
+    hook_event_name: eventName,
+    session_id: eventSessionId(event),
+    cwd,
+    timestamp: new Date().toISOString(),
+    ...fields,
+  };
+}
+
+function geminiNotificationHookPayload(cwd, input) {
+  const toolName = String(input?.tool || input?.toolName || input?.name || "tool");
+  const message = String(input?.description || input?.message || ("Permission requested for " + toolName));
+  return {
+    hook_event_name: "Notification",
+    session_id: inputSessionId(input),
+    cwd,
+    timestamp: new Date().toISOString(),
+    notification_type: "ToolPermission",
+    message,
+    details: input || {},
   };
 }
 
@@ -917,6 +971,58 @@ async function runGeminiExtensionAgentHooks(cwd, client, eventName, event, seenE
       });
     }
   }
+}
+
+async function runNonBlockingGeminiHooks(cwd, client, eventName, payload, commands, failureLabel) {
+  for (const command of commands) {
+    const result = await runHookCommand(command, payload);
+    const hookOutput = parseHookJson(result.stdout);
+    const decision = String(hookOutput.decision || "").toLowerCase();
+    const requestedStop = decision === "deny" || decision === "block" || hookOutput.continue === false || result.code === 2;
+    if (requestedStop || result.timedOut || result.code !== 0) {
+      await log(client, {
+        service: "agentx-extension-hooks",
+        level: "warn",
+        message: failureLabel,
+        extension: command.extensionName,
+        hook: command.name,
+        event: eventName,
+        code: result.code,
+        timedOut: Boolean(result.timedOut),
+        stderr: tail(result.stderr || hookOutput.reason || hookOutput.stopReason),
+      });
+    }
+  }
+}
+
+async function runGeminiLifecycleHooks(cwd, client, eventName, event, seenEvents, fields = {}, keyExtra = "") {
+  const key = lifecycleEventKey(eventName, event, keyExtra);
+  if (seenEvents.has(key)) return;
+  seenEvents.add(key);
+  const commands = geminiAgentHookCommands(cwd, cwd, eventName);
+  if (commands.length === 0) return;
+  const payload = geminiLifecycleHookPayload(cwd, eventName, event, fields);
+  await runNonBlockingGeminiHooks(cwd, client, eventName, payload, commands, "Gemini lifecycle hook failed open.");
+}
+
+async function runGeminiNotificationHooks(cwd, client, input) {
+  const commands = geminiAgentHookCommands(cwd, cwd, "Notification");
+  if (commands.length === 0) return;
+  const payload = geminiNotificationHookPayload(cwd, input);
+  await runNonBlockingGeminiHooks(cwd, client, "Notification", payload, commands, "Gemini notification hook failed open.");
+}
+
+async function runGeminiAfterAgentHooks(cwd, client, event, promptsBySession, responsesBySession, seenEvents) {
+  const sessionId = eventSessionId(event);
+  if (!sessionId) return;
+  const prompt = promptsBySession.get(sessionId);
+  if (!prompt) return;
+  const promptResponse = responsesBySession.get(sessionId) || "[no response text]";
+  await runGeminiLifecycleHooks(cwd, client, "AfterAgent", event, seenEvents, {
+    prompt,
+    prompt_response: promptResponse,
+    stop_hook_active: false,
+  }, prompt + "\\0" + promptResponse);
 }
 
 async function showToast(client, cwd, input) {
@@ -1587,6 +1693,11 @@ export const AgentXStartupSync = async ({ client, directory, worktree }) => {
   const lockPath = startupLockPath(cwd);
   const startupEvents = new Set(["session.created"]);
   const beforeAgentHookEvents = new Set();
+  const afterAgentHookEvents = new Set();
+  const sessionStartHookEvents = new Set();
+  const sessionEndHookEvents = new Set();
+  const promptsBySession = new Map();
+  const responsesBySession = new Map();
   const config = readConfig(cwd);
   const configuredBackoff = Number(config.failureBackoffMs ?? DEFAULT_FAILURE_BACKOFF_MS);
   const failureBackoffMs = Number.isFinite(configuredBackoff) && configuredBackoff >= 0 ? configuredBackoff : DEFAULT_FAILURE_BACKOFF_MS;
@@ -1716,8 +1827,32 @@ export const AgentXStartupSync = async ({ client, directory, worktree }) => {
     },
     event: async ({ event }) => {
       const type = String(event?.type || "");
+      if (type === "session.created") {
+        await runGeminiLifecycleHooks(cwd, client, "SessionStart", event, sessionStartHookEvents, { source: "startup" });
+      }
       if (startupEvents.has(type)) scheduleStartup(type, 0);
-      if (type === "message.updated") await runGeminiExtensionAgentHooks(cwd, client, "BeforeAgent", event, beforeAgentHookEvents);
+      if (type === "message.updated") {
+        const prompt = beforeAgentPromptFromEvent(event);
+        const sessionId = eventSessionId(event);
+        if (prompt && sessionId) promptsBySession.set(sessionId, prompt);
+        const response = assistantResponseFromEvent(event);
+        if (response && sessionId) responsesBySession.set(sessionId, response);
+        await runGeminiExtensionAgentHooks(cwd, client, "BeforeAgent", event, beforeAgentHookEvents);
+      }
+      if (type === "session.next.text.ended") {
+        const response = assistantResponseFromEvent(event);
+        const sessionId = eventSessionId(event);
+        if (response && sessionId) responsesBySession.set(sessionId, response);
+      }
+      if (type === "session.idle") {
+        await runGeminiAfterAgentHooks(cwd, client, event, promptsBySession, responsesBySession, afterAgentHookEvents);
+      }
+      if (type === "session.deleted") {
+        await runGeminiLifecycleHooks(cwd, client, "SessionEnd", event, sessionEndHookEvents, { reason: "clear" });
+      }
+      if (type === "global.disposed" || type === "server.instance.disposed") {
+        await runGeminiLifecycleHooks(cwd, client, "SessionEnd", event, sessionEndHookEvents, { reason: "exit" });
+      }
     },
     "session.created": async () => {
       if (process.env.OGB_SYNC_ON_SESSION_CREATED === "1") {
@@ -1734,6 +1869,9 @@ export const AgentXStartupSync = async ({ client, directory, worktree }) => {
     },
     "tool.execute.after": async (input, output) => {
       await runGeminiExtensionToolHooks(cwd, client, "AfterTool", input, output);
+    },
+    "permission.ask": async (input) => {
+      await runGeminiNotificationHooks(cwd, client, input);
     },
   };
 };

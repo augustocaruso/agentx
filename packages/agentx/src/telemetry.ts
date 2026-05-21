@@ -742,7 +742,7 @@ function diagnosticContext(workflow: string, payload: unknown, summary: Record<s
   } else if (includesAny(messagesText, ["hook needs review", "needs_review", "trusted hook/script changed", "trusted hook", "hooks/scripts"])) {
     code = "trust_review_required";
     label = "Hooks/scripts need review";
-    recovery = "BeforeTool/AfterTool/BeforeAgent hooks sync automatically; review scripts or events without an OpenCode equivalent and keep a legacy hash only if you want to silence the audit.";
+    recovery = "Known Gemini hooks sync automatically through the agentX OpenCode plugin; review only custom hook events without a compatible OpenCode projection.";
   } else if (payloadBoolean(payload, "restartRequired") || payloadOutcome === "updated") {
     code = "restart_required";
     label = "OpenCode needs a restart to load changes";

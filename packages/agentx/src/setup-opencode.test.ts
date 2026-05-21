@@ -883,6 +883,95 @@ process.stdin.on("end", () => {
   }
 });
 
+test("startup plugin projects compatible Gemini lifecycle and notification hooks onto OpenCode events", async () => {
+  const root = tempProject();
+  const projectRoot = path.join(root, "project");
+  const pluginDir = path.join(root, "plugin");
+  const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
+  const hookLog = path.join(root, "lifecycle-hook-log.jsonl");
+  fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.mkdirSync(path.join(pluginDir), { recursive: true });
+  fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
+  fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
+    version: 1,
+    enabled: false,
+    autoUpdate: false,
+    command: "ogb",
+    baseArgs: [],
+    syncArgs: ["startup-sync"],
+  }, null, 2) + "\n");
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), JSON.stringify({
+    _generated: { tool: "ogb", version: "test", warning: "test" },
+    projectRoot,
+    generatedAt: new Date().toISOString(),
+    extensions: [],
+    projectedCommands: [],
+    projectedAgents: [],
+    modelFallbacks: [],
+    removedCommands: [],
+    removedAgents: [],
+    warnings: [],
+  }, null, 2) + "\n");
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    hooks: {
+      SessionStart: [{ hooks: [{ name: "start", type: "command", command: "node ./lifecycle-hook-runner.mjs" }] }],
+      AfterAgent: [{ hooks: [{ name: "after", type: "command", command: "node ./lifecycle-hook-runner.mjs" }] }],
+      Notification: [{ hooks: [{ name: "notify", type: "command", command: "node ./lifecycle-hook-runner.mjs" }] }],
+      SessionEnd: [{ hooks: [{ name: "end", type: "command", command: "node ./lifecycle-hook-runner.mjs" }] }],
+    },
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(projectRoot, "lifecycle-hook-runner.mjs"), `
+import fs from "node:fs";
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => input += chunk);
+process.stdin.on("end", () => {
+  const payload = JSON.parse(input || "{}");
+  fs.appendFileSync(process.env.OGB_TEST_HOOK_LOG, JSON.stringify(payload) + "\\n");
+});
+`, "utf8");
+
+  const previousDelay = process.env.OGB_STARTUP_DELAY_MS;
+  const previousHookLog = process.env.OGB_TEST_HOOK_LOG;
+  process.env.OGB_STARTUP_DELAY_MS = "600000";
+  process.env.OGB_TEST_HOOK_LOG = hookLog;
+  try {
+    const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}-lifecycle-hooks`);
+    const plugin = await mod.default({
+      directory: projectRoot,
+      worktree: projectRoot,
+      client: {
+        app: { log: async () => undefined },
+        tui: { showToast: async () => undefined },
+      },
+    });
+
+    await plugin.event({ event: { type: "session.created", properties: { sessionID: "s1" } } });
+    await plugin.event({ event: { type: "message.updated", sessionID: "s1", message: { id: "m1", role: "user", content: "please answer" } } });
+    await plugin.event({ event: { type: "session.next.text.ended", properties: { sessionID: "s1", text: "final answer" } } });
+    await plugin.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+    await plugin["permission.ask"]({ sessionID: "s1", tool: "bash", description: "Run a command" }, { status: "ask" });
+    await plugin.event({ event: { type: "global.disposed" } });
+
+    const records = fs.readFileSync(hookLog, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    const byEvent = new Map(records.map((record) => [record.hook_event_name, record]));
+    assert.equal(byEvent.get("SessionStart")?.session_id, "s1");
+    assert.equal(byEvent.get("SessionStart")?.source, "startup");
+    assert.equal(byEvent.get("AfterAgent")?.prompt, "please answer");
+    assert.equal(byEvent.get("AfterAgent")?.prompt_response, "final answer");
+    assert.equal(byEvent.get("Notification")?.notification_type, "ToolPermission");
+    assert.equal(byEvent.get("Notification")?.details?.tool, "bash");
+    assert.equal(byEvent.get("SessionEnd")?.reason, "exit");
+  } finally {
+    if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
+    else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
+    if (previousHookLog === undefined) delete process.env.OGB_TEST_HOOK_LOG;
+    else process.env.OGB_TEST_HOOK_LOG = previousHookLog;
+  }
+});
+
 test("startup plugin runs once for a burst of startup events", async () => {
   const root = tempProject();
   const projectRoot = path.join(root, "project");

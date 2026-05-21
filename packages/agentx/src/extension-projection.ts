@@ -443,7 +443,7 @@ function extensionMapEntry(extension: ExtensionRoot): GeminiExtensionMapEntry {
     hooks: hookFiles.map((filePath) => ({
       source: relativeTo(extension.dir, filePath),
       projected: true,
-      target: "opencode-plugin:tool.execute.before,tool.execute.after,event.message.updated",
+      target: "opencode-plugin:tool.execute.before,tool.execute.after,permission.ask,event.message.updated,event.session.next.text.ended,event.session.idle,event.session.created,event.global.disposed,event.server.instance.disposed",
       reason: `Projected through the ${DISPLAY} OpenCode plugin.`,
     })),
     scripts: collectScripts(extension.dir),

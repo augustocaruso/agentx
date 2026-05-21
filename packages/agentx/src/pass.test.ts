@@ -91,7 +91,7 @@ test("runPass accepts BeforeTool and BeforeAgent hooks independently", () => {
   process.exitCode = oldExitCode;
 });
 
-test("runPass does not warn users about known unsupported Gemini lifecycle hooks during normal checks", () => {
+test("runPass does not warn users about known Gemini hook projections during normal checks", () => {
   const projectRoot = tempRoot();
   const oldExitCode = process.exitCode;
   fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });

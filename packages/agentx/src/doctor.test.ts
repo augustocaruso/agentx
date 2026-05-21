@@ -196,7 +196,7 @@ test("runDoctor treats BeforeAgent hooks as compatible projection without trust 
   assert.equal(report.warnings.some((warning) => warning.startsWith("Hook needs review: BeforeAgent")), false);
 });
 
-test("runDoctor treats known unsupported Gemini lifecycle hooks as compatibility notes, not install blockers", () => {
+test("runDoctor treats known Gemini hooks as automatic projections, not install blockers", () => {
   const projectRoot = tempRoot();
   fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({

@@ -145,7 +145,7 @@ Update depois que o `agentx` ja esta instalado:
 ```bash
 agentx --project "$PWD" update
 agentx --project "$PWD" update --dry-run
-agentx --project "$PWD" update --release v0.2.14
+agentx --project "$PWD" update --release v0.2.15
 agentx --project "$PWD" check-update
 agentx --project "$PWD" auto-update
 ```
@@ -198,7 +198,7 @@ como fonte de verdade. Comandos vão para `~/.config/opencode/commands/`, agents
 Comandos/agents/skills vindos de extensoes Gemini tambem entram nesses
 diretórios globais. MCPs compativeis de `~/.gemini/settings.json` e dos
 manifestos das extensoes Gemini entram em `~/.config/opencode/opencode.json`.
-Hooks `BeforeTool`/`AfterTool` de `settings.json` e das extensoes Gemini sao
+Hooks Gemini conhecidos de `settings.json` e das extensoes Gemini sao
 sincronizados pelo plugin agentX do OpenCode; scripts soltos continuam apenas
 inventariados para revisao.
 
@@ -278,7 +278,7 @@ Comandos, skills, MCPs, `GEMINI.md`, subagentes e hooks compativeis de
 `settings.json`/extensoes sao projetados para OpenCode. Subagentes projetados
 podem ler, editar e criar arquivos por padrao; comandos de terminal continuam
 em `bash: ask`.
-Hooks `BeforeTool`/`AfterTool` rodam pelo plugin agentX sem etapa manual de trust.
+Hooks Gemini conhecidos rodam pelo plugin agentX sem etapa manual de trust.
 Scripts soltos continuam no mapa de risco para revisao; se um script revisado
 mudar depois, `agentx security-check` falha ate voce revisar de novo.
 

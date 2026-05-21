@@ -214,14 +214,14 @@ function postUpdateNext(report: SelfUpdateReport): string[] {
     ...(report.postUpdate?.summary?.next ?? []),
     ...(report.postUpdate?.status === "fail" || report.postUpdate?.status === "error"
       ? ["Run `agentx check --plain --force` to inspect the post-update failure directly.", "Run `agentx dashboard --plain` for the last persisted bridge state."]
-      : ["Run `agentx update --plain` so the release install log is printed without the rich UI.", "Check Node/npm/PowerShell PATH and network access, then retry the same release."]),
+      : ["Run `agentx update --plain` so the release install log is printed without live progress.", "Check Node/npm/PowerShell PATH and network access, then retry the same release."]),
   ], 4);
 }
 
 function unexpectedErrorNext(kind: RitualKind, message: string): string[] {
   const command = `agentx ${kind} --plain`;
   const generic = [
-    `Run \`${command}\` to see the classic logs without the rich UI.`,
+    `Run \`${command}\` to see the classic logs without live progress.`,
     "Then run `agentx dashboard --plain` to inspect the last persisted bridge status.",
   ];
   if (/ENOENT|not found|command not found|no such file|n.o . reconhecido/i.test(message)) {

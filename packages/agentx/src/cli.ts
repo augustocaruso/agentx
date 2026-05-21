@@ -435,7 +435,7 @@ type CheckCliOptions = {
 function addCheckOptions(command: Command): Command {
   return command
     .option("--json", "Print JSON report")
-    .option("--plain", "Use the classic text report instead of the rich terminal UI")
+    .option("--plain", "Use the classic text report instead of live terminal progress")
     .option("--progress-json", "Emit versioned NDJSON progress events for automation")
     .option("--dry-run", "Preview check actions without writing trust changes")
     .option("--force", `Overwrite files previously changed outside ${DISPLAY} management`)
@@ -519,7 +519,7 @@ function addUpdateOptions(command: Command): Command {
     .option("--force", "Force managed repair during release install")
     .option("--dry-run", "Print the release install command without running it")
     .option("--json", "Print JSON report")
-    .option("--plain", "Use the classic text report instead of the rich terminal UI")
+    .option("--plain", "Use the classic text report instead of live terminal progress")
     .option("--progress-json", "Emit versioned NDJSON progress events for automation");
 }
 
@@ -1143,7 +1143,7 @@ program.command("install")
   .option("--accept-hooks", "Legacy: record unsupported Gemini hook events as reviewed during the final check")
   .option("--windows", "Include Windows installer/static checks during the final check")
   .option("--json", "Print JSON report")
-  .option("--plain", "Use the classic text report instead of the rich terminal UI")
+  .option("--plain", "Use the classic text report instead of live terminal progress")
   .option("--progress-json", "Emit versioned NDJSON progress events for automation")
   .action(async (opts) => {
     if (structuredOutputConflict(opts)) return;
@@ -1254,7 +1254,7 @@ program.command("reset")
   .option("--no-install-opencode", "Do not install OpenCode when it is missing")
   .option("--no-plugins", "Do not run global OpenCode plugin installers")
   .option("--json", "Print JSON report")
-  .option("--plain", "Use the classic text report instead of the rich terminal UI")
+  .option("--plain", "Use the classic text report instead of live terminal progress")
   .option("--progress-json", "Emit versioned NDJSON progress events for automation")
   .action(async (opts) => {
     if (structuredOutputConflict(opts)) return;

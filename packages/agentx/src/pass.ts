@@ -121,7 +121,7 @@ export interface PassReport {
 }
 
 function actionForWarning(warning: string): string {
-  if (/^Hook needs review:/.test(warning)) return "Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` already sync automatically; for events without an OpenCode equivalent, review the resource and keep the legacy hash only if you want to silence the audit.";
+  if (/^Hook needs review:/.test(warning)) return "Known Gemini hooks sync automatically through the agentX OpenCode plugin; review only custom hook events that do not have a compatible OpenCode projection yet.";
   if (/Duplicate name/i.test(warning)) return "Run `agentx check --json` or open `.opencode/generated/agentx-inventory.json` to inspect duplicate paths; keep one copy.";
   if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Enable the generated fallback config or disable `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc`.";
   if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Install `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, run `agentx sync`, then restart OpenCode.";
