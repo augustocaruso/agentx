@@ -269,9 +269,9 @@ test("bundled shared converter builds a complete Antigravity plugin", (context) 
       },
     },
   }, null, 2), "utf8");
-  fs.writeFileSync(path.join(sourceDir, "GEMINI.md"), "Use ${extensionPath} as root.\n", "utf8");
-  fs.writeFileSync(path.join(sourceDir, "README.md"), "Gemini CLI extension README\n", "utf8");
-  fs.writeFileSync(path.join(sourceDir, "commands", "study", "review.toml"), "description = \"Review\"\nprompt = \"Review {{args}} with ${extensionPath}${/}docs\"\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "GEMINI.md"), "Use ${extensionPath} as root; fallback ~/.gemini/extensions/study-pack.\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "README.md"), "Gemini CLI extension README\n\ngemini extensions validate dist/gemini-cli-extension\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "commands", "study", "review.toml"), "description = \"Review\"\nprompt = \"Review {{args}} with ${extensionPath}${/}docs and run uv run python scripts/study.py --config ~/.gemini/medical-notes-workbench/config.toml; run gemini extensions config study-pack STUDY_TOKEN if needed\"\n", "utf8");
   fs.writeFileSync(path.join(sourceDir, "agents", "helper.md"), "---\nname: helper\ndescription: Helper\nmodel: gemini-3-flash-preview\n---\nUse ${extensionPath}.\n", "utf8");
   fs.writeFileSync(path.join(sourceDir, "hooks", "hooks.json"), JSON.stringify({
     hooks: {
@@ -282,6 +282,8 @@ test("bundled shared converter builds a complete Antigravity plugin", (context) 
   }, null, 2), "utf8");
   fs.writeFileSync(path.join(sourceDir, "skills", "native-skill", "SKILL.md"), "---\nname: native-skill\ndescription: Native\n---\nUse ${extensionPath}.\n", "utf8");
   fs.writeFileSync(path.join(sourceDir, "scripts", "hook.mjs"), "console.log('${extensionPath}');\n", "utf8");
+  fs.mkdirSync(path.join(sourceDir, "scripts", "hooks"), { recursive: true });
+  fs.writeFileSync(path.join(sourceDir, "scripts", "hooks", "runtime.mjs"), "console.log('${extensionPath}');\n", "utf8");
   fs.writeFileSync(path.join(sourceDir, "src", "mcp-server.js"), "console.log('${extensionPath}');\n", "utf8");
 
   const result = spawnSync(python, [
@@ -305,7 +307,9 @@ test("bundled shared converter builds a complete Antigravity plugin", (context) 
   const commandSkill = fs.readFileSync(path.join(outputDir, "skills", "study-review", "SKILL.md"), "utf8");
   const copiedSkill = fs.readFileSync(path.join(outputDir, "skills", "native-skill", "SKILL.md"), "utf8");
   const agent = fs.readFileSync(path.join(outputDir, "agents", "helper.md"), "utf8");
+  const readme = fs.readFileSync(path.join(outputDir, "README.md"), "utf8");
   const script = fs.readFileSync(path.join(outputDir, "scripts", "hook.mjs"), "utf8");
+  const hookRuntime = fs.readFileSync(path.join(outputDir, "scripts", "hooks", "runtime.mjs"), "utf8");
   const server = fs.readFileSync(path.join(outputDir, "src", "mcp-server.js"), "utf8");
   const rules = fs.readFileSync(path.join(outputDir, "rules", "study-pack.md"), "utf8");
   const notes = fs.readFileSync(path.join(outputDir, "MIGRATION_NOTES.md"), "utf8");
@@ -329,14 +333,22 @@ test("bundled shared converter builds a complete Antigravity plugin", (context) 
   assert.match(commandSkill, /SOURCE_KIND: gemini-antigravity-command-skill/);
   assert.match(commandSkill, /\$ARGUMENTS/);
   assert.doesNotMatch(commandSkill, /\{\{args\}\}/);
+  assert.doesNotMatch(`${readme}\n${commandSkill}`, /gemini extensions /);
+  assert.match(readme, /agy plugin validate/);
+  assert.match(commandSkill, /configure STUDY_TOKEN in the Antigravity environment/);
+  assert.match(commandSkill, /node "<plugin-root>\/scripts\/run_python\.mjs" scripts\/study\.py/);
+  assert.doesNotMatch(commandSkill, /--config ~\/\.gemini\/medical-notes-workbench\/config\.toml/);
   assert.match(copiedSkill, /<plugin-root>/);
   assert.match(agent, /Gemini 3\.5 Flash \(High\)/);
   assert.match(agent, /Antigravity Plugin Root/);
   assert.match(script, /'\.'/);
+  assert.match(hookRuntime, /'\.'/);
+  assert.equal(fs.existsSync(path.join(outputDir, "hooks", "hooks.json")), false);
   assert.match(server, /'\.'/);
   assert.match(rules, /<plugin-root>/);
+  assert.doesNotMatch(rules, /~\/\.gemini\/extensions/);
   assert.match(notes, /mcp_config\.json/);
-  assert.doesNotMatch(`${mcpText}\n${script}\n${server}`, /\$\{extensionPath\}/);
+  assert.doesNotMatch(`${mcpText}\n${script}\n${hookRuntime}\n${server}`, /\$\{extensionPath\}/);
 });
 
 test("Antigravity converter fails clearly when Python is unavailable", () => {

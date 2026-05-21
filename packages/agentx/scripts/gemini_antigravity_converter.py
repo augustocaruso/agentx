@@ -87,7 +87,6 @@ COPY_IGNORE = (
     "GEMINI.md",
     "README.md",
     "commands",
-    "hooks",
 )
 
 
@@ -177,6 +176,19 @@ def normalize_command_prompt(prompt: str, extension_dir: str | None = None) -> s
     output = re.sub(r"\{\{\s*args\s*\}\}", "$ARGUMENTS", prompt)
     if extension_dir:
         output = output.replace("${extensionPath}", extension_dir).replace("${/}", os.sep)
+        runner = f'node "{extension_dir}/scripts/run_python.mjs"'
+        output = re.sub(r"\buv run --project\s+\S+\s+python\s+", f"{runner} ", output)
+        output = re.sub(r"\buv run python\s+", f"{runner} ", output)
+    output = output.replace(" --config ~/.gemini/medical-notes-workbench/config.toml", "")
+    output = output.replace(
+        "~/.gemini/medical-notes-workbench/config.toml",
+        "config.toml resolved at runtime from MEDNOTES_HOME when set; otherwise the Workbench app home",
+    )
+    output = re.sub(
+        r"gemini extensions config\s+[\w.-]+\s+([A-Z0-9_]+)",
+        r"configure \1 in the Antigravity environment",
+        output,
+    )
     return output.strip()
 
 
@@ -286,16 +298,27 @@ def _copy_extension_payload(source_dir: Path, output_dir: Path) -> None:
 
 
 def _sanitize_runtime_text(text: str, source_dir: Path, plugin_root_token: str = PLUGIN_ROOT_TOKEN) -> str:
+    text = re.sub(
+        r"gemini extensions config\s+[\w.-]+\s+([A-Z0-9_]+)",
+        r"configure \1 in the Antigravity environment",
+        text,
+    )
+    text = re.sub(r"~/.gemini/extensions/[\w.-]+", plugin_root_token, text)
     replacements = {
         str(source_dir): plugin_root_token,
         "${extensionPath}": plugin_root_token,
+        "~/.gemini/extensions": "<antigravity-plugin-install-root>",
         "${/}": os.sep,
         "Gemini CLI extension": "Antigravity plugin",
         "Gemini CLI Extension": "Antigravity Plugin",
         "Gemini CLI hooks": "Antigravity hooks",
         "Gemini CLI hook": "Antigravity hook",
+        "gemini extensions validate": "agy plugin validate",
+        "gemini extensions install": "install the Antigravity plugin",
+        "gemini extensions uninstall": "remove the Antigravity plugin",
         "gemini extensions list": "inspect Antigravity plugins/customizations",
         "gemini extensions update": "update the Antigravity plugin bundle",
+        "gemini extensions": "Antigravity plugins",
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
