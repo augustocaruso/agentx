@@ -35,3 +35,11 @@ test("OpenCode TUI source is isolated from the sidebar installer adapter", () =>
   assert.match(adapter, /from\s+["']\.\/tui-sidebar-source\.js["']/);
   assert.match(source, /export const TUI_SIDEBAR_PLUGIN_SOURCE = String\.raw`import fs from "node:fs"/);
 });
+
+test("presentation theme and format modules stay free of React and Ink", () => {
+  for (const file of ["presentation/theme.ts", "presentation/format.ts"]) {
+    const source = readSource(file);
+    assert.doesNotMatch(source, /from\s+["'](?:ink|react)["']/, `${file} must not import ink/react`);
+    assert.doesNotMatch(source, /React\.createElement|render\(/, `${file} must not invoke React/Ink runtime`);
+  }
+});
