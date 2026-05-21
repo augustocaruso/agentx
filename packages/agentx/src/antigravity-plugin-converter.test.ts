@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { convertGeminiCommandToAntigravitySkill, isMissingPythonCommandResult } from "./antigravity-plugin-converter.js";
+import {
+  convertGeminiCommandToAntigravitySkill,
+  convertGeminiExtensionToAntigravityPlugin,
+  isMissingPythonCommandResult,
+} from "./antigravity-plugin-converter.js";
 
 function writeFakePythonCommand(
   binDir: string,
@@ -39,6 +44,18 @@ interface AntigravityPayload {
   description: string;
   markdown: string;
   warnings: string[];
+}
+
+function bundledConverterPath(): string {
+  return path.resolve("scripts", "gemini_antigravity_converter.py");
+}
+
+function availablePython(): string | undefined {
+  for (const command of ["python3", "python"]) {
+    const result = spawnSync(command, ["--version"], { encoding: "utf8" });
+    if (!result.error && result.status === 0) return command;
+  }
+  return undefined;
 }
 
 test("Antigravity converter treats Windows cmd not-recognized output as a missing Python command", () => {
@@ -168,6 +185,158 @@ test("Antigravity converter prefers the bundled Python converter when Python is 
     if (previousPython === undefined) delete process.env.AGENTX_PYTHON_BIN;
     else process.env.AGENTX_PYTHON_BIN = previousPython;
   }
+});
+
+test("Antigravity converter exposes full Gemini extension to Antigravity plugin conversion", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-antigravity-plugin-wrapper-"));
+  const binDir = path.join(root, "bin");
+  const marker = path.join(root, "python-args.json");
+  const sourceDir = path.join(root, "extension");
+  const outputDir = path.join(root, "plugin");
+  fs.mkdirSync(sourceDir, { recursive: true });
+  const python = writeFakePythonCommand(
+    binDir,
+    "python",
+    {
+      schema: "agentx.gemini-antigravity-converter.v1",
+      status: "converted",
+      pluginName: "study-pack",
+      sourceDir,
+      pluginDir: outputDir,
+      counts: { commandSkills: 2, hooks: 2, mcpServers: 1, agents: 1, skills: 3, inventory: 9 },
+      warnings: [],
+      inventory: [{ source: "GEMINI.md", kind: "instruction", destination: "rules/study-pack.md", status: "migrated", note: "ok" }],
+    } as unknown as AntigravityPayload,
+    { argsMarker: marker },
+  );
+
+  const previousConverter = process.env.AGENTX_ANTIGRAVITY_CONVERTER;
+  const previousPython = process.env.AGENTX_PYTHON_BIN;
+  delete process.env.AGENTX_ANTIGRAVITY_CONVERTER;
+  process.env.AGENTX_PYTHON_BIN = python;
+  try {
+    const result = convertGeminiExtensionToAntigravityPlugin({
+      sourceDir,
+      outputDir,
+      pluginName: "study-pack",
+    });
+    const args = JSON.parse(fs.readFileSync(marker, "utf8")) as string[];
+
+    assert.equal(result.pluginName, "study-pack");
+    assert.equal(result.counts.hooks, 2);
+    assert.equal(result.counts.mcpServers, 1);
+    assert.equal(result.inventory[0]?.destination, "rules/study-pack.md");
+    assert.ok(args.some((arg) => arg.replace(/\\/g, "/").endsWith("scripts/gemini_antigravity_converter.py")));
+    assert.ok(args.includes("convert-extension-plugin"));
+    assert.ok(args.includes("--source-dir"));
+    assert.ok(args.includes(sourceDir));
+    assert.ok(args.includes("--output-dir"));
+    assert.ok(args.includes(outputDir));
+  } finally {
+    if (previousConverter === undefined) delete process.env.AGENTX_ANTIGRAVITY_CONVERTER;
+    else process.env.AGENTX_ANTIGRAVITY_CONVERTER = previousConverter;
+    if (previousPython === undefined) delete process.env.AGENTX_PYTHON_BIN;
+    else process.env.AGENTX_PYTHON_BIN = previousPython;
+  }
+});
+
+test("bundled shared converter builds a complete Antigravity plugin", (context) => {
+  const python = availablePython();
+  if (!python) {
+    context.skip("Python unavailable");
+    return;
+  }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-antigravity-plugin-real-"));
+  const sourceDir = path.join(root, "extension");
+  const outputDir = path.join(root, "plugin");
+  fs.mkdirSync(path.join(sourceDir, "commands", "study"), { recursive: true });
+  fs.mkdirSync(path.join(sourceDir, "agents"), { recursive: true });
+  fs.mkdirSync(path.join(sourceDir, "hooks"), { recursive: true });
+  fs.mkdirSync(path.join(sourceDir, "skills", "native-skill"), { recursive: true });
+  fs.mkdirSync(path.join(sourceDir, "scripts"), { recursive: true });
+  fs.mkdirSync(path.join(sourceDir, "src"), { recursive: true });
+  const fakeNotionToken = `ntn_${"a".repeat(32)}`;
+  fs.writeFileSync(path.join(sourceDir, "gemini-extension.json"), JSON.stringify({
+    name: "study-pack",
+    mcpServers: {
+      notion: {
+        command: "node",
+        args: ["${extensionPath}${/}src${/}mcp-server.js"],
+        env: {
+          OPENAPI_MCP_HEADERS: "$OPENAPI_MCP_HEADERS",
+          NOTION_TOKEN: fakeNotionToken,
+        },
+      },
+    },
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(sourceDir, "GEMINI.md"), "Use ${extensionPath} as root.\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "README.md"), "Gemini CLI extension README\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "commands", "study", "review.toml"), "description = \"Review\"\nprompt = \"Review {{args}} with ${extensionPath}${/}docs\"\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "agents", "helper.md"), "---\nname: helper\ndescription: Helper\nmodel: gemini-3-flash-preview\n---\nUse ${extensionPath}.\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "hooks", "hooks.json"), JSON.stringify({
+    hooks: {
+      BeforeTool: [{ matcher: "Bash", hooks: [{ type: "command", command: "node ${extensionPath}${/}scripts/hook.mjs" }] }],
+      AfterTool: [{ matcher: "Bash", hooks: [{ type: "command", command: "node ${extensionPath}${/}scripts/after.mjs" }] }],
+      BeforeAgent: [{ hooks: [{ type: "command", command: "node ${extensionPath}${/}scripts/before-agent.mjs" }] }],
+    },
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(sourceDir, "skills", "native-skill", "SKILL.md"), "---\nname: native-skill\ndescription: Native\n---\nUse ${extensionPath}.\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "scripts", "hook.mjs"), "console.log('${extensionPath}');\n", "utf8");
+  fs.writeFileSync(path.join(sourceDir, "src", "mcp-server.js"), "console.log('${extensionPath}');\n", "utf8");
+
+  const result = spawnSync(python, [
+    bundledConverterPath(),
+    "convert-extension-plugin",
+    "--source-dir",
+    sourceDir,
+    "--output-dir",
+    outputDir,
+    "--json",
+  ], {
+    cwd: path.resolve("."),
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const payload = JSON.parse(result.stdout) as { counts: Record<string, number>; warnings: string[] };
+  const manifest = JSON.parse(fs.readFileSync(path.join(outputDir, "plugin.json"), "utf8"));
+  const mcp = JSON.parse(fs.readFileSync(path.join(outputDir, "mcp_config.json"), "utf8"));
+  const hooks = JSON.parse(fs.readFileSync(path.join(outputDir, "hooks.json"), "utf8"));
+  const commandSkill = fs.readFileSync(path.join(outputDir, "skills", "study-review", "SKILL.md"), "utf8");
+  const copiedSkill = fs.readFileSync(path.join(outputDir, "skills", "native-skill", "SKILL.md"), "utf8");
+  const agent = fs.readFileSync(path.join(outputDir, "agents", "helper.md"), "utf8");
+  const script = fs.readFileSync(path.join(outputDir, "scripts", "hook.mjs"), "utf8");
+  const server = fs.readFileSync(path.join(outputDir, "src", "mcp-server.js"), "utf8");
+  const rules = fs.readFileSync(path.join(outputDir, "rules", "study-pack.md"), "utf8");
+  const notes = fs.readFileSync(path.join(outputDir, "MIGRATION_NOTES.md"), "utf8");
+  const mcpText = fs.readFileSync(path.join(outputDir, "mcp_config.json"), "utf8");
+
+  assert.deepEqual(manifest, { name: "study-pack" });
+  assert.deepEqual(mcp.mcpServers.notion.command, "node");
+  assert.deepEqual(mcp.mcpServers.notion.args, [`.${path.sep}src${path.sep}mcp-server.js`]);
+  assert.deepEqual(mcp.mcpServers.notion.env, {
+    NOTION_TOKEN: "{env:NOTION_TOKEN}",
+    OPENAPI_MCP_HEADERS: "{env:OPENAPI_MCP_HEADERS}",
+  });
+  assert.equal(mcpText.includes(fakeNotionToken), false);
+  assert.equal(payload.counts.commandSkills, 1);
+  assert.equal(payload.counts.mcpServers, 1);
+  assert.equal(payload.counts.agents, 1);
+  assert.ok(payload.warnings.some((warning) => warning.includes("NOTION_TOKEN")));
+  assert.equal(hooks["study-pack-hooks"].PreToolUse.length, 1);
+  assert.equal(hooks["study-pack-hooks"].PostToolUse.length, 1);
+  assert.ok(payload.warnings.some((warning) => warning.includes("BeforeAgent")));
+  assert.match(commandSkill, /SOURCE_KIND: gemini-antigravity-command-skill/);
+  assert.match(commandSkill, /\$ARGUMENTS/);
+  assert.doesNotMatch(commandSkill, /\{\{args\}\}/);
+  assert.match(copiedSkill, /<plugin-root>/);
+  assert.match(agent, /Gemini 3\.5 Flash \(High\)/);
+  assert.match(agent, /Antigravity Plugin Root/);
+  assert.match(script, /'\.'/);
+  assert.match(server, /'\.'/);
+  assert.match(rules, /<plugin-root>/);
+  assert.match(notes, /mcp_config\.json/);
+  assert.doesNotMatch(`${mcpText}\n${script}\n${server}`, /\$\{extensionPath\}/);
 });
 
 test("Antigravity converter fails clearly when Python is unavailable", () => {

@@ -1185,6 +1185,7 @@ test("syncToOpenCode projects global Gemini MCPs to Antigravity mcp_config", () 
     },
   }));
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  const fakeSecretToken = "do-not-copy";
   fs.mkdirSync(extensionDir, { recursive: true });
   fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({
     name: "study-pack",
@@ -1194,6 +1195,7 @@ test("syncToOpenCode projects global Gemini MCPs to Antigravity mcp_config", () 
         args: ["${extensionPath}${/}src${/}mcp-server.js"],
         env: {
           STUDY_HOME: "${extensionPath}",
+          SECRET_TOKEN: fakeSecretToken,
         },
       },
     },
@@ -1227,8 +1229,13 @@ test("syncToOpenCode projects global Gemini MCPs to Antigravity mcp_config", () 
     command: "node",
     args: [path.join(extensionDir, "src", "mcp-server.js")],
     env: {
+      SECRET_TOKEN: "{env:SECRET_TOKEN}",
       STUDY_HOME: extensionDir,
     },
+  });
+  assert.equal(JSON.stringify(config).includes(fakeSecretToken), false);
+  assert.deepEqual(readMcpEnvValues({ homeDir }), {
+    SECRET_TOKEN: fakeSecretToken,
   });
   assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string }) =>
     file.path === ".gemini/antigravity/mcp_config.json#mcpServers/study-pack"
