@@ -19,15 +19,20 @@ function expectedGlobalExpandedInstruction(homeDir: string): string {
 
 function writeFakeOpenCode(binDir: string, output = "OpenCode debug info\nsuperpowers plugin loaded\n"): void {
   fs.mkdirSync(binDir, { recursive: true });
-  const command = path.join(binDir, "opencode");
-  fs.writeFileSync(command, `#!/usr/bin/env node
+  const runner = path.join(binDir, "opencode-runner.cjs");
+  fs.writeFileSync(runner, `#!/usr/bin/env node
 if (process.argv[2] === "debug" && process.argv[3] === "info") {
   process.stdout.write(${JSON.stringify(output)});
   process.exit(0);
 }
 process.exit(0);
 `, "utf8");
+  fs.chmodSync(runner, 0o755);
+
+  const command = path.join(binDir, "opencode");
+  fs.writeFileSync(command, `#!/usr/bin/env sh\nexec "${process.execPath}" "${runner}" "$@"\n`, "utf8");
   fs.chmodSync(command, 0o755);
+  fs.writeFileSync(path.join(binDir, "opencode.cmd"), `@echo off\r\n"${process.execPath}" "${runner}" %*\r\n`, "utf8");
 }
 
 test("syncToOpenCode writes bridge-native generated config without Rulesync", () => {

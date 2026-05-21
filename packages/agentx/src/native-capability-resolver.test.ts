@@ -17,6 +17,25 @@ function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-native-capability-"));
 }
 
+function writeFakeOpenCodeDebugInfo(binDir: string, marker: string): void {
+  fs.mkdirSync(binDir, { recursive: true });
+  if (process.platform === "win32") {
+    fs.writeFileSync(
+      path.join(binDir, "opencode.cmd"),
+      [
+        "@echo off",
+        `echo call>>"${marker}"`,
+        "echo superpowers honcho plugin loaded",
+        "",
+      ].join("\r\n"),
+      "utf8",
+    );
+    return;
+  }
+
+  fs.writeFileSync(path.join(binDir, "opencode"), `#!/usr/bin/env sh\necho call >> "${marker}"\necho "superpowers honcho plugin loaded"\n`, { mode: 0o755 });
+}
+
 test("native capability registry exposes known native and portable capabilities", () => {
   const superpowers = capabilityEntry("superpowers", "opencode");
   const honcho = capabilityEntry("honcho", "opencode");
@@ -212,8 +231,7 @@ test("createOpenCodeNativeSmoke reuses identical OpenCode debug probes", () => {
   const root = tempRoot();
   const binDir = path.join(root, "bin");
   const marker = path.join(root, "opencode-debug-calls.txt");
-  fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(path.join(binDir, "opencode"), `#!/usr/bin/env sh\necho call >> "${marker}"\necho "superpowers honcho plugin loaded"\n`, { mode: 0o755 });
+  writeFakeOpenCodeDebugInfo(binDir, marker);
 
   const env = { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` };
   const smoke = createOpenCodeNativeSmoke({ projectRoot: root, homeDir: root, env });

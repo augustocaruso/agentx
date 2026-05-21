@@ -10,6 +10,24 @@ function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-command-"));
 }
 
+function writeNpmPrefixShim(binDir: string, marker: string, prefixDir: string): void {
+  if (process.platform === "win32") {
+    fs.writeFileSync(
+      path.join(binDir, "npm.cmd"),
+      [
+        "@echo off",
+        `echo call>>"${marker}"`,
+        `echo ${prefixDir}`,
+        "",
+      ].join("\r\n"),
+      "utf8",
+    );
+    return;
+  }
+
+  fs.writeFileSync(path.join(binDir, "npm"), `#!/bin/sh\necho call >> "${marker}"\necho "${prefixDir}"\n`, { mode: 0o755 });
+}
+
 test("resolveCommand prefers Windows npm cmd shim for an extensionless command path", () => {
   const root = tempRoot();
   const shim = path.join(root, "opencode");
@@ -53,7 +71,7 @@ test("resolveCommand reuses npm global prefix lookup for the same environment", 
   const marker = path.join(root, "npm-prefix-calls.txt");
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(prefixDir, { recursive: true });
-  fs.writeFileSync(path.join(binDir, "npm"), `#!/bin/sh\necho call >> "${marker}"\necho "${prefixDir}"\n`, { mode: 0o755 });
+  writeNpmPrefixShim(binDir, marker, prefixDir);
 
   const env = { PATH: binDir };
 
