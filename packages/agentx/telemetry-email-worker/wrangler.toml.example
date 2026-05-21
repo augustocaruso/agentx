@@ -1,4 +1,4 @@
-name = "ogb-telemetry-email-worker"
+name = "agentx-telemetry-email-worker"
 main = "worker.js"
 compatibility_date = "2026-05-06"
 workers_dev = true
@@ -6,6 +6,7 @@ workers_dev = true
 [vars]
 DIGEST_WINDOW_MINUTES = "15"
 DIGEST_MAX_RECORDS = "100"
+TELEMETRY_LEGACY_SCHEMAS = "opencode-gemini-bridge.workflow-telemetry-envelope.v1"
 
 [triggers]
 crons = ["*/15 * * * *"]
@@ -18,7 +19,7 @@ id = "REPLACE_WITH_KV_NAMESPACE_ID"
 preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
 
 # Configure secrets manually:
-# wrangler secret put OGB_TELEMETRY_TOKEN
+# wrangler secret put AGENTX_TELEMETRY_TOKEN
 # wrangler secret put RESEND_API_KEY
 # wrangler secret put RESEND_FROM
 # wrangler secret put RESEND_TO

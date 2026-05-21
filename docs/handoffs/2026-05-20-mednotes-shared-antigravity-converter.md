@@ -9,13 +9,13 @@ Medical Notes Workbench already had a Python build script that converted Gemini 
 Use this Python module as the preferred source:
 
 ```text
-packages/ogb/scripts/gemini_antigravity_converter.py
+packages/agentx/scripts/gemini_antigravity_converter.py
 ```
 
 It exposes importable functions and a JSON CLI:
 
 ```bash
-python packages/ogb/scripts/gemini_antigravity_converter.py render-command-skill \
+python packages/agentx/scripts/gemini_antigravity_converter.py render-command-skill \
   --source-path <command-file> \
   --source-rel-path <path-inside-extension> \
   --extension-name <optional-extension-name> \
@@ -41,9 +41,9 @@ OGB's TypeScript wrapper now prefers the bundled Python converter when Python is
 Relevant files:
 
 ```text
-packages/ogb/src/antigravity-plugin-converter.ts
-packages/ogb/src/antigravity-plugin-converter.test.ts
-packages/ogb/scripts/gemini_antigravity_converter.py
+packages/agentx/src/antigravity-plugin-converter.ts
+packages/agentx/src/antigravity-plugin-converter.test.ts
+packages/agentx/scripts/gemini_antigravity_converter.py
 ```
 
 ## MedNotes Alignment

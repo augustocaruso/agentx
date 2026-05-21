@@ -86,24 +86,27 @@ test("linux POSIX installer persists env without macOS zsh config", () => {
   assert.match(text, /set -gx OPENCODE_ENABLE_EXA 1/);
   assert.match(text, /contains "\$PREFIX\/bin" \\\$PATH/);
   assert.match(text, /OPENCODE_ENABLE_EXA/);
-  assert.match(text, /repair_primary_shim/);
-  assert.match(text, /npm install did not complete/);
+  assert.match(text, /install_stable_cli/);
+  assert.match(text, /Installing \$BINARY_NAME into a stable local folder/);
   assert.match(text, /rm -f "\$PRIMARY_BIN"/);
   assert.match(text, /exec node/);
-  assert.match(text, /Installed \$BINARY_NAME verification returned no version output/);
+  assert.match(text, /Installed \$BINARY_NAME at \$PRIMARY_BIN, but it did not run/);
   const linuxTargets = text.match(/linux_profile_targets\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(linuxTargets, /\.config\/zsh/);
 });
 
-test("posix installer installs ogb from a packed tarball instead of linking a source directory", () => {
+test("posix installer installs agentx into a stable local folder instead of a global npm package", () => {
   assertScriptExists("install-posix.sh");
   const text = script("install-posix.sh");
 
-  assert.match(text, /install_cli_package/);
-  assert.match(text, /cd "\$CLI_DIR" && npm pack --pack-destination/);
-  assert.match(text, /package_tgz/);
-  assert.match(text, /\$PACKAGE_NAME-\*\.tgz/);
-  assert.match(text, /npm install --prefix "\$PREFIX" -g "\$package_tgz"/);
+  assert.match(text, /STABLE_CLI_DIR_NAME="\$\{AGENTX_STABLE_CLI_DIR:-\$PACKAGE_NAME-cli\}"/);
+  assert.match(text, /CLI_INSTALL_DIR="\$HOME\/\.ai\/opencode-pack\/\$STABLE_CLI_DIR_NAME"/);
+  assert.match(text, /install_stable_cli "\$CLI_DIR" "\$CLI_INSTALL_DIR"/);
+  assert.match(text, /npm --prefix "\$install_dir" install --omit=dev/);
+  assert.match(text, /write_primary_binary "\$PRIMARY_BIN" "\$CLI_TARGET"/);
+  assert.doesNotMatch(text, /npm pack --pack-destination/);
+  assert.doesNotMatch(text, /package_tgz/);
+  assert.doesNotMatch(text, /npm install --prefix "\$PREFIX" -g/);
   assert.doesNotMatch(text, /npm install --prefix "\$PREFIX" -g "\$CLI_DIR"/);
 });
 

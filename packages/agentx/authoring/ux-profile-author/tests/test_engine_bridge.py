@@ -19,7 +19,7 @@ def cell_text(value) -> str:
 
 
 def test_engine_command_uses_checkout_engine() -> None:
-    root = Path("/tmp/opencode-gemini-bridge/packages/ogb")
+    root = Path("/tmp/agentx/packages/agentx")
     with patch("ogb_ux_profile_author.engine.shutil.which", return_value="/usr/bin/node"):
         assert engine_command(["inventory"], root)[-2:] == [
             str(root / "authoring" / "ux-profile-engine.ts"),
@@ -108,7 +108,7 @@ def test_tui_confirmed_write_calls_engine(monkeypatch) -> None:
         calls.append(args)
         if args[:2] == ["inventory", "--json"]:
             return fake_inventory()
-        return {"status": "written", "outputRelPath": "packages/ogb/src/ux-profile.generated.ts", "artifactsRelPath": "artifacts/ux-profile-snapshot"}
+        return {"status": "written", "outputRelPath": "packages/agentx/src/ux-profile.generated.ts", "artifactsRelPath": "artifacts/ux-profile-snapshot"}
 
     async def drive_app() -> None:
         monkeypatch.setattr("ogb_ux_profile_author.app.run_engine_json", fake_engine)
@@ -161,7 +161,7 @@ def test_tui_can_exclude_unchanged_candidate_before_write(monkeypatch) -> None:
         calls.append(args)
         if args[:2] == ["inventory", "--json"]:
             return inventory
-        return {"status": "written", "outputRelPath": "packages/ogb/src/ux-profile.generated.ts", "artifactsRelPath": "artifacts/ux-profile-snapshot"}
+        return {"status": "written", "outputRelPath": "packages/agentx/src/ux-profile.generated.ts", "artifactsRelPath": "artifacts/ux-profile-snapshot"}
 
     async def drive_app() -> None:
         monkeypatch.setattr("ogb_ux_profile_author.app.run_engine_json", fake_engine)

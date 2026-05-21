@@ -39,11 +39,11 @@ global, nao como projeto. Ele nao cria `~/.opencode`, nao cria
 
 Nesse caso, o OpenCode usa o perfil global em `~/.config/opencode/`. Os
 relatorios do OGB que ainda fizerem sentido ficam em
-`~/.config/opencode-gemini-bridge/generated/`.
+`~/.config/agentx/generated/`.
 
 `ogb sync` no home sincroniza como global: `~/.gemini/GEMINI.md`, `GEMINI.md`
 das extensoes Gemini e imports viram
-`~/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md`, e esse conteúdo
+`~/.config/agentx/generated/GEMINI.expanded.md`, e esse conteúdo
 expandido entra no contexto via `instructions` em
 `~/.config/opencode/opencode.json`. O `setup-ux`/`reset` sobrescreve
 `~/.config/opencode/AGENTS.md` com o preset OGB; o `sync` nao usa esse arquivo
@@ -56,7 +56,7 @@ do OpenCode.
 
 Instalacoes novas rodam `ogb cleanup-home` antes de reaplicar o perfil global.
 Esse comando faz backup em
-`~/.config/opencode-gemini-bridge/backups/home-cleanup/` e remove apenas
+`~/.config/agentx/backups/home-cleanup/` e remove apenas
 artefatos OGB de projeto que ficaram na home por engano. A retencao central
 mantem ate 5 sessoes por operacao e exclui sessoes com mais de 30 dias.
 
@@ -181,10 +181,10 @@ precisa chamar `ogb check` manualmente depois.
 ## Antes de publicar ou entregar
 
 ```bash
-npm --prefix packages/ogb run typecheck
-npm --prefix packages/ogb test
-npm --prefix packages/ogb run build
-npm --prefix packages/ogb pack --dry-run
+npm --prefix packages/agentx run typecheck
+npm --prefix packages/agentx test
+npm --prefix packages/agentx run build
+npm --prefix packages/agentx pack --dry-run
 ogb validate
 ogb security-check
 ogb bridge

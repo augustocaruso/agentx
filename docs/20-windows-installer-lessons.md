@@ -8,12 +8,12 @@ deve ser lido antes de mexer em:
 
 - `scripts/bootstrap-windows.ps1`
 - `scripts/install-windows.ps1`
-- `packages/ogb/src/command-resolution.ts`
-- `packages/ogb/src/process.ts`
-- `packages/ogb/src/self-update.ts`
-- `packages/ogb/src/dashboard.ts`
-- `packages/ogb/src/setup-ux.ts`
-- `packages/ogb/src/setup-opencode.ts`
+- `packages/agentx/src/command-resolution.ts`
+- `packages/agentx/src/process.ts`
+- `packages/agentx/src/self-update.ts`
+- `packages/agentx/src/dashboard.ts`
+- `packages/agentx/src/setup-ux.ts`
+- `packages/agentx/src/setup-opencode.ts`
 
 O objetivo nao e explicar PowerShell do zero. O objetivo e impedir que a gente
 repita a mesma sequencia exaustiva de falso PASS, falso FAIL, shim quebrado,
@@ -152,7 +152,7 @@ e precisa ter teste de regressao.
 | Extensoes Gemini viram warnings permanentes | Extension map nao era gerado no modo global | Gerar `ogb-extension-map.json` global e tratar como inventario | Doctor global nao emite warning generico de extensao |
 | Skills contadas a mais | Gemini source e copia OpenCode eram somadas juntas | Inventario/doctor contam recursos OpenCode sem duplicar fonte Gemini | Home com skill fonte + copia nao soma duplicado |
 | `restart OpenCode` aparece para sempre apos PASS | Dashboard exigia tag alvo explicita e/ou timestamp posterior | Consumir restart quando reports atuais estao PASS; aceitar self-update `latest` sem `latestTag` | Status updated sem `latestTag` + reports 0.0.x PASS vira current |
-| `npm pack --dry-run` sem `dist` | Pack rodou em paralelo enquanto build limpava `dist` | Nunca rodar pack em paralelo com build/clean | Release check deve rodar build antes de pack, sequencialmente |
+| Zip de release sem `dist` | Empacotamento rodou antes do build terminar | Criar zip so depois de build/test, sequencialmente | Release check deve rodar build antes do zip |
 
 ## Padroes de PowerShell para manter
 
@@ -333,24 +333,23 @@ Nao consumir `restartRequired` se validation/security ainda estao `fail`.
 Rodar em ordem, sem paralelizar build com pack:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test
 npm run typecheck
 npm run build
 node dist/cli.js --project /path/to/repo pass --force --windows
-npm pack --dry-run
 ```
 
 ### Release
 
 Depois de tag/push:
 
-1. Esperar `Validate OpenCode Gemini Bridge` na tag.
-2. Esperar `Validate OpenCode Gemini Bridge` no main.
+1. Esperar `Validate agentX` na tag.
+2. Esperar `Validate agentX` no main.
 3. Esperar `Release Pack`.
 4. Baixar o zip/tgz publicados.
 5. Confirmar `package.json.version`.
-6. Confirmar que `packages/ogb/dist/*.js` existe no zip.
+6. Confirmar que `packages/agentx/dist/*.js` existe no zip.
 7. Grepar o fix esperado dentro do `dist`, nao so no `src`.
 
 ## Matriz Windows minima
@@ -393,12 +392,12 @@ Arquivos importantes no modo home/global:
 ```text
 %USERPROFILE%\.config\opencode\opencode.json
 %USERPROFILE%\.config\opencode\agents\YOLO.md
-%USERPROFILE%\.config\opencode-gemini-bridge\generated\GEMINI.expanded.md
-%USERPROFILE%\.config\opencode-gemini-bridge\generated\ogb-dashboard.json
-%USERPROFILE%\.config\opencode-gemini-bridge\generated\ogb-plugin-status.json
-%USERPROFILE%\.config\opencode-gemini-bridge\generated\ogb-update-status.json
-%USERPROFILE%\.config\opencode-gemini-bridge\generated\ogb-validation.json
-%USERPROFILE%\.config\opencode-gemini-bridge\generated\ogb-security.json
+%USERPROFILE%\.config\agentx\generated\GEMINI.expanded.md
+%USERPROFILE%\.config\agentx\generated\ogb-dashboard.json
+%USERPROFILE%\.config\agentx\generated\ogb-plugin-status.json
+%USERPROFILE%\.config\agentx\generated\ogb-update-status.json
+%USERPROFILE%\.config\agentx\generated\ogb-validation.json
+%USERPROFILE%\.config\agentx\generated\ogb-security.json
 ```
 
 Se algum arquivo novo aparece em `%USERPROFILE%\.opencode\generated` durante home

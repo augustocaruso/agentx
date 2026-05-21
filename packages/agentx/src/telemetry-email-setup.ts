@@ -8,7 +8,7 @@ import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { enableTelemetry, type TelemetryPayloadLevel } from "./telemetry.js";
 
-const DEFAULT_WORKER_NAME = "ogb-telemetry-email-worker";
+const DEFAULT_WORKER_NAME = "agentx-telemetry-email-worker";
 const DEFAULT_PAYLOAD_LEVEL: TelemetryPayloadLevel = "diagnostic_redacted";
 
 export interface TelemetryEmailSetupOptions {
@@ -96,7 +96,7 @@ function templateDir(): string {
   for (const candidate of candidates) {
     if (fs.existsSync(path.join(candidate, "worker.js")) && fs.existsSync(path.join(candidate, "wrangler.toml.example"))) return candidate;
   }
-  throw new TelemetrySetupError("telemetry email Worker template not found", "Check packages/ogb/telemetry-email-worker or reinstall the OGB package.");
+  throw new TelemetrySetupError("telemetry email Worker template not found", "Check packages/agentx/telemetry-email-worker or reinstall the OGB package.");
 }
 
 function stateRoot(homeDir = os.homedir()): string {
@@ -390,7 +390,7 @@ export async function setupTelemetryEmailReceiver(options: TelemetryEmailSetupOp
     endpointUrl = `https://${workerName}.<your-workers-subdomain>.workers.dev/v1/telemetry/workflow-runs`;
   } else {
     kvNamespace = configureDigestKv(workDir, runner);
-    putSecret(workDir, runner, "OGB_TELEMETRY_TOKEN", ingestToken);
+    putSecret(workDir, runner, "AGENTX_TELEMETRY_TOKEN", ingestToken);
     putSecret(workDir, runner, "RESEND_API_KEY", resendApiKey);
     putSecret(workDir, runner, "RESEND_TO", toEmail);
     putSecret(workDir, runner, "RESEND_FROM", fromEmail);

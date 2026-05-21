@@ -158,7 +158,6 @@ Ações sugeridas:
 - `npm run typecheck`.
 - `npm run build`.
 - `node --check dist/tui-sidebar.js`.
-- `npm pack --dry-run`.
 - Validar schemas.
 - Rodar fixture conversion.
 - Empacotar release zip.

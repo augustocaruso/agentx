@@ -20,7 +20,7 @@ $LegacyPackageName = if ($env:AGENTX_LEGACY_PACKAGE) { $env:AGENTX_LEGACY_PACKAG
 $StableCliDirName = if ($env:AGENTX_STABLE_CLI_DIR) { $env:AGENTX_STABLE_CLI_DIR } else { "$PackageName-cli" }
 $LegacyStableCliDirName = if ($env:AGENTX_LEGACY_STABLE_CLI_DIR) { $env:AGENTX_LEGACY_STABLE_CLI_DIR } else { "opencode-gemini-bridge-cli" }
 $StateDirName = if ($env:AGENTX_STATE_DIR) { $env:AGENTX_STATE_DIR } else { "agentx" }
-$SourcePackageDirName = if ($env:AGENTX_SOURCE_PACKAGE_DIR) { $env:AGENTX_SOURCE_PACKAGE_DIR } else { "ogb" }
+$SourcePackageDirName = if ($env:AGENTX_SOURCE_PACKAGE_DIR) { $env:AGENTX_SOURCE_PACKAGE_DIR } else { "agentx" }
 
 function Require-Command($Name) {
   $Command = Get-Command $Name -ErrorAction SilentlyContinue | Select-Object -First 1

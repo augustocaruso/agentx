@@ -1,4 +1,5 @@
-const OGB_ENVELOPE_SCHEMA = "opencode-gemini-bridge.workflow-telemetry-envelope.v1";
+const TELEMETRY_ENVELOPE_SCHEMA = "agentx.workflow-telemetry-envelope.v2";
+const DEFAULT_TELEMETRY_LEGACY_SCHEMAS = ["opencode-gemini-bridge.workflow-telemetry-envelope.v1"];
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
 const DEFAULT_MAX_EMAIL_JSON_CHARS = 180 * 1024;
@@ -24,7 +25,7 @@ function text(value, status = 200) {
 }
 
 function requireBearer(request, env) {
-  const expected = env.OGB_TELEMETRY_TOKEN || env.INGEST_TOKEN || env.TELEMETRY_TOKEN || "";
+  const expected = env.AGENTX_TELEMETRY_TOKEN || env.OGB_TELEMETRY_TOKEN || env.INGEST_TOKEN || env.TELEMETRY_TOKEN || "";
   const header = request.headers.get("authorization") || "";
   if (!expected) return { ok: false, response: json({ error: "worker_token_not_configured" }, 500) };
   if (header !== `Bearer ${expected}`) return { ok: false, response: json({ error: "unauthorized" }, 401) };
@@ -44,9 +45,20 @@ async function readJsonBody(request, env) {
   }
 }
 
-function validateEnvelope(body) {
+function telemetryLegacySchemas(env) {
+  const raw = typeof env.TELEMETRY_LEGACY_SCHEMAS === "string" ? env.TELEMETRY_LEGACY_SCHEMAS : "";
+  if (!raw.trim()) return DEFAULT_TELEMETRY_LEGACY_SCHEMAS;
+  return raw.split(/[,\s]+/).map((schema) => schema.trim()).filter(Boolean);
+}
+
+function supportsEnvelopeSchema(schema, env) {
+  if (schema === TELEMETRY_ENVELOPE_SCHEMA) return true;
+  return telemetryLegacySchemas(env).includes(schema);
+}
+
+function validateEnvelope(body, env) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return "body_must_be_object";
-  if (body.schema !== OGB_ENVELOPE_SCHEMA) return "unsupported_schema";
+  if (!supportsEnvelopeSchema(body.schema, env)) return "unsupported_schema";
   if (!Array.isArray(body.records)) return "records_must_be_array";
   if (typeof body.installId !== "string" || !body.installId) return "install_id_required";
   if (typeof body.generatedAt !== "string") return "generated_at_required";
@@ -419,7 +431,7 @@ function buildDigestEnvelope(entries, env, reason) {
   }
   const first = envelopes[0] || {};
   return {
-    schema: first.schema || OGB_ENVELOPE_SCHEMA,
+    schema: TELEMETRY_ENVELOPE_SCHEMA,
     envelopeId: `digest-${cryptoRandomId()}`,
     generatedAt: new Date().toISOString(),
     digest: true,
@@ -432,7 +444,7 @@ function buildDigestEnvelope(entries, env, reason) {
     payloadLevel: payloadLevel(first),
     client: {
       ...(first.client || {}),
-      app: first.client?.app || "opencode-gemini-bridge",
+      app: first.client?.app || "agentx",
     },
     records,
     actionableRecordCount: records.filter(isActionableRecord).length,
@@ -766,7 +778,7 @@ async function acceptWorkflowRuns(request, env) {
   if (!auth.ok) return auth.response;
   const parsed = await readJsonBody(request, env);
   if (!parsed.ok) return parsed.response;
-  const error = validateEnvelope(parsed.body);
+  const error = validateEnvelope(parsed.body, env);
   if (error) return json({ error }, 400);
 
   const actionable = actionableEnvelope(parsed.body);
@@ -777,7 +789,7 @@ async function acceptWorkflowRuns(request, env) {
       accepted: parsed.body.records.length,
       actionable: 0,
       reason: "no_actionable_records",
-      schema: OGB_ENVELOPE_SCHEMA,
+      schema: TELEMETRY_ENVELOPE_SCHEMA,
     });
   }
 
@@ -791,7 +803,7 @@ async function acceptWorkflowRuns(request, env) {
       records: actionable.records.length,
       bufferKey: key,
       digestWindowMinutes: digestWindowMinutes(env),
-      schema: OGB_ENVELOPE_SCHEMA,
+      schema: TELEMETRY_ENVELOPE_SCHEMA,
     });
   }
 
@@ -804,7 +816,7 @@ async function acceptWorkflowRuns(request, env) {
     actionable: email.actionableCount,
     records: email.recordCount,
     subject: email.subject,
-    schema: OGB_ENVELOPE_SCHEMA,
+    schema: TELEMETRY_ENVELOPE_SCHEMA,
   });
 }
 
@@ -921,8 +933,8 @@ export default {
     if (request.method === "GET" && url.pathname === "/health") {
       return json({
         ok: true,
-        service: "ogb-telemetry-email-worker",
-        schema: OGB_ENVELOPE_SCHEMA,
+        service: "agentx-telemetry-email-worker",
+        schema: TELEMETRY_ENVELOPE_SCHEMA,
         digestWindowMinutes: digestWindowMinutes(env),
         resendConfigured: Boolean(env.RESEND_API_KEY && (env.RESEND_FROM || env.FROM_EMAIL) && (env.RESEND_TO || env.TO_EMAIL)),
         kvConfigured: hasTelemetryBuffer(env),

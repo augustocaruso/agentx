@@ -470,7 +470,7 @@ async function fetchLatestRelease(options: UpdateCheckOptions, repo: string): Pr
   const response = await fetcher(`https://api.github.com/repos/${repo}/releases/latest`, {
     headers: {
       "Accept": "application/vnd.github+json",
-      "User-Agent": "opencode-gemini-bridge",
+      "User-Agent": BINARY,
     },
   });
   if (!response.ok) throw new Error(`GitHub releases API returned HTTP ${response.status}.`);

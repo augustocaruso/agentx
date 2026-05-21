@@ -213,9 +213,9 @@ O fluxo normal deve continuar "just works":
 Adicionar um módulo novo, por exemplo:
 
 ```text
-packages/ogb/src/native-capability-resolver.ts
-packages/ogb/src/native-capability-registry.ts
-packages/ogb/src/native-capability-resolver.test.ts
+packages/agentx/src/native-capability-resolver.ts
+packages/agentx/src/native-capability-registry.ts
+packages/agentx/src/native-capability-resolver.test.ts
 ```
 
 O `sync` e o `setup-ux` devem consultar o resolver antes de projetar uma entidade que tenha entrada no registry.

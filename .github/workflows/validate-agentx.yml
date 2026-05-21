@@ -1,4 +1,4 @@
-name: Validate OpenCode Gemini Bridge
+name: Validate agentX
 
 on:
   push:
@@ -20,21 +20,21 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: packages/ogb/package-lock.json
+          cache-dependency-path: packages/agentx/package-lock.json
       - name: Install
-        working-directory: packages/ogb
+        working-directory: packages/agentx
         run: npm ci
       - name: Typecheck
-        working-directory: packages/ogb
+        working-directory: packages/agentx
         run: npm run typecheck
       - name: Test
-        working-directory: packages/ogb
+        working-directory: packages/agentx
         run: npm test
       - name: Build
-        working-directory: packages/ogb
+        working-directory: packages/agentx
         run: npm run build
       - name: Syntax check TUI plugin
-        working-directory: packages/ogb
+        working-directory: packages/agentx
         run: node --check dist/tui-sidebar.js
       - name: Syntax check shell installers
         if: runner.os != 'Windows'
@@ -68,45 +68,42 @@ jobs:
       - name: CLI smoke test (POSIX)
         if: runner.os != 'Windows'
         run: |
-          mkdir -p "$RUNNER_TEMP/ogb-smoke"
-          printf 'Smoke rules\n' > "$RUNNER_TEMP/ogb-smoke/GEMINI.md"
-          node packages/ogb/dist/cli.js --project "$RUNNER_TEMP/ogb-smoke" init
-          node packages/ogb/dist/cli.js --project "$RUNNER_TEMP/ogb-smoke" setup-ux --dry-run --no-install-opencode --no-plugins
-          node packages/ogb/dist/cli.js --project "$RUNNER_TEMP/ogb-smoke" self-update --dry-run --no-setup --no-ux --no-install-opencode
-          node packages/ogb/dist/cli.js --project "$RUNNER_TEMP/ogb-smoke" sync --rulesync off
-          node packages/ogb/dist/cli.js --project "$RUNNER_TEMP/ogb-smoke" validate
-          node packages/ogb/dist/cli.js --project "$RUNNER_TEMP/ogb-smoke" security-check
-          node packages/ogb/dist/cli.js --project "$RUNNER_TEMP/ogb-smoke" bridge --no-refresh
+          mkdir -p "$RUNNER_TEMP/agentx-smoke"
+          printf 'Smoke rules\n' > "$RUNNER_TEMP/agentx-smoke/GEMINI.md"
+          node packages/agentx/dist/cli.js --project "$RUNNER_TEMP/agentx-smoke" init
+          node packages/agentx/dist/cli.js --project "$RUNNER_TEMP/agentx-smoke" setup-ux --dry-run --no-install-opencode --no-plugins
+          node packages/agentx/dist/cli.js --project "$RUNNER_TEMP/agentx-smoke" self-update --dry-run --no-setup --no-ux --no-install-opencode
+          node packages/agentx/dist/cli.js --project "$RUNNER_TEMP/agentx-smoke" sync --rulesync off
+          node packages/agentx/dist/cli.js --project "$RUNNER_TEMP/agentx-smoke" validate
+          node packages/agentx/dist/cli.js --project "$RUNNER_TEMP/agentx-smoke" security-check
+          node packages/agentx/dist/cli.js --project "$RUNNER_TEMP/agentx-smoke" bridge --no-refresh
       - name: CLI smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $project = Join-Path $env:RUNNER_TEMP "ogb-smoke"
+          $project = Join-Path $env:RUNNER_TEMP "agentx-smoke"
           New-Item -ItemType Directory -Force -Path $project | Out-Null
           Set-Content -Path (Join-Path $project "GEMINI.md") -Value "Smoke rules"
-          node packages/ogb/dist/cli.js --project $project init
-          node packages/ogb/dist/cli.js --project $project setup-ux --dry-run --no-install-opencode --no-plugins
-          node packages/ogb/dist/cli.js --project $project self-update --dry-run --no-setup --no-ux --no-install-opencode
-          node packages/ogb/dist/cli.js --project $project sync --rulesync off
-          node packages/ogb/dist/cli.js --project $project validate --windows
-          node packages/ogb/dist/cli.js --project $project security-check
-          node packages/ogb/dist/cli.js --project $project bridge --no-refresh
+          node packages/agentx/dist/cli.js --project $project init
+          node packages/agentx/dist/cli.js --project $project setup-ux --dry-run --no-install-opencode --no-plugins
+          node packages/agentx/dist/cli.js --project $project self-update --dry-run --no-setup --no-ux --no-install-opencode
+          node packages/agentx/dist/cli.js --project $project sync --rulesync off
+          node packages/agentx/dist/cli.js --project $project validate --windows
+          node packages/agentx/dist/cli.js --project $project security-check
+          node packages/agentx/dist/cli.js --project $project bridge --no-refresh
       - name: Home-mode check smoke (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $bin = Join-Path $env:RUNNER_TEMP "ogb-home-bin"
+          $bin = Join-Path $env:RUNNER_TEMP "agentx-home-bin"
           New-Item -ItemType Directory -Force -Path $bin | Out-Null
           $repo = $PWD.Path
           Set-Content -Path (Join-Path $bin "gemini.cmd") -Value "@echo off`r`necho gemini-smoke`r`n"
           Set-Content -Path (Join-Path $bin "opencode.cmd") -Value "@echo off`r`nif ""%1""==""--version"" (`r`n  echo opencode-smoke`r`n  exit /b 0`r`n)`r`nif ""%1""==""debug"" (`r`n  echo {""agent"":{},""command"":{}}`r`n  exit /b 0`r`n)`r`necho opencode-smoke`r`n"
-          Set-Content -Path (Join-Path $bin "ogb.cmd") -Value "@echo off`r`nnode ""$repo\packages\ogb\dist\cli.js"" %*`r`n"
+          Set-Content -Path (Join-Path $bin "ogb.cmd") -Value "@echo off`r`nnode ""$repo\packages\agentx\dist\cli.js"" %*`r`n"
           $env:Path = "$bin;$env:Path"
           New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE ".gemini") | Out-Null
           Set-Content -Path (Join-Path $env:USERPROFILE ".gemini/GEMINI.md") -Value "Global smoke rules"
-          node packages/ogb/dist/cli.js --project $env:USERPROFILE check --force --rulesync off --windows --plain
-      - name: Pack dry run
-        working-directory: packages/ogb
-        run: npm pack --dry-run
+          node packages/agentx/dist/cli.js --project $env:USERPROFILE check --force --rulesync off --windows --plain
       - name: Validate schemas exist
-        run: node -e "const fs=require('node:fs'); for (const p of ['packages/ogb/schemas/inventory.schema.json','packages/ogb/schemas/gemini-extension-compat.schema.json']) if (!fs.existsSync(p)) throw new Error(p + ' missing')"
+        run: node -e "const fs=require('node:fs'); for (const p of ['packages/agentx/schemas/inventory.schema.json','packages/agentx/schemas/gemini-extension-compat.schema.json']) if (!fs.existsSync(p)) throw new Error(p + ' missing')"

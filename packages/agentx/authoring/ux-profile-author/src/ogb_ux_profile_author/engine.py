@@ -14,7 +14,7 @@ def package_root(start: Optional[Path] = None) -> Path:
         package_json = parent / "package.json"
         if package_json.exists():
             try:
-                if json.loads(package_json.read_text(encoding="utf-8")).get("name") == "opencode-gemini-bridge":
+                if json.loads(package_json.read_text(encoding="utf-8")).get("name") == "agentx":
                     return parent
             except Exception:
                 pass
@@ -43,7 +43,7 @@ def tsx_command(root: Optional[Path] = None) -> list[str]:
     if tsx_path:
         return [tsx_path]
 
-    raise RuntimeError("tsx was not found. Run npm install in packages/ogb first.")
+    raise RuntimeError("tsx was not found. Run npm install in packages/agentx first.")
 
 
 def engine_command(args: Iterable[str], root: Optional[Path] = None) -> list[str]:

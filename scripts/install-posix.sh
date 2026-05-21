@@ -7,9 +7,10 @@ BINARY_NAME="${AGENTX_BINARY:-agentx}"
 LEGACY_BINARY_NAME="${AGENTX_LEGACY_BINARY:-ogb}"
 PACKAGE_NAME="${AGENTX_PACKAGE:-agentx}"
 LEGACY_PACKAGE_NAME="${AGENTX_LEGACY_PACKAGE:-opencode-gemini-bridge}"
+STABLE_CLI_DIR_NAME="${AGENTX_STABLE_CLI_DIR:-$PACKAGE_NAME-cli}"
+LEGACY_STABLE_CLI_DIR_NAME="${AGENTX_LEGACY_STABLE_CLI_DIR:-opencode-gemini-bridge-cli}"
 STATE_DIR_NAME="${AGENTX_STATE_DIR:-agentx}"
-SOURCE_PACKAGE_DIR="${AGENTX_SOURCE_PACKAGE_DIR:-ogb}"
-PACK_TEMP_PREFIX="${AGENTX_PACK_TEMP_PREFIX:-agentx-npm-pack}"
+SOURCE_PACKAGE_DIR="${AGENTX_SOURCE_PACKAGE_DIR:-agentx}"
 
 usage() {
   cat <<EOF
@@ -20,8 +21,8 @@ $BINARY_NAME install
 
 Defaults:
   --project  current working directory
-  --prefix   \$OGB_PREFIX, else the npm global prefix when writable and on PATH,
-             else \$HOME/.local
+  --prefix   \$AGENTX_PREFIX, else \$OGB_PREFIX, else a writable command prefix
+             already on PATH, else \$HOME/.local
 
 Examples:
   scripts/install-mac.sh --project "\$PWD"
@@ -38,6 +39,11 @@ path_contains() {
 }
 
 default_prefix() {
+  if [[ -n "${AGENTX_PREFIX:-}" ]]; then
+    printf '%s\n' "$AGENTX_PREFIX"
+    return
+  fi
+
   if [[ -n "${OGB_PREFIX:-}" ]]; then
     printf '%s\n' "$OGB_PREFIX"
     return
@@ -214,62 +220,62 @@ ensure_opencode_exa_env() {
   export OPENCODE_ENABLE_EXA=1
 }
 
-repair_primary_shim() {
-  local global_root
-  local cli_target
-  local version_output
+write_primary_binary() {
+  local shim_path="$1"
+  local cli_target="$2"
 
-  global_root="$(npm --prefix "$PREFIX" root -g 2>/dev/null || true)"
-  cli_target="$global_root/$PACKAGE_NAME/dist/cli.js"
-  if [[ ! -f "$cli_target" ]]; then
-    echo "Installed $PRODUCT_NAME CLI target was not found at $cli_target." >&2
-    return 1
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'exec node %s "$@"\n' "$(bash_quote "$cli_target")"
+  } > "$shim_path"
+  chmod +x "$shim_path"
+}
+
+repair_broken_command_shim() {
+  local shim_path="$1"
+  if [[ ! -f "$shim_path" ]]; then
+    return
   fi
 
-  chmod +x "$cli_target" 2>/dev/null || true
-  version_output="$("$PRIMARY_BIN" --version 2>/dev/null || true)"
-  if [[ -z "$version_output" ]]; then
-    rm -f "$PRIMARY_BIN"
-    {
-      printf '#!/usr/bin/env bash\n'
-      printf 'exec node %s "$@"\n' "$(bash_quote "$cli_target")"
-    } > "$PRIMARY_BIN"
-    chmod +x "$PRIMARY_BIN"
-  fi
-
-  version_output="$("$PRIMARY_BIN" --version 2>/dev/null || true)"
-  if [[ -z "$version_output" ]]; then
-    echo "Installed $BINARY_NAME verification returned no version output." >&2
-    return 1
+  local content
+  content="$(cat "$shim_path" 2>/dev/null || true)"
+  if [[ "$content" == *"$LEGACY_STABLE_CLI_DIR_NAME"* || "$content" == *".ai/opencode-pack"* || "$content" =~ added[[:space:]][0-9]+[[:space:]]packages ]]; then
+    rm -f "$shim_path"
+    echo "Removed old $PRODUCT_NAME command shim: $shim_path"
   fi
 }
 
-install_cli_package() {
-  local force_flag="${1:-0}"
-  local pack_dir
-  local package_tgz
-  local install_status=0
+install_stable_cli() {
+  local source_dir="$1"
+  local install_dir="$2"
+  local cli_target
 
-  pack_dir="$(mktemp -d "${TMPDIR:-/tmp}/$PACK_TEMP_PREFIX.XXXXXX")"
-  if ! (cd "$CLI_DIR" && npm pack --pack-destination "$pack_dir"); then
-    rm -rf "$pack_dir"
+  rm -rf "$install_dir"
+  mkdir -p "$install_dir"
+
+  cp "$source_dir/package.json" "$install_dir/package.json"
+  cp "$source_dir/package-lock.json" "$install_dir/package-lock.json"
+  if [[ -f "$source_dir/LICENSE" ]]; then
+    cp "$source_dir/LICENSE" "$install_dir/LICENSE"
+  fi
+  local telemetry_defaults
+  for telemetry_defaults in telemetry.defaults.json telemetry.defaults.example.json; do
+    if [[ -f "$source_dir/$telemetry_defaults" ]]; then
+      cp "$source_dir/$telemetry_defaults" "$install_dir/$telemetry_defaults"
+    fi
+  done
+  if [[ -d "$source_dir/telemetry-email-worker" ]]; then
+    cp -R "$source_dir/telemetry-email-worker" "$install_dir/telemetry-email-worker"
+  fi
+  cp -R "$source_dir/dist" "$install_dir/dist"
+
+  npm --prefix "$install_dir" install --omit=dev
+  cli_target="$install_dir/dist/cli.js"
+  if [[ ! -f "$cli_target" ]]; then
+    echo "Expected built CLI at $cli_target, but it was not found." >&2
     return 1
   fi
-
-  package_tgz="$(find "$pack_dir" -maxdepth 1 -type f -name "$PACKAGE_NAME-*.tgz" -print -quit)"
-  if [[ -z "$package_tgz" || ! -f "$package_tgz" ]]; then
-    echo "npm pack did not produce a $PACKAGE_NAME tarball." >&2
-    rm -rf "$pack_dir"
-    return 1
-  fi
-
-  if [[ "$force_flag" -eq 1 ]]; then
-    npm install --prefix "$PREFIX" -g "$package_tgz" --force || install_status=$?
-  else
-    npm install --prefix "$PREFIX" -g "$package_tgz" || install_status=$?
-  fi
-  rm -rf "$pack_dir"
-  return "$install_status"
+  chmod +x "$cli_target" 2>/dev/null || true
 }
 
 write_legacy_binary_alias() {
@@ -383,19 +389,16 @@ npm --prefix "$CLI_DIR" run build
 
 PRIMARY_BIN="$PREFIX/bin/$BINARY_NAME"
 LEGACY_BIN="$PREFIX/bin/$LEGACY_BINARY_NAME"
-echo "Installing $BINARY_NAME into $PREFIX..."
-if ! install_cli_package 0; then
-  echo "npm install did not complete; removing stale $BINARY_NAME shim and retrying with --force..."
-  rm -f "$PRIMARY_BIN"
-  install_cli_package 1
-fi
+CLI_INSTALL_DIR="$HOME/.ai/opencode-pack/$STABLE_CLI_DIR_NAME"
+CLI_TARGET="$CLI_INSTALL_DIR/dist/cli.js"
+echo "Installing $BINARY_NAME into a stable local folder..."
+install_stable_cli "$CLI_DIR" "$CLI_INSTALL_DIR"
 
-if ! repair_primary_shim; then
-  echo "$BINARY_NAME command shim was not created or did not run; retrying npm install with --force..."
-  rm -f "$PRIMARY_BIN"
-  install_cli_package 1
-  repair_primary_shim
-fi
+echo "Registering $BINARY_NAME command in $PREFIX..."
+repair_broken_command_shim "$PRIMARY_BIN"
+repair_broken_command_shim "$LEGACY_BIN"
+rm -f "$PRIMARY_BIN"
+write_primary_binary "$PRIMARY_BIN" "$CLI_TARGET"
 
 write_legacy_binary_alias
 

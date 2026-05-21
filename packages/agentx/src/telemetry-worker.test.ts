@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 const workerUrl = pathToFileURL(path.resolve(process.cwd(), "telemetry-email-worker", "worker.js")).href;
+const CURRENT_ENVELOPE_SCHEMA = "agentx.workflow-telemetry-envelope.v2";
+const LEGACY_ENVELOPE_SCHEMA = "opencode-gemini-bridge.workflow-telemetry-envelope.v1";
 
 class MemoryKv {
   private store = new Map<string, string>();
@@ -40,9 +42,9 @@ async function loadWorker(): Promise<any> {
   return mod.default;
 }
 
-function envelope(records: Array<Record<string, unknown>> = [actionableRecord()]) {
+function envelope(records: Array<Record<string, unknown>> = [actionableRecord()], schema = CURRENT_ENVELOPE_SCHEMA) {
   return {
-    schema: "opencode-gemini-bridge.workflow-telemetry-envelope.v1",
+    schema,
     envelopeId: "env-1",
     generatedAt: "2026-05-06T12:00:00.000Z",
     installId: "install-1",
@@ -121,7 +123,8 @@ test("telemetry email worker health check", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(body.ok, true);
-  assert.equal(body.schema, "opencode-gemini-bridge.workflow-telemetry-envelope.v1");
+  assert.equal(body.service, "agentx-telemetry-email-worker");
+  assert.equal(body.schema, CURRENT_ENVELOPE_SCHEMA);
 });
 
 test("telemetry email worker rejects missing bearer token", async () => {
@@ -147,7 +150,7 @@ test("telemetry email worker rejects invalid schema", async () => {
   assert.equal(body.error, "unsupported_schema");
 });
 
-test("telemetry email worker accepts an OGB envelope", async () => {
+test("telemetry email worker accepts a current agentX envelope", async () => {
   const worker = await loadWorker();
   const kv = new MemoryKv();
   const response = await worker.fetch(request("/v1/telemetry/workflow-runs", {
@@ -162,6 +165,28 @@ test("telemetry email worker accepts an OGB envelope", async () => {
   assert.equal(body.actionable, 1);
   assert.equal(body.queued, true);
   assert.match(body.bufferKey, /^pending:/);
+  assert.equal(kv.size, 1);
+});
+
+test("telemetry email worker accepts a legacy OGB envelope from configured legacy schemas", async () => {
+  const worker = await loadWorker();
+  const kv = new MemoryKv();
+  const response = await worker.fetch(request("/v1/telemetry/workflow-runs", {
+    method: "POST",
+    headers: { authorization: "Bearer secret" },
+    body: JSON.stringify(envelope(undefined, LEGACY_ENVELOPE_SCHEMA)),
+  }), {
+    OGB_TELEMETRY_TOKEN: "secret",
+    TELEMETRY_LEGACY_SCHEMAS: LEGACY_ENVELOPE_SCHEMA,
+    TELEMETRY_BUFFER: kv,
+  });
+  const body = await response.json() as any;
+
+  assert.equal(response.status, 200);
+  assert.equal(body.accepted, 1);
+  assert.equal(body.actionable, 1);
+  assert.equal(body.queued, true);
+  assert.equal(body.schema, CURRENT_ENVELOPE_SCHEMA);
   assert.equal(kv.size, 1);
 });
 

@@ -30,7 +30,7 @@ test("setupTelemetryEmailReceiver configures Worker, receipt, defaults and local
       return { status: 0, stdout: "", stderr: "" };
     }
     if (joined.includes("wrangler deploy")) {
-      return { status: 0, stdout: "Published ogb\nhttps://ogb-telemetry-email-worker.example.workers.dev\n", stderr: "" };
+      return { status: 0, stdout: "Published agentx\nhttps://agentx-telemetry-email-worker.example.workers.dev\n", stderr: "" };
     }
     return { status: 0, stdout: "", stderr: "" };
   };
@@ -50,9 +50,9 @@ test("setupTelemetryEmailReceiver configures Worker, receipt, defaults and local
   });
 
   assert.equal(result.ok, true);
-  assert.equal(result.endpointUrl, "https://ogb-telemetry-email-worker.example.workers.dev/v1/telemetry/workflow-runs");
+  assert.equal(result.endpointUrl, "https://agentx-telemetry-email-worker.example.workers.dev/v1/telemetry/workflow-runs");
   assert.equal(result.kvNamespace?.id, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-  assert.equal(secrets.OGB_TELEMETRY_TOKEN, "ingest-secret");
+  assert.equal(secrets.AGENTX_TELEMETRY_TOKEN, "ingest-secret");
   assert.equal(secrets.RESEND_API_KEY, "resend-secret");
   assert.equal(fs.existsSync(path.join(result.workerDir, "worker.js")), true);
   assert.equal(fs.existsSync(path.join(result.workerDir, "wrangler.toml")), true);
@@ -86,7 +86,7 @@ test("setupTelemetryEmailReceiver reuses an existing digest KV namespace", async
     }
     if (joined.includes("secret put")) return { status: 0, stdout: "", stderr: "" };
     if (joined.includes("wrangler deploy")) {
-      return { status: 0, stdout: "Uploaded ogb\nhttps://ogb-telemetry-email-worker.example.workers.dev\n", stderr: "" };
+      return { status: 0, stdout: "Uploaded agentx\nhttps://agentx-telemetry-email-worker.example.workers.dev\n", stderr: "" };
     }
     return { status: 0, stdout: "", stderr: "" };
   };
@@ -127,7 +127,7 @@ test("CLI telemetry setup-email dry-run prepares local worker without printing s
   });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /ogb-telemetry-email-worker/);
+  assert.match(result.stdout, /agentx-telemetry-email-worker/);
   assert.doesNotMatch(result.stdout, /resend-secret|ingest-secret/);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "telemetry-email-worker", "worker.js")), true);
 });

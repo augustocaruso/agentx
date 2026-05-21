@@ -9,4 +9,4 @@ while [[ -L "$source_path" ]]; do
 done
 
 repo_root="$(cd -P "$(dirname "$source_path")" >/dev/null 2>&1 && pwd)"
-exec uv run --project "$repo_root/packages/ogb/authoring/ux-profile-author" ogb-ux-profile-author "$@"
+exec uv run --project "$repo_root/packages/agentx/authoring/ux-profile-author" ogb-ux-profile-author "$@"

@@ -6,7 +6,7 @@ import test from "node:test";
 import { BINARY, BOOTSTRAP_TEMP_PREFIX, DISPLAY, GITHUB_REPO, LEGACY_BINARY, PACKAGE, RELEASE_ASSET } from "./brand.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const packageRoot = path.join(repoRoot, "packages", "ogb");
+const packageRoot = path.join(repoRoot, "packages", "agentx");
 
 function readRepoFile(...parts: string[]): string {
   return fs.readFileSync(path.join(repoRoot, ...parts), "utf8");
@@ -38,14 +38,15 @@ test("release workflow centralizes branded artifact names", () => {
   const workflow = readRepoFile(".github", "workflows", "release-pack.yml");
 
   assert.match(workflow, new RegExp(`PACKAGE_NAME:\\s+${PACKAGE}`));
-  assert.match(workflow, /PACKAGE_DIR:\s+packages\/ogb/);
+  assert.match(workflow, /PACKAGE_DIR:\s+packages\/agentx/);
   assert.match(workflow, new RegExp(`RELEASE_ASSET:\\s+${RELEASE_ASSET}`));
   assert.match(workflow, /zip -r "\$RELEASE_ASSET"/);
   assert.match(workflow, /name: \$\{\{ env\.PACKAGE_NAME \}\}-pack/);
-  assert.match(workflow, /path:\s*\|\s*\n\s*\$\{\{ env\.RELEASE_ASSET \}\}/);
-  assert.match(workflow, /\$\{\{ env\.PACKAGE_DIR \}\}\/\$\{\{ env\.PACKAGE_NAME \}\}-\*\.tgz/);
+  assert.match(workflow, /path:\s*\$\{\{ env\.RELEASE_ASSET \}\}/);
   assert.doesNotMatch(workflow, /opencode-gemini-bridge-pack\.zip/);
   assert.doesNotMatch(workflow, /opencode-gemini-bridge-\*\.tgz/);
+  assert.doesNotMatch(workflow, /npm pack/);
+  assert.doesNotMatch(workflow, /\.tgz/);
 });
 
 test("public bootstrap scripts keep repo and release asset names centralized", () => {
@@ -92,7 +93,7 @@ const guardedBrandFiles = [
 const allowedBrandLiteralReferences: Record<string, RegExp[]> = {
   ".github/workflows/release-pack.yml": [
     /^\s*PACKAGE_NAME: agentx\s*$/,
-    /^\s*PACKAGE_DIR: packages\/ogb\s*$/,
+    /^\s*PACKAGE_DIR: packages\/agentx\s*$/,
     /^\s*RELEASE_ASSET: agentx-pack\.zip\s*$/,
     /^\s*TELEMETRY_DEFAULTS_SCHEMA: agentx\.telemetry-defaults\.v2\s*$/,
     /OGB_TELEMETRY_DEFAULTS_JSON/,
@@ -135,9 +136,11 @@ const allowedBrandLiteralReferences: Record<string, RegExp[]> = {
     /^LEGACY_BINARY_NAME="\$\{AGENTX_LEGACY_BINARY:-ogb\}"$/,
     /^PACKAGE_NAME="\$\{AGENTX_PACKAGE:-agentx\}"$/,
     /^LEGACY_PACKAGE_NAME="\$\{AGENTX_LEGACY_PACKAGE:-opencode-gemini-bridge\}"$/,
+    /^STABLE_CLI_DIR_NAME="\$\{AGENTX_STABLE_CLI_DIR:-\$PACKAGE_NAME-cli\}"$/,
+    /^LEGACY_STABLE_CLI_DIR_NAME="\$\{AGENTX_LEGACY_STABLE_CLI_DIR:-opencode-gemini-bridge-cli\}"$/,
     /^STATE_DIR_NAME="\$\{AGENTX_STATE_DIR:-agentx\}"$/,
-    /^SOURCE_PACKAGE_DIR="\$\{AGENTX_SOURCE_PACKAGE_DIR:-ogb\}"$/,
-    /^PACK_TEMP_PREFIX="\$\{AGENTX_PACK_TEMP_PREFIX:-agentx-npm-pack\}"$/,
+    /^SOURCE_PACKAGE_DIR="\$\{AGENTX_SOURCE_PACKAGE_DIR:-agentx\}"$/,
+    /\bAGENTX_PREFIX\b/,
     /\bOGB_PREFIX\b/,
   ],
   "scripts/install-windows.ps1": [
@@ -149,7 +152,7 @@ const allowedBrandLiteralReferences: Record<string, RegExp[]> = {
     /^\$StableCliDirName = if \(\$env:AGENTX_STABLE_CLI_DIR\) \{ \$env:AGENTX_STABLE_CLI_DIR \} else \{ "\$PackageName-cli" \}$/,
     /^\$LegacyStableCliDirName = if \(\$env:AGENTX_LEGACY_STABLE_CLI_DIR\) \{ \$env:AGENTX_LEGACY_STABLE_CLI_DIR \} else \{ "opencode-gemini-bridge-cli" \}$/,
     /^\$StateDirName = if \(\$env:AGENTX_STATE_DIR\) \{ \$env:AGENTX_STATE_DIR \} else \{ "agentx" \}$/,
-    /^\$SourcePackageDirName = if \(\$env:AGENTX_SOURCE_PACKAGE_DIR\) \{ \$env:AGENTX_SOURCE_PACKAGE_DIR \} else \{ "ogb" \}$/,
+    /^\$SourcePackageDirName = if \(\$env:AGENTX_SOURCE_PACKAGE_DIR\) \{ \$env:AGENTX_SOURCE_PACKAGE_DIR \} else \{ "agentx" \}$/,
   ],
 };
 
@@ -171,7 +174,7 @@ test("release/install surfaces keep raw brand literals only in reference declara
 });
 
 test("validation release/install summaries interpolate brand constants", () => {
-  const validation = readRepoFile("packages", "ogb", "src", "validation.ts");
+  const validation = readRepoFile("packages", "agentx", "src", "validation.ts");
 
   assert.match(validation, /delegate the ritual to \$\{BINARY\} install/);
   assert.match(validation, /delegates the install ritual to the \$\{BINARY\} CLI/);
@@ -181,7 +184,7 @@ test("validation release/install summaries interpolate brand constants", () => {
 });
 
 test("self-update bootstrap temp names use the brand reference", () => {
-  const selfUpdate = readRepoFile("packages", "ogb", "src", "self-update.ts");
+  const selfUpdate = readRepoFile("packages", "agentx", "src", "self-update.ts");
 
   assert.equal(BOOTSTRAP_TEMP_PREFIX, `${BINARY}-bootstrap`);
   assert.match(selfUpdate, /BOOTSTRAP_TEMP_PREFIX/);

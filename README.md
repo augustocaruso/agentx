@@ -1,16 +1,19 @@
-# OpenCode Gemini Bridge
+# agentX
 
 **Data de consolidação:** 2026-05-04
 **Estrutura reorganizada:** 2026-05-06
 
-Este repositório contém o **OpenCode Gemini Bridge**, um CLI chamado `ogb` para usar o **OpenCode como interface primária** para estudos e automação, preservando o ecossistema já existente no **Gemini CLI**.
+Este repositório contém o **agentX**, um CLI chamado `agentx` para usar o
+**OpenCode como interface primária** para estudos e automação, preservando o
+ecossistema já existente no **Gemini CLI**. O comando legado `ogb` continua
+existindo como alias de compatibilidade.
 
 A ideia central:
 
 ```text
 Gemini CLI = fonte da verdade atual
 OpenCode   = interface principal nova
-Bridge     = camada que sincroniza, converte, expande e valida recursos
+agentX     = camada que sincroniza, converte, expande e valida recursos
 ```
 
 O projeto começou como handoff/spec, mas hoje o caminho principal é produto: código do CLI, instaladores, workflows e documentação de uso.
@@ -24,7 +27,7 @@ Leia nesta ordem:
 3. [`docs/01-cheat-sheet.md`](docs/01-cheat-sheet.md) — visão de bolso do projeto.
 4. [`docs/12-dia-a-dia.md`](docs/12-dia-a-dia.md) — fluxo curto de uso diario.
 5. [`docs/04-architecture.md`](docs/04-architecture.md) — arquitetura do bridge.
-6. [`docs/17-cli-command-spec.md`](docs/17-cli-command-spec.md) — comandos do `ogb`.
+6. [`docs/17-cli-command-spec.md`](docs/17-cli-command-spec.md) — comandos do `agentx`.
 
 Material histórico de handoff e MVP antigo fica em [`docs/archive/`](docs/archive/).
 
@@ -57,12 +60,12 @@ No Windows, em PowerShell:
 .\scripts\install-windows.ps1 -Project $PWD
 ```
 
-Esses instaladores agora fazem quatro coisas: instalam o `ogb`, limpam artefatos
+Esses instaladores agora fazem quatro coisas: instalam o `agentx`, limpam artefatos
 de projeto que versões antigas possam ter criado por engano no home, instalam o
-OpenCode se ele ainda não existir e aplicam o perfil OGB do OpenCode
+OpenCode se ele ainda não existir e aplicam o perfil agentX do OpenCode
 globalmente. A limpeza faz backup em
-`~/.config/opencode-gemini-bridge/backups/home-cleanup/` antes de remover
-`~/opencode.jsonc` ou arquivos OGB dentro de `~/.opencode`. A pasta central
+`~/.config/agentx/backups/home-cleanup/` antes de remover
+`~/opencode.jsonc` ou arquivos agentX dentro de `~/.opencode`. A pasta central
 mantem ate 5 sessoes por operacao e exclui sessoes com mais de 30 dias. Esse
 perfil inclui
 plugins, `/research`, `/upgrade-ogb`, DCP, websearch, PTY, auto-fallback, YOLO,
@@ -78,25 +81,25 @@ de login; no Windows ele grava a variável de ambiente de usuário.
 
 Quando `--project` aponta para o home (`~`), o instalador não cria setup de
 projeto. Ele ainda roda o sync global para gerar
-`~/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md` e injetar esse
+`~/.config/agentx/generated/GEMINI.expanded.md` e injetar esse
 arquivo no contexto global do OpenCode via `instructions`. Se nao existir
 `~/.gemini/GEMINI.md`, os `GEMINI.md` das extensoes Gemini instaladas tambem
 alimentam esse contexto global.
 
-Para resetar de verdade o perfil global depois de instalar ou atualizar o OGB,
-rode `ogb reset` a partir do home. Ele so aceita home como projeto e pede
+Para resetar de verdade o perfil global depois de instalar ou atualizar o agentX,
+rode `agentx reset` a partir do home. Ele so aceita home como projeto e pede
 confirmacao antes de limpar artefatos antigos e sobrescrever o perfil global.
-Esse reset tambem reinstala o plugin global OGB do OpenCode:
+Esse reset tambem reinstala o plugin global agentX do OpenCode:
 
 ```bash
 cd ~
-ogb reset
+agentx reset
 ```
 
 Importação inicial:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm install
 npm run build
 node dist/cli.js --project /caminho/do/projeto setup-ux
@@ -107,36 +110,36 @@ node dist/cli.js --project /caminho/do/projeto setup-opencode
 Distribuição por GitHub Release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/augustocaruso/opencode-gemini-bridge/main/scripts/bootstrap-mac.sh | bash -s -- --project "$PWD"
+curl -fsSL https://raw.githubusercontent.com/augustocaruso/agentx/main/scripts/bootstrap-mac.sh | bash -s -- --project "$PWD"
 ```
 
 No Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/augustocaruso/opencode-gemini-bridge/main/scripts/bootstrap-linux.sh | bash -s -- --project "$PWD"
+curl -fsSL https://raw.githubusercontent.com/augustocaruso/agentx/main/scripts/bootstrap-linux.sh | bash -s -- --project "$PWD"
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-iwr -UseB https://github.com/augustocaruso/opencode-gemini-bridge/releases/latest/download/opencode-gemini-bridge-pack.zip -OutFile $env:TEMP\ogb.zip
-Remove-Item -Recurse -Force $env:TEMP\ogb -ErrorAction SilentlyContinue
-Expand-Archive -Force $env:TEMP\ogb.zip $env:TEMP\ogb
+iwr -UseB https://github.com/augustocaruso/agentx/releases/latest/download/agentx-pack.zip -OutFile $env:TEMP\agentx.zip
+Remove-Item -Recurse -Force $env:TEMP\agentx -ErrorAction SilentlyContinue
+Expand-Archive -Force $env:TEMP\agentx.zip $env:TEMP\agentx
 Set-ExecutionPolicy -Scope Process Bypass -Force
-& $env:TEMP\ogb\install.ps1 -Project $PWD -Force
+& $env:TEMP\agentx\install.ps1 -Project $PWD -Force
 ```
 
-Quando o CLI `ogb` ja esta instalado e voce quer reaplicar o perfil sem baixar
+Quando o CLI `agentx` ja esta instalado e voce quer reaplicar o perfil sem baixar
 release pack de novo:
 
 ```bash
-ogb --project "$PWD" install
-ogb --project "$PWD" install --dry-run
-ogb --project "$PWD" install --force
+agentx --project "$PWD" install
+agentx --project "$PWD" install --dry-run
+agentx --project "$PWD" install --force
 ```
 
 O `install` e o wrapper publico para reinstalar perfil OpenCode, plugin de
-startup, comandos globais/projeto e rodar `ogb check` no final. O bootstrap
+startup, comandos globais/projeto e rodar `agentx check` no final. O bootstrap
 externo continua sendo o caminho para instalar o binario do zero.
 
 Update depois que o `ogb` ja esta instalado:
@@ -183,12 +186,12 @@ OGB entra em modo home. Nesse modo ele usa os arquivos globais e nao cria
 projeto dentro da home: nada de `~/.opencode`, nada de `~/opencode.jsonc` e
 nada de perfil `.opencode/ogb.config.jsonc` ali. O perfil OpenCode global fica
 em `~/.config/opencode/`, e os relatorios/estado do OGB ficam em
-`~/.config/opencode-gemini-bridge/generated/`. Para ter configuracao de projeto,
+`~/.config/agentx/generated/`. Para ter configuracao de projeto,
 abra uma pasta de projeto fora do home.
 
 No modo home, `ogb sync` e `ogb import` sincronizam recursos globais do Gemini:
 `~/.gemini/GEMINI.md` e `~/.gemini/extensions/*/GEMINI.md` sao expandidos para
-`~/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md`, e esse conteúdo
+`~/.config/agentx/generated/GEMINI.expanded.md`, e esse conteúdo
 expandido é injetado no contexto via `instructions` em
 `~/.config/opencode/opencode.json`. O `setup-ux`/`reset` sobrescreve
 `~/.config/opencode/AGENTS.md` com o preset OGB; o `sync` não usa esse arquivo
@@ -335,7 +338,7 @@ ogb sync --bidirectional --dry-run
 
 Nesta fase ele sincroniza apenas regras Markdown de usuario entre Gemini,
 OpenCode e Codex, com conflito por padrao e backup central em
-`~/.config/opencode-gemini-bridge/backups/` antes de sobrescrever. A retencao
+`~/.config/agentx/backups/` antes de sobrescrever. A retencao
 automatica mantem ate 5 sessoes por operacao e remove sessoes com mais de 30 dias.
 
 Setup OpenCode com sync no startup:
@@ -361,7 +364,7 @@ ogb telemetry disable
 ```
 
 Por padrao ela grava apenas registros locais redigidos em
-`~/.config/opencode-gemini-bridge/telemetry/`. Envio remoto so acontece quando
+`~/.config/agentx/telemetry/`. Envio remoto so acontece quando
 voce configura `ogb telemetry enable --endpoint <url> --token <token>` ou
 quando o pacote foi montado pelo mantenedor com defaults privados. `disable`
 bloqueia esses defaults para aquela instalacao. O dashboard escreve
@@ -381,22 +384,22 @@ pacote privado, as instalacoes dos seus usuarios passam a enviar envelopes
 redigidos para o seu Worker por padrao. Eles recebem apenas o endpoint e o token
 de ingestao do Worker; a chave do Resend fica somente nos secrets da Cloudflare.
 
-O arquivo `packages/ogb/telemetry.defaults.json` e ignorado
-pelo Git para nao vazar o token, mas entra no pacote npm/tarball quando existe.
+O arquivo `packages/agentx/telemetry.defaults.json` e ignorado
+pelo Git para nao vazar o token, mas entra no zip de release quando existe.
 Use `ogb telemetry setup-email --no-distribution-defaults` se quiser configurar
 so a sua maquina sem autoativar builds privados.
 
 Para releases montadas pelo GitHub Actions, grave esse mesmo JSON no secret
 `OGB_TELEMETRY_DEFAULTS_JSON`. O workflow restaura o arquivo antes de criar o
-tarball/zip, sem mostrar o token nos logs.
+zip, sem mostrar o token nos logs.
 
 ## Estrutura do pacote
 
 ```text
-opencode-gemini-bridge/
+agentx/
   README.md
   packages/
-    ogb/
+    agentx/
       src/
       schemas/
       telemetry-email-worker/
@@ -419,8 +422,8 @@ O bridge ja e funcional, mas ainda esta em evolucao. Antes de distribuir para
 terceiros, rode:
 
 ```bash
-npm --prefix packages/ogb test
-npm --prefix packages/ogb run build
+npm --prefix packages/agentx test
+npm --prefix packages/agentx run build
 ogb validate
 ogb security-check
 ogb bridge

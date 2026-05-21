@@ -353,7 +353,7 @@
 
 ## 0.0.45 - global profile reset and TUI hardening
 
-- Move o pacote CLI de `artifacts/bridge-cli-skeleton` para `packages/ogb`.
+- Move o pacote CLI de `artifacts/bridge-cli-skeleton` para `packages/agentx`.
 - Move instaladores e bootstraps para `scripts/`.
 - Arquiva handoffs e docs antigas de MVP em `docs/archive/`.
 - Remove templates/workflows duplicados e mantém o Worker de telemetria dentro do pacote CLI.

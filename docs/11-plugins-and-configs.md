@@ -556,7 +556,7 @@ Antes de promover qualquer plugin novo:
 Ver:
 
 ```text
-packages/ogb/src/setup-ux.ts
+packages/agentx/src/setup-ux.ts
 ```
 
 ## Princípio

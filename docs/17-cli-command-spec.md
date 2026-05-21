@@ -74,7 +74,7 @@ Dentro do home, ele sincroniza como global: `~/.gemini/GEMINI.md`,
 equivalentes de extensoes Gemini sao projetados para `~/.config/opencode/`.
 O `GEMINI.md` global e os `GEMINI.md` das extensoes Gemini passam antes por
 expansao de imports em
-`~/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md`; o config
+`~/.config/agentx/generated/GEMINI.expanded.md`; o config
 global `~/.config/opencode/opencode.json` recebe esse caminho em
 `instructions`. MCPs globais compativeis entram no campo `mcp` do mesmo config.
 O `~/.config/opencode/AGENTS.md` e sobrescrito pelo preset OGB no `setup-ux` e
@@ -241,18 +241,18 @@ manual do canal remoto.
 Arquivos locais:
 
 ```text
-~/.config/opencode-gemini-bridge/telemetry/config.json
-~/.config/opencode-gemini-bridge/telemetry/runs/*.json
-~/.config/opencode-gemini-bridge/telemetry/outbox/*.json
-~/.config/opencode-gemini-bridge/telemetry/telemetry-sent.json
+~/.config/agentx/telemetry/config.json
+~/.config/agentx/telemetry/runs/*.json
+~/.config/agentx/telemetry/outbox/*.json
+~/.config/agentx/telemetry/telemetry-sent.json
 ```
 
 Schemas:
 
 ```text
-opencode-gemini-bridge.workflow-run-record.v1
-opencode-gemini-bridge.workflow-telemetry-envelope.v1
-opencode-gemini-bridge.telemetry-status.v1
+agentx.workflow-run-record.v2
+agentx.workflow-telemetry-envelope.v2
+agentx.telemetry-status.v2
 ```
 
 Privacidade:
@@ -268,8 +268,8 @@ Defaults privados:
 
 - `telemetry.defaults.example.json` fica versionado como molde;
 - `.telemetry-defaults.json` fica ignorado localmente;
-- `packages/ogb/telemetry.defaults.json` fica ignorado pelo
-  Git, mas entra no pacote npm/tarball quando existe;
+- `packages/agentx/telemetry.defaults.json` fica ignorado pelo
+  Git, mas entra no zip de release quando existe;
 - runtime le `telemetry.defaults.json` perto do pacote instalado ou
   `OGB_TELEMETRY_DEFAULTS`;
 - defaults so podem conter `enabled`, `endpoint_url`, `auth_token`,
@@ -286,23 +286,23 @@ ogb telemetry setup-email \
 ```
 
 O comando prepara o Worker local em
-`~/.config/opencode-gemini-bridge/telemetry-email-worker/`, usa o Wrangler
+`~/.config/agentx/telemetry-email-worker/`, usa o Wrangler
 autenticado da maquina para criar KV opcional, gravar secrets e fazer deploy,
 envia um email de teste via Resend e grava
-`~/.config/opencode-gemini-bridge/telemetry-receiver.json`. Por padrao tambem
+`~/.config/agentx/telemetry-receiver.json`. Por padrao tambem
 grava `telemetry.defaults.json` no pacote para builds privados. Esse defaults
 autoativa telemetria remota nas instalacoes dos usuarios, sem expor a chave do
 Resend; usuarios ainda podem rodar `ogb telemetry disable`.
 
 Em releases montadas pelo GitHub Actions, o secret
 `OGB_TELEMETRY_DEFAULTS_JSON` deve conter o JSON inteiro de
-`telemetry.defaults.json`; o workflow restaura esse arquivo antes do `npm pack`
-e do zip de release.
+`telemetry.defaults.json`; o workflow restaura esse arquivo antes do zip de
+release.
 
 Worker:
 
 ```text
-packages/ogb/telemetry-email-worker/
+packages/agentx/telemetry-email-worker/
 ```
 
 O template Cloudflare Worker expoe `GET /health`,
@@ -331,7 +331,7 @@ GEMINI.md / AGENTS.md do projeto
 ```
 
 Conflitos não são sobrescritos sem `--force`. Com `--force`, o OGB cria backup
-em `~/.config/opencode-gemini-bridge/backups/bidirectional-sync/`. A retencao
+em `~/.config/agentx/backups/bidirectional-sync/`. A retencao
 central mantem ate 5 sessoes por operacao e exclui sessoes com mais de 30 dias.
 
 ### `ogb validate`
@@ -613,7 +613,7 @@ ogb cleanup-home --json
 
 Deve:
 
-- fazer backup em `~/.config/opencode-gemini-bridge/backups/home-cleanup/`;
+- fazer backup em `~/.config/agentx/backups/home-cleanup/`;
 - aplicar retencao central: ate 5 sessoes por operacao e remocao de sessoes com
   mais de 30 dias;
 - remover `~/opencode.jsonc` quando ele parecer config de projeto gerenciada
@@ -771,7 +771,7 @@ em modo home. `init` e `setup-opencode` pulam a criacao de arquivos locais de
 projeto para evitar `~/.opencode` e `~/opencode.jsonc`. `import` e `sync`
 tratam a home como fonte global: regras, comandos, agents e skills do Gemini
 passam por expansao/projecao para `~/.config/opencode/`. O estado gerado pelo OGB vai para
-`~/.config/opencode-gemini-bridge/generated/`; o perfil OpenCode global tambem
+`~/.config/agentx/generated/`; o perfil OpenCode global tambem
 continua em `~/.config/opencode/`.
 
 Os instaladores seguem a mesma regra: quando recebem `--project ~`, rodam

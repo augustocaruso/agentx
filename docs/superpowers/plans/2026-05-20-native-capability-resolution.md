@@ -24,28 +24,28 @@ Full Gemini CLI or Antigravity CLI target modes are still future work. The curre
 
 ## File Structure
 
-- Create `packages/ogb/src/native-capability-registry.ts`
+- Create `packages/agentx/src/native-capability-registry.ts`
   Static registry, entity detection helpers, plugin package normalization.
-- Create `packages/ogb/src/native-capability-resolver.ts`
+- Create `packages/agentx/src/native-capability-resolver.ts`
   Pure decision engine and report writer.
-- Create `packages/ogb/src/native-capability-resolver.test.ts`
+- Create `packages/agentx/src/native-capability-resolver.test.ts`
   Unit tests for registry, decisions, native install preference, fallback, and Honcho cross-target modeling.
-- Modify `packages/ogb/src/paths.ts`
+- Modify `packages/agentx/src/paths.ts`
   Add generated report path `nativeCapabilitiesPath`.
-- Modify `packages/ogb/src/sync.ts`
+- Modify `packages/agentx/src/sync.ts`
   Call resolver before `ensureProjectConfig`; add native plugin specs; pass suppressed extension names into skill projection; include native decision summary in `SyncReport`.
-- Modify `packages/ogb/src/doctor.ts`
+- Modify `packages/agentx/src/doctor.ts`
   Read native capability report and include it in `DoctorReport`.
-- Modify `packages/ogb/src/sync.test.ts`
+- Modify `packages/agentx/src/sync.test.ts`
   Add integration tests for Superpowers plugin preference and managed port removal.
-- Modify `packages/ogb/src/doctor.test.ts`
+- Modify `packages/agentx/src/doctor.test.ts`
   Add reporting tests.
 
 ## Task 1: Add Capability Registry
 
 **Files:**
-- Create: `packages/ogb/src/native-capability-registry.ts`
-- Test: `packages/ogb/src/native-capability-resolver.test.ts`
+- Create: `packages/agentx/src/native-capability-registry.ts`
+- Test: `packages/agentx/src/native-capability-resolver.test.ts`
 
 - [ ] **Step 1: Write failing registry tests**
 
@@ -113,7 +113,7 @@ test("nativeCapabilityEntriesForTarget returns stable sorted entries", () => {
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts
 ```
 
@@ -121,7 +121,7 @@ Expected: FAIL with module-not-found errors for `native-capability-registry.js`.
 
 - [ ] **Step 3: Implement registry**
 
-Create `packages/ogb/src/native-capability-registry.ts`:
+Create `packages/agentx/src/native-capability-registry.ts`:
 
 ```ts
 export type NativeCapabilityTarget = "opencode" | "gemini-cli" | "antigravity-cli" | "antigravity-legacy";
@@ -246,7 +246,7 @@ export function entityIdFromGeminiExtensionName(name: string): NativeCapabilityE
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts
 ```
 
@@ -255,19 +255,19 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ogb/src/native-capability-registry.ts packages/ogb/src/native-capability-resolver.test.ts
+git add packages/agentx/src/native-capability-registry.ts packages/agentx/src/native-capability-resolver.test.ts
 git commit -m "feat: add native capability registry"
 ```
 
 ## Task 2: Add Resolver Decisions
 
 **Files:**
-- Modify: `packages/ogb/src/native-capability-resolver.test.ts`
-- Create: `packages/ogb/src/native-capability-resolver.ts`
+- Modify: `packages/agentx/src/native-capability-resolver.test.ts`
+- Create: `packages/agentx/src/native-capability-resolver.ts`
 
 - [ ] **Step 1: Add failing resolver tests**
 
-Append to `packages/ogb/src/native-capability-resolver.test.ts`:
+Append to `packages/agentx/src/native-capability-resolver.test.ts`:
 
 ```ts
 import {
@@ -339,7 +339,7 @@ test("resolveNativeCapabilities models Honcho Gemini CLI as explicit cross-targe
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts
 ```
 
@@ -347,7 +347,7 @@ Expected: FAIL with module-not-found errors for `native-capability-resolver.js`.
 
 - [ ] **Step 3: Implement resolver**
 
-Create `packages/ogb/src/native-capability-resolver.ts`:
+Create `packages/agentx/src/native-capability-resolver.ts`:
 
 ```ts
 import {
@@ -508,7 +508,7 @@ export function knownEntityIdsForTarget(target: NativeCapabilityTarget): NativeC
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts
 ```
 
@@ -517,20 +517,20 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ogb/src/native-capability-resolver.ts packages/ogb/src/native-capability-resolver.test.ts
+git add packages/agentx/src/native-capability-resolver.ts packages/agentx/src/native-capability-resolver.test.ts
 git commit -m "feat: resolve native capability decisions"
 ```
 
 ## Task 3: Write Native Capability Reports
 
 **Files:**
-- Modify: `packages/ogb/src/paths.ts`
-- Modify: `packages/ogb/src/native-capability-resolver.ts`
-- Modify: `packages/ogb/src/native-capability-resolver.test.ts`
+- Modify: `packages/agentx/src/paths.ts`
+- Modify: `packages/agentx/src/native-capability-resolver.ts`
+- Modify: `packages/agentx/src/native-capability-resolver.test.ts`
 
 - [ ] **Step 1: Add failing path/report tests**
 
-Append to `packages/ogb/src/native-capability-resolver.test.ts`:
+Append to `packages/agentx/src/native-capability-resolver.test.ts`:
 
 ```ts
 import fs from "node:fs";
@@ -571,7 +571,7 @@ test("writeNativeCapabilityReport writes stable generated JSON", () => {
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts
 ```
 
@@ -579,7 +579,7 @@ Expected: FAIL because `nativeCapabilitiesPath` and `writeNativeCapabilityReport
 
 - [ ] **Step 3: Add path field**
 
-Modify `packages/ogb/src/paths.ts`:
+Modify `packages/agentx/src/paths.ts`:
 
 ```ts
 export interface ProjectPaths {
@@ -624,7 +624,7 @@ modelRoutingPath: path.join(generatedDir, "ogb-model-routing.json"),
 
 - [ ] **Step 4: Add report writer**
 
-Append to `packages/ogb/src/native-capability-resolver.ts`:
+Append to `packages/agentx/src/native-capability-resolver.ts`:
 
 ```ts
 import fs from "node:fs";
@@ -653,7 +653,7 @@ Merge these imports with the existing imports at the top of the file; do not lea
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts src/paths.test.ts
 ```
 
@@ -662,19 +662,19 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/ogb/src/paths.ts packages/ogb/src/native-capability-resolver.ts packages/ogb/src/native-capability-resolver.test.ts
+git add packages/agentx/src/paths.ts packages/agentx/src/native-capability-resolver.ts packages/agentx/src/native-capability-resolver.test.ts
 git commit -m "feat: write native capability reports"
 ```
 
 ## Task 4: Integrate Resolver Into Project Sync
 
 **Files:**
-- Modify: `packages/ogb/src/sync.ts`
-- Modify: `packages/ogb/src/sync.test.ts`
+- Modify: `packages/agentx/src/sync.ts`
+- Modify: `packages/agentx/src/sync.test.ts`
 
 - [ ] **Step 1: Add failing sync tests**
 
-Append to `packages/ogb/src/sync.test.ts`:
+Append to `packages/agentx/src/sync.test.ts`:
 
 ```ts
 test("syncToOpenCode prefers validated native Superpowers plugin over compatibility skill projection", () => {
@@ -730,7 +730,7 @@ test("syncToOpenCode keeps Superpowers compatibility projection when native smok
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/sync.test.ts
 ```
 
@@ -738,7 +738,7 @@ Expected: FAIL because `SyncOptions.nativeCapabilitySmoke` and `SyncReport.nativ
 
 - [ ] **Step 3: Extend `SyncOptions` and `SyncReport`**
 
-Modify imports near the top of `packages/ogb/src/sync.ts`:
+Modify imports near the top of `packages/agentx/src/sync.ts`:
 
 ```ts
 import {
@@ -940,7 +940,7 @@ Add `nativeCapabilities` to the global `SyncReport`.
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/sync.test.ts src/native-capability-resolver.test.ts
 ```
 
@@ -949,19 +949,19 @@ Expected: PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/ogb/src/sync.ts packages/ogb/src/sync.test.ts packages/ogb/src/native-capability-resolver.ts packages/ogb/src/native-capability-registry.ts
+git add packages/agentx/src/sync.ts packages/agentx/src/sync.test.ts packages/agentx/src/native-capability-resolver.ts packages/agentx/src/native-capability-registry.ts
 git commit -m "feat: prefer validated native capabilities during sync"
 ```
 
 ## Task 5: Report Native Decisions In Doctor
 
 **Files:**
-- Modify: `packages/ogb/src/doctor.ts`
-- Modify: `packages/ogb/src/doctor.test.ts`
+- Modify: `packages/agentx/src/doctor.ts`
+- Modify: `packages/agentx/src/doctor.test.ts`
 
 - [ ] **Step 1: Add failing doctor test**
 
-Append to `packages/ogb/src/doctor.test.ts`:
+Append to `packages/agentx/src/doctor.test.ts`:
 
 ```ts
 test("runDoctor reports native capability decisions from generated report", () => {
@@ -1003,7 +1003,7 @@ test("runDoctor reports native capability decisions from generated report", () =
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/doctor.test.ts
 ```
 
@@ -1011,7 +1011,7 @@ Expected: FAIL because `DoctorReport.nativeCapabilities` does not exist.
 
 - [ ] **Step 3: Extend doctor report type**
 
-In `packages/ogb/src/doctor.ts`, add to `DoctorReport`:
+In `packages/agentx/src/doctor.ts`, add to `DoctorReport`:
 
 ```ts
 nativeCapabilities: {
@@ -1069,7 +1069,7 @@ console.log(`Native capabilities: ${report.nativeCapabilities.reportExists ? `${
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/doctor.test.ts src/sync.test.ts
 ```
 
@@ -1078,19 +1078,19 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/ogb/src/doctor.ts packages/ogb/src/doctor.test.ts
+git add packages/agentx/src/doctor.ts packages/agentx/src/doctor.test.ts
 git commit -m "feat: report native capability decisions"
 ```
 
 ## Task 6: Add Honcho Cross-Target Metadata Helpers
 
 **Files:**
-- Create: `packages/ogb/src/honcho-capability.ts`
-- Modify: `packages/ogb/src/native-capability-resolver.test.ts`
+- Create: `packages/agentx/src/honcho-capability.ts`
+- Modify: `packages/agentx/src/native-capability-resolver.test.ts`
 
 - [ ] **Step 1: Add failing Honcho metadata tests**
 
-Append to `packages/ogb/src/native-capability-resolver.test.ts`:
+Append to `packages/agentx/src/native-capability-resolver.test.ts`:
 
 ```ts
 import { honchoMcpCompatibilitySurface } from "./honcho-capability.js";
@@ -1126,7 +1126,7 @@ test("honchoMcpCompatibilitySurface marks hooks and commands as review-only", ()
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts
 ```
 
@@ -1134,7 +1134,7 @@ Expected: FAIL because `honcho-capability.js` does not exist.
 
 - [ ] **Step 3: Implement Honcho surface helper**
 
-Create `packages/ogb/src/honcho-capability.ts`:
+Create `packages/agentx/src/honcho-capability.ts`:
 
 ```ts
 import type { GeminiMcpServer } from "./types.js";
@@ -1188,7 +1188,7 @@ export function honchoMcpCompatibilitySurface(options: {
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts
 ```
 
@@ -1197,19 +1197,19 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ogb/src/honcho-capability.ts packages/ogb/src/native-capability-resolver.test.ts
+git add packages/agentx/src/honcho-capability.ts packages/agentx/src/native-capability-resolver.test.ts
 git commit -m "feat: model Honcho compatibility surfaces"
 ```
 
 ## Task 7: Add Pass/Check Summary Wiring
 
 **Files:**
-- Modify: `packages/ogb/src/pass.ts`
-- Modify: `packages/ogb/src/pass.test.ts`
+- Modify: `packages/agentx/src/pass.ts`
+- Modify: `packages/agentx/src/pass.test.ts`
 
 - [ ] **Step 1: Add failing pass summary test**
 
-Append to `packages/ogb/src/pass.test.ts`:
+Append to `packages/agentx/src/pass.test.ts`:
 
 ```ts
 test("runPass includes native capability counts in sync summary", () => {
@@ -1243,7 +1243,7 @@ test("runPass includes native capability counts in sync summary", () => {
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/pass.test.ts
 ```
 
@@ -1251,7 +1251,7 @@ Expected: FAIL because `runPass` options and summary do not include native capab
 
 - [ ] **Step 3: Thread smoke option through pass**
 
-In `packages/ogb/src/pass.ts`, import `NativeSmokeProbe`:
+In `packages/agentx/src/pass.ts`, import `NativeSmokeProbe`:
 
 ```ts
 import type { NativeSmokeProbe } from "./native-capability-resolver.js";
@@ -1309,7 +1309,7 @@ if (sync.nativeFallbacks > 0) parts.push(plural(sync.nativeFallbacks, "native fa
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/pass.test.ts src/sync.test.ts
 ```
 
@@ -1318,7 +1318,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/ogb/src/pass.ts packages/ogb/src/pass.test.ts
+git add packages/agentx/src/pass.ts packages/agentx/src/pass.test.ts
 git commit -m "feat: summarize native capabilities in check"
 ```
 
@@ -1389,7 +1389,7 @@ git commit -m "docs: explain native-first compatibility"
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test -- src/native-capability-resolver.test.ts src/sync.test.ts src/doctor.test.ts src/pass.test.ts
 ```
 
@@ -1400,7 +1400,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm test
 ```
 
@@ -1411,7 +1411,7 @@ Expected: PASS.
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm run typecheck
 ```
 
@@ -1422,7 +1422,7 @@ Expected: PASS with no TypeScript errors.
 Run:
 
 ```bash
-cd packages/ogb
+cd packages/agentx
 npm run build
 ```
 
@@ -1433,7 +1433,7 @@ Expected: PASS and `dist/cli.js` exists.
 Run from repo root:
 
 ```bash
-node packages/ogb/dist/cli.js --project "$PWD" sync --dry-run --rulesync off
+node packages/agentx/dist/cli.js --project "$PWD" sync --dry-run --rulesync off
 ```
 
 Expected: exits 0 and prints generated OpenCode config JSON. If no Superpowers extension exists locally, no native plugin should be added.
@@ -1443,7 +1443,7 @@ Expected: exits 0 and prints generated OpenCode config JSON. If no Superpowers e
 Run:
 
 ```bash
-node packages/ogb/dist/cli.js --project "$PWD" doctor --json
+node packages/agentx/dist/cli.js --project "$PWD" doctor --json
 ```
 
 Expected: exits 0 and JSON includes `nativeCapabilities`.

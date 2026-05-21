@@ -11,7 +11,7 @@ permissions:
 
 env:
   PACKAGE_NAME: agentx
-  PACKAGE_DIR: packages/ogb
+  PACKAGE_DIR: packages/agentx
   RELEASE_ASSET: agentx-pack.zip
   TELEMETRY_DEFAULTS_SCHEMA: agentx.telemetry-defaults.v2
 
@@ -48,21 +48,14 @@ jobs:
         run: npm test
       - name: Restore tracked release sources
         run: git checkout -- .
-      - name: Create npm tarball
-        working-directory: ${{ env.PACKAGE_DIR }}
-        run: npm pack
       - name: Create source zip
-        run: zip -r "$RELEASE_ASSET" . -x '*.git*' '*/node_modules/*' '*.tgz'
+        run: zip -r "$RELEASE_ASSET" . -x '*.git*' '*/node_modules/*'
       - uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ env.PACKAGE_NAME }}-pack
-          path: |
-            ${{ env.RELEASE_ASSET }}
-            ${{ env.PACKAGE_DIR }}/${{ env.PACKAGE_NAME }}-*.tgz
+          path: ${{ env.RELEASE_ASSET }}
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3.0.0
         with:
-          files: |
-            ${{ env.RELEASE_ASSET }}
-            ${{ env.PACKAGE_DIR }}/${{ env.PACKAGE_NAME }}-*.tgz
+          files: ${{ env.RELEASE_ASSET }}

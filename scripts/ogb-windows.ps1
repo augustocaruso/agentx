@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
-$CliDir = Join-Path (Join-Path $RepoRoot "packages") "ogb"
+$CliDir = Join-Path (Join-Path $RepoRoot "packages") "agentx"
 
 if (Get-Command ogb -ErrorAction SilentlyContinue) {
   ogb --project $Project launch

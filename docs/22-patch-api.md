@@ -74,7 +74,7 @@ O target exato pode ficar `undefined` quando o Gemini CLI nao expuser um dry-run
 
 ## Contrato de um patch
 
-Um patch vive em `packages/ogb/src/patches.ts` e segue este formato:
+Um patch vive em `packages/agentx/src/patches.ts` e segue este formato:
 
 ```ts
 export interface OgbPatch {
@@ -136,12 +136,12 @@ Patches rodam como API interna Node do OGB. Quando precisam chamar ferramentas n
 
 O estado persistido fica em:
 
-- home/global: `~/.config/opencode-gemini-bridge/generated/ogb-patches.json`
+- home/global: `~/.config/agentx/generated/ogb-patches.json`
 - projeto: `.opencode/generated/ogb-patches.json`
 
 O arquivo guarda:
 
-- schema `opencode-gemini-bridge.patches.v1`;
+- schema `agentx.patches.v2`;
 - patches aplicados;
 - historico curto de runs;
 - outcome por fase.
@@ -220,7 +220,7 @@ Regra:
 - se a telemetria especifica do Medical Notes ainda nao estiver configurada,
   mas a telemetria do proprio OGB estiver pronta, o patch usa endpoint/token do
   OGB como fallback e envia um envelope compativel com
-  `opencode-gemini-bridge.workflow-telemetry-envelope.v1` contendo o snapshot e
+  `agentx.workflow-telemetry-envelope.v2` contendo o snapshot e
   os diffs tecnicos no JSON sanitizado.
 - se snapshots antigos ja existirem em `pre-update-snapshots/` e ainda nao
   tiverem `send-result.json` com `sent=true`, o proximo `ogb update` tenta
@@ -312,7 +312,7 @@ Checklist minimo:
 7. Retorne `preview` em `dryRun`.
 8. Adicione teste unitario em `patches.test.ts`.
 9. Se o patch influencia o check, adicione teste em `pass.test.ts`.
-10. Rode `ogb patches`, `npm run typecheck` e `npm test` em `packages/ogb`.
+10. Rode `ogb patches`, `npm run typecheck` e `npm test` em `packages/agentx`.
 
 ## Quando empacotar e quando aposentar
 

@@ -11,7 +11,7 @@ Arquivo:
 O perfil global recomendado é gerado pelo CLI em:
 
 ```text
-packages/ogb/src/setup-ux.ts
+packages/agentx/src/setup-ux.ts
 ```
 
 Pontos importantes:
@@ -34,7 +34,7 @@ project/opencode.jsonc
 O template de projeto é gerado pelo CLI em:
 
 ```text
-packages/ogb/src/project-config.ts
+packages/agentx/src/project-config.ts
 ```
 
 O ponto crítico:
@@ -55,7 +55,7 @@ O ponto crítico:
 O agente embutido fica em:
 
 ```text
-packages/ogb/src/built-ins.ts
+packages/agentx/src/built-ins.ts
 ```
 
 OpenCode também aceita agentes Markdown em:
@@ -82,7 +82,7 @@ O bridge canoniza outputs de conversores externos para esses caminhos.
 Os comandos embutidos ficam em:
 
 ```text
-packages/ogb/src/built-ins.ts
+packages/agentx/src/built-ins.ts
 ```
 
 Skills devem preferir:

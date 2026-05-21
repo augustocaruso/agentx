@@ -175,7 +175,7 @@ OpenCode carrega plugins locais no startup. Um plugin pode rodar `ogb sync` quan
 Implementação:
 
 ```text
-packages/ogb/src/setup-opencode.ts
+packages/agentx/src/setup-opencode.ts
 ```
 
 Instalação futura pelo bridge:
