@@ -15,6 +15,7 @@ import {
   missingPluginsFromDebugInfo,
   OGB_UX_PLUGINS,
   setupUx as rawSetupUx,
+  shouldRunAuthProbe,
   type SetupUxOptions,
 } from "./setup-ux.js";
 import { TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
@@ -654,6 +655,27 @@ test("auth probe parser recognizes OAuth methods and fails API-key-only output",
   assert.deepEqual(missingAuthProbeExpectations("openai", openaiOutput), []);
   assert.deepEqual(missingAuthProbeExpectations("google", googleOutput), []);
   assert.deepEqual(missingAuthProbeExpectations("openai", apiKeyOnly), ["ChatGPT Pro/Plus"]);
+});
+
+test("setupUx skips auth login probes unless explicitly enabled", () => {
+  const root = tempRoot();
+  const baseOptions: SetupUxOptions = {
+    homeDir: path.join(root, "home"),
+    projectRoot: path.join(root, "project"),
+    dryRun: true,
+    installOpenCode: false,
+  };
+
+  const disabled = setupUx(baseOptions);
+  assert.equal(shouldRunAuthProbe({}), false);
+  assert.equal(disabled.commands.some((command) => command.command.join(" ").includes("auth login")), false);
+
+  const enabled = setupUx({
+    ...baseOptions,
+    env: { AGENTX_AUTH_PROBE: "1" },
+  });
+  assert.equal(shouldRunAuthProbe({ AGENTX_AUTH_PROBE: "true" }), true);
+  assert.equal(enabled.commands.filter((command) => command.command.join(" ").includes("auth login")).length, 2);
 });
 
 test("setupUx dry-run previews without writing files", () => {

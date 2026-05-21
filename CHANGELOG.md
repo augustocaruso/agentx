@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.16 - Install no longer probes interactive auth
+
+- Stop running `opencode auth login --method __ogb_probe__` during normal install/update, because current OpenCode can keep that probe alive and leave the update waiting.
+- Keep the auth probe parser behind `AGENTX_AUTH_PROBE=1` for explicit maintainer diagnostics only.
+
 ## 0.2.15 - Gemini hook projections run in OpenCode
 
 - Run compatible Gemini hooks through the agentX OpenCode plugin: `SessionStart`, `AfterAgent`, `Notification`, and `SessionEnd` now join the existing tool and prompt hooks.

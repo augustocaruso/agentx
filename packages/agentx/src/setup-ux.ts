@@ -26,6 +26,7 @@ export const OGB_TUI_RUNTIME_DEPENDENCIES = { ...UX_PROFILE_PRESET.tuiRuntimeDep
 export const REMOVED_GLOBAL_UX_COMMANDS = [...UX_PROFILE_PRESET.removedGlobalCommands];
 const UX_PROFILE_COMMANDS: Record<string, string> = UX_PROFILE_PRESET.files.commands;
 const GLOBAL_STARTUP_PLUGIN_FILENAME = "ogb-startup-sync.js";
+const AUTH_PROBE_TIMEOUT_MS = 8_000;
 export const LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC = "file:plugins/ogb-startup-sync.js";
 
 export function globalStartupPluginSpec(pluginPath?: string): string {
@@ -469,6 +470,10 @@ export function missingAuthProbeExpectations(provider: "openai" | "google", outp
     : ["OAuth with Google (Gemini CLI)"];
 }
 
+export function shouldRunAuthProbe(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.AGENTX_AUTH_PROBE === "1" || /^true$/i.test(env.AGENTX_AUTH_PROBE ?? "");
+}
+
 function runAuthProbe(opencodeCommand: string, provider: "openai" | "google", dryRun?: boolean, cwd?: string): SetupUxCommand {
   const command = [
     opencodeCommand,
@@ -494,6 +499,7 @@ function runAuthProbe(opencodeCommand: string, provider: "openai" | "google", dr
       NO_COLOR: process.env.NO_COLOR ?? "1",
       OGB_STARTUP_SYNC: "0",
     },
+    timeoutMs: AUTH_PROBE_TIMEOUT_MS,
   });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
   const missing = missingAuthProbeExpectations(provider, output);
@@ -915,8 +921,10 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
         if (missing.length > 0) verification.status = "fail";
       }
       commands.push(verification);
-      commands.push(runAuthProbe(opencodeCommand, "openai", options.dryRun, commandCwd));
-      commands.push(runAuthProbe(opencodeCommand, "google", options.dryRun, commandCwd));
+      if (shouldRunAuthProbe(adapter.env)) {
+        commands.push(runAuthProbe(opencodeCommand, "openai", options.dryRun, commandCwd));
+        commands.push(runAuthProbe(opencodeCommand, "google", options.dryRun, commandCwd));
+      }
     } else if (localRole.enabled && !options.dryRun) {
       commands.push({ command: ["opencode", "debug", "info"], status: "skipped", message: "Skipped by local maintainer mode", role: "verify" });
     }
