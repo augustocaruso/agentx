@@ -169,6 +169,137 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function safeCommandSegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "command";
+}
+
+function commandSegments(sourceRelPath: string): string[] {
+  const normalized = sourceRelPath.replace(/\\/g, "/");
+  const withoutCommands = normalized.startsWith("commands/") ? normalized.slice("commands/".length) : normalized;
+  const extension = path.posix.extname(withoutCommands);
+  const withoutExtension = extension ? withoutCommands.slice(0, -extension.length) : withoutCommands;
+  return withoutExtension.split("/").map(safeCommandSegment).filter(Boolean);
+}
+
+function slugForCommand(sourceRelPath: string): string {
+  return commandSegments(sourceRelPath).join("-") || "command";
+}
+
+function publicNameForCommand(sourceRelPath: string): string {
+  const segments = commandSegments(sourceRelPath);
+  if (segments.length > 1) return `${segments.slice(0, -1).join(":")}:${segments.at(-1)}`;
+  return segments[0] ?? "command";
+}
+
+function parseQuotedValue(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("\"")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      return typeof parsed === "string" ? parsed : trimmed;
+    } catch {
+      return trimmed.endsWith("\"") ? trimmed.slice(1, -1) : trimmed.slice(1);
+    }
+  }
+  if (trimmed.startsWith("'")) return trimmed.endsWith("'") ? trimmed.slice(1, -1) : trimmed.slice(1);
+  return trimmed;
+}
+
+function parseTomlCommand(text: string): { description?: string; prompt: string; warnings: string[] } {
+  const warnings: string[] = [];
+  const descriptionMatch = text.match(/^\s*description\s*=\s*("[^"\n]*(?:\\.[^"\n]*)*"|'[^'\n]*'|[^\n#]+)/m);
+  const blockMatch = text.match(/^\s*prompt\s*=\s*"""[\r\n]?([\s\S]*?)[\r\n]?"""/m)
+    ?? text.match(/^\s*prompt\s*=\s*'''[\r\n]?([\s\S]*?)[\r\n]?'''/m);
+  const linePromptMatch = text.match(/^\s*prompt\s*=\s*("[^"\n]*(?:\\.[^"\n]*)*"|'[^'\n]*'|[^\n#]+)/m);
+  const description = parseQuotedValue(descriptionMatch?.[1]);
+  let prompt = blockMatch?.[1] ?? parseQuotedValue(linePromptMatch?.[1]);
+  if (!description) warnings.push("Missing description");
+  if (!prompt?.trim()) {
+    warnings.push("Missing prompt; copied raw TOML as fallback");
+    prompt = text.trim();
+  }
+  return { description: description?.trim(), prompt: prompt.trim(), warnings };
+}
+
+function parseMarkdownCommand(text: string, fallbackDescription: string): { description: string; prompt: string; warnings: string[] } {
+  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!match) return { description: fallbackDescription, prompt: text.trim(), warnings: [] };
+
+  const frontmatter = match[1] ?? "";
+  const description = parseQuotedValue(frontmatter.match(/^\s*description\s*:\s*("[^"\n]*(?:\\.[^"\n]*)*"|'[^'\n]*'|[^\n]+)/m)?.[1])
+    ?? fallbackDescription;
+  return { description, prompt: text.slice(match[0].length).trim(), warnings: [] };
+}
+
+function normalizeCommandPrompt(prompt: string, extensionDir?: string): string {
+  let output = prompt.replace(/\{\{\s*args\s*\}\}/g, "$ARGUMENTS");
+  if (extensionDir) {
+    output = output.replaceAll("${extensionPath}", extensionDir).replaceAll("${/}", path.sep);
+    const runner = `node "${extensionDir}/scripts/run_python.mjs"`;
+    output = output.replace(/\buv run --project\s+\S+\s+python\s+/g, `${runner} `);
+    output = output.replace(/\buv run python\s+/g, `${runner} `);
+  }
+  output = output.replaceAll(" --config ~/.gemini/medical-notes-workbench/config.toml", "");
+  output = output.replaceAll(
+    "~/.gemini/medical-notes-workbench/config.toml",
+    "config.toml resolved at runtime from MEDNOTES_HOME when set; otherwise the Workbench app home",
+  );
+  output = output.replace(/gemini extensions config\s+[\w.-]+\s+([A-Z0-9_]+)/g, "configure $1 in the Antigravity environment");
+  return output.trim();
+}
+
+function convertWithInternalRenderer(input: AntigravityCommandSkillInput): AntigravityCommandSkill {
+  const text = fs.readFileSync(input.sourcePath, "utf8");
+  const fallbackDescription = `Gemini command: ${input.sourceRelPath}`;
+  const parsed = input.sourcePath.toLowerCase().endsWith(".toml")
+    ? parseTomlCommand(text)
+    : parseMarkdownCommand(text, fallbackDescription);
+  const description = parsed.description ?? fallbackDescription;
+  const publicName = publicNameForCommand(input.sourceRelPath);
+  const slug = slugForCommand(input.sourceRelPath);
+  const sourceLines = input.extensionName
+    ? [
+        `<!-- Source extension: ${input.extensionName} -->`,
+        `<!-- Source command: ${input.sourceRelPath} -->`,
+      ]
+    : [`<!-- Source command: ${input.sourceRelPath} -->`];
+  const markdown = [
+    "---",
+    `name: ${JSON.stringify(publicName)}`,
+    `description: ${JSON.stringify(`Use when the user invokes /${publicName}. ${description}`)}`,
+    "---",
+    "",
+    `# /${publicName}`,
+    "",
+    "<!-- GENERATED BY agentX. DO NOT EDIT. -->",
+    "<!-- SOURCE_KIND: gemini-antigravity-command-skill -->",
+    ...sourceLines,
+    `<!-- Source file: ${input.sourcePath} -->`,
+    "",
+    "This skill is the Antigravity launcher generated from a Gemini CLI command.",
+    `When the user invokes /${publicName}, treat the text after the command as $ARGUMENTS.`,
+    "",
+    "## Launcher Instructions",
+    "",
+    normalizeCommandPrompt(parsed.prompt, input.extensionDir),
+    "",
+  ].join("\n");
+
+  return {
+    slug,
+    publicName,
+    description,
+    markdown,
+    warnings: parsed.warnings,
+  };
+}
+
 export function isMissingPythonCommandResult(command: string, result: PythonCommandResult, platform: NodeJS.Platform = process.platform): boolean {
   const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
   if (errorCode === "ENOENT") return true;
@@ -226,7 +357,11 @@ function convertWithExternalPython(input: AntigravityCommandSkillInput): Antigra
 }
 
 export function convertGeminiCommandToAntigravitySkill(input: AntigravityCommandSkillInput): AntigravityCommandSkill {
-  return convertWithExternalPython(input);
+  try {
+    return convertWithExternalPython(input);
+  } catch {
+    return convertWithInternalRenderer(input);
+  }
 }
 
 export function convertGeminiExtensionToAntigravityPlugin(input: AntigravityPluginConversionInput): AntigravityPluginConversion {

@@ -376,7 +376,7 @@ test("bundled shared converter builds a complete Antigravity plugin", (context) 
   assert.doesNotMatch(`${mcpText}\n${script}\n${hookRuntime}\n${server}`, /\$\{extensionPath\}/);
 });
 
-test("Antigravity converter fails clearly when Python is unavailable", () => {
+test("Antigravity command converter falls back to the internal renderer when Python is unavailable", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-antigravity-no-python-"));
   const extensionDir = path.join(root, "honcho");
   const commandPath = path.join(extensionDir, "commands", "honcho", "plan.md");
@@ -390,13 +390,43 @@ test("Antigravity converter fails clearly when Python is unavailable", () => {
   delete process.env.AGENTX_ANTIGRAVITY_CONVERTER;
   delete process.env.AGENTX_PYTHON_BIN;
   try {
+    const skill = convertGeminiCommandToAntigravitySkill({
+      sourcePath: commandPath,
+      sourceRelPath: "commands/honcho/plan.md",
+      extensionName: "honcho",
+      extensionDir,
+    });
+
+    assert.equal(skill.slug, "honcho-plan");
+    assert.match(skill.markdown, /# \/honcho:plan/);
+    assert.match(skill.markdown, /Run honcho with \$ARGUMENTS/);
+  } finally {
+    process.env.PATH = previousPath;
+    if (previousConverter === undefined) delete process.env.AGENTX_ANTIGRAVITY_CONVERTER;
+    else process.env.AGENTX_ANTIGRAVITY_CONVERTER = previousConverter;
+    if (previousPython === undefined) delete process.env.AGENTX_PYTHON_BIN;
+    else process.env.AGENTX_PYTHON_BIN = previousPython;
+  }
+});
+
+test("Antigravity plugin converter fails clearly when Python is unavailable", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-antigravity-plugin-no-python-"));
+  const sourceDir = path.join(root, "extension");
+  const outputDir = path.join(root, "plugin");
+  fs.mkdirSync(sourceDir, { recursive: true });
+
+  const previousPath = process.env.PATH;
+  const previousConverter = process.env.AGENTX_ANTIGRAVITY_CONVERTER;
+  const previousPython = process.env.AGENTX_PYTHON_BIN;
+  process.env.PATH = "";
+  delete process.env.AGENTX_ANTIGRAVITY_CONVERTER;
+  delete process.env.AGENTX_PYTHON_BIN;
+  try {
     assert.throws(
       () =>
-        convertGeminiCommandToAntigravitySkill({
-          sourcePath: commandPath,
-          sourceRelPath: "commands/honcho/plan.md",
-          extensionName: "honcho",
-          extensionDir,
+        convertGeminiExtensionToAntigravityPlugin({
+          sourceDir,
+          outputDir,
         }),
       /Antigravity converter failed: python not found on PATH/,
     );

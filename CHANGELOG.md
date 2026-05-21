@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.12 - Internal Antigravity command renderer fallback
+
+- Falls back to a TypeScript renderer for Gemini command -> Antigravity launcher skill projection when the external Python converter cannot run.
+- Keeps full Gemini extension -> Antigravity plugin conversion on the shared Python converter, where the broader migration still belongs.
+
 ## 0.2.11 - Windows Python command order for Antigravity sync
 
 - Prefer `python` before `python3` on Windows so the Antigravity command projection uses the stable command installed by `actions/setup-python` and ordinary Python installers.
