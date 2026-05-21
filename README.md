@@ -145,7 +145,7 @@ Update depois que o `agentx` ja esta instalado:
 ```bash
 agentx --project "$PWD" update
 agentx --project "$PWD" update --dry-run
-agentx --project "$PWD" update --release v0.2.10
+agentx --project "$PWD" update --release v0.2.11
 agentx --project "$PWD" check-update
 agentx --project "$PWD" auto-update
 ```

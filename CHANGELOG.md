@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.11 - Windows Python command order for Antigravity sync
+
+- Prefer `python` before `python3` on Windows so the Antigravity command projection uses the stable command installed by `actions/setup-python` and ordinary Python installers.
+- Continue falling back across `python`, `python3`, and `py` when a Windows command is missing or points at the broken App Installer alias.
+
 ## 0.2.10 - Windows Python fallback for Antigravity conversion
 
 - Treat the broken Windows `python3` App Installer alias (`exit 9009` / "Python was not found") as unavailable so agentX falls back to `python`.

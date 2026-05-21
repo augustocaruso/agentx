@@ -56,9 +56,11 @@ function converterScriptPath(): string {
   return path.resolve(here, "..", "scripts", "gemini_antigravity_converter.py");
 }
 
-function pythonCommands(): string[] {
+export function pythonCommands(platform: NodeJS.Platform = process.platform): string[] {
   const override = readEnvAgentx("PYTHON_BIN");
-  return override ? [override] : ["python3", "python"];
+  if (override) return [override];
+  if (platform === "win32") return ["python", "python3", "py"];
+  return ["python3", "python"];
 }
 
 function converterEnv(): NodeJS.ProcessEnv {
@@ -197,11 +199,12 @@ function convertWithExternalPython(input: AntigravityCommandSkillInput): Antigra
   if (input.extensionDir) args.push("--extension-dir", input.extensionDir);
 
   let lastFailure = "unknown converter failure";
+  const hasPythonOverride = Boolean(readEnvAgentx("PYTHON_BIN"));
   for (const command of pythonCommands()) {
     const resolvedCommand = resolvePythonCommand(command);
     if (!resolvedCommand) {
-      lastFailure = `${command} not found on PATH`;
-      if (command === "python3" && !readEnvAgentx("PYTHON_BIN")) continue;
+      lastFailure = hasPythonOverride ? `${command} not found on PATH` : "python not found on PATH";
+      if (!hasPythonOverride) continue;
       break;
     }
     const result = spawnCommandSync(resolvedCommand, args, {
@@ -214,9 +217,9 @@ function convertWithExternalPython(input: AntigravityCommandSkillInput): Antigra
     if (!result.error && result.status === 0) return parseConverterOutput(String(result.stdout || ""));
     const missingCommand = isMissingPythonCommandResult(command, result);
     lastFailure = missingCommand
-      ? `${command} not found on PATH`
+      ? hasPythonOverride ? `${command} not found on PATH` : "python not found on PATH"
       : String(result.stderr || result.error?.message || `exit code ${String(result.status ?? "unknown")}`).trim();
-    if (missingCommand && command === "python3" && !readEnvAgentx("PYTHON_BIN")) continue;
+    if (missingCommand && !hasPythonOverride) continue;
     break;
   }
   throw new Error(`Antigravity converter failed: ${lastFailure}`);
@@ -241,11 +244,12 @@ export function convertGeminiExtensionToAntigravityPlugin(input: AntigravityPlug
   if (input.pluginName) args.push("--plugin-name", input.pluginName);
 
   let lastFailure = "unknown converter failure";
+  const hasPythonOverride = Boolean(readEnvAgentx("PYTHON_BIN"));
   for (const command of pythonCommands()) {
     const resolvedCommand = resolvePythonCommand(command);
     if (!resolvedCommand) {
-      lastFailure = `${command} not found on PATH`;
-      if (command === "python3" && !readEnvAgentx("PYTHON_BIN")) continue;
+      lastFailure = hasPythonOverride ? `${command} not found on PATH` : "python not found on PATH";
+      if (!hasPythonOverride) continue;
       break;
     }
     const result = spawnCommandSync(resolvedCommand, args, {
@@ -258,9 +262,9 @@ export function convertGeminiExtensionToAntigravityPlugin(input: AntigravityPlug
     if (!result.error && result.status === 0) return parsePluginConversionOutput(String(result.stdout || ""));
     const missingCommand = isMissingPythonCommandResult(command, result);
     lastFailure = missingCommand
-      ? `${command} not found on PATH`
+      ? hasPythonOverride ? `${command} not found on PATH` : "python not found on PATH"
       : String(result.stderr || result.error?.message || `exit code ${String(result.status ?? "unknown")}`).trim();
-    if (missingCommand && command === "python3" && !readEnvAgentx("PYTHON_BIN")) continue;
+    if (missingCommand && !hasPythonOverride) continue;
     break;
   }
   throw new Error(`Antigravity converter failed: ${lastFailure}`);

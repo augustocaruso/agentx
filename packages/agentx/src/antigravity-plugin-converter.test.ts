@@ -8,6 +8,7 @@ import {
   convertGeminiCommandToAntigravitySkill,
   convertGeminiExtensionToAntigravityPlugin,
   isMissingPythonCommandResult,
+  pythonCommands,
 } from "./antigravity-plugin-converter.js";
 
 function writeFakePythonCommand(
@@ -83,6 +84,18 @@ test("Antigravity converter treats Windows cmd not-recognized output as a missin
     ),
     true,
   );
+});
+
+test("Antigravity converter prefers the stable Python command name on Windows", () => {
+  const previousPython = process.env.AGENTX_PYTHON_BIN;
+  delete process.env.AGENTX_PYTHON_BIN;
+  try {
+    assert.deepEqual(pythonCommands("win32"), ["python", "python3", "py"]);
+    assert.deepEqual(pythonCommands("linux"), ["python3", "python"]);
+  } finally {
+    if (previousPython === undefined) delete process.env.AGENTX_PYTHON_BIN;
+    else process.env.AGENTX_PYTHON_BIN = previousPython;
+  }
 });
 
 test("Antigravity converter uses bundled Python converter by default", () => {
