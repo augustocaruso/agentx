@@ -91,6 +91,34 @@ test("runPass accepts BeforeTool and BeforeAgent hooks independently", () => {
   process.exitCode = oldExitCode;
 });
 
+test("runPass does not warn users about known unsupported Gemini lifecycle hooks during normal checks", () => {
+  const projectRoot = tempRoot();
+  const oldExitCode = process.exitCode;
+  fs.mkdirSync(path.join(projectRoot, ".gemini"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".gemini", "settings.json"), JSON.stringify({
+    hooks: {
+      AfterAgent: [{ command: "echo after-agent" }],
+      Notification: [{ command: "echo notify" }],
+    },
+  }, null, 2), "utf8");
+
+  const report = runPass({
+    projectRoot,
+    homeDir: projectRoot,
+    skipExtensionUpdate: true,
+    skipSync: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+    silent: true,
+    setExitCode: false,
+  });
+
+  assert.equal(report.outcome, "pass");
+  assert.equal(report.blockers.some((blocker) => blocker.message.startsWith("Hook needs review:")), false);
+  process.exitCode = oldExitCode;
+});
+
 test("runPass emits real progress events in ritual order", () => {
   const projectRoot = tempRoot();
   const oldExitCode = process.exitCode;

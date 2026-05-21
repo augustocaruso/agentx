@@ -516,8 +516,8 @@ function addUpdateOptions(command: Command): Command {
     .option("--no-setup", `Update ${BINARY}/profile only; skip import/setup/doctor validation`)
     .option("--no-ux", "Do not reapply the global OpenCode UX profile")
     .option("--no-install-opencode", "Do not install OpenCode when it is missing")
-    .option("--force", "Pass force to the bootstrap installer")
-    .option("--dry-run", "Print the bootstrap command without running it")
+    .option("--force", "Force managed repair during release install")
+    .option("--dry-run", "Print the release install command without running it")
     .option("--json", "Print JSON report")
     .option("--plain", "Use the classic text report instead of the rich terminal UI")
     .option("--progress-json", "Emit versioned NDJSON progress events for automation");
@@ -1348,8 +1348,8 @@ program.command("auto-update")
   .option("--no-setup", `Update ${BINARY}/profile only; skip import/setup/doctor validation`)
   .option("--no-ux", "Do not reapply the global OpenCode UX profile")
   .option("--install-opencode", "Allow auto-update to install OpenCode when it is missing", false)
-  .option("--force", "Pass force to the bootstrap installer")
-  .option("--dry-run", "Check and print the bootstrap command without running it")
+  .option("--force", "Force managed repair during release install")
+  .option("--dry-run", "Check and print the release install command without running it")
   .option("--no-write", "Do not write .opencode/generated/agentx-update-status.json")
   .option("--json", "Print JSON report")
   .action(async (opts) => {
@@ -1468,7 +1468,11 @@ function maybeMigrateFromOgb(): void {
   }
 }
 
+function shouldSkipStartupMigration(argv = process.argv.slice(2)): boolean {
+  return argv.some((arg) => arg === "--version" || arg === "-V" || arg === "--help" || arg === "-h" || arg === "help");
+}
+
 if (isCliEntryPoint()) {
-  maybeMigrateFromOgb();
+  if (!shouldSkipStartupMigration()) maybeMigrateFromOgb();
   program.parse();
 }

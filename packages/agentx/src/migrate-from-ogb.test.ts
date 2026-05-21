@@ -191,3 +191,23 @@ test("skips a generated rename when the target file already exists", (t) => {
   assert.equal(fs.readFileSync(path.join(generatedDir, "agentx-doctor.json"), "utf8"), "current");
   assert.equal(fs.existsSync(path.join(generatedDir, "ogb-doctor.json")), true);
 });
+
+test("marker suppresses repeated warnings for legacy project files already replaced by agentx files", (t) => {
+  const { homeDir, projectRoot } = setup(t);
+  const newHome = path.join(homeDir, ".config", "agentx");
+  const opencodeDir = path.join(projectRoot, ".opencode");
+  const generatedDir = path.join(opencodeDir, "generated");
+  fs.mkdirSync(newHome, { recursive: true });
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.writeFileSync(path.join(newHome, ".migrated-from-ogb"), "migrated\n", "utf8");
+  fs.writeFileSync(path.join(opencodeDir, "ogb.config.jsonc"), "legacy", "utf8");
+  fs.writeFileSync(path.join(opencodeDir, "agentx.config.jsonc"), "current", "utf8");
+  fs.writeFileSync(path.join(generatedDir, "ogb-doctor.json"), "legacy", "utf8");
+  fs.writeFileSync(path.join(generatedDir, "agentx-doctor.json"), "current", "utf8");
+
+  const report = migrateFromOgb({ homeDir, projectRoot });
+
+  assert.equal(report.status, "already-done");
+  assert.deepEqual(report.renamedFiles, []);
+  assert.deepEqual(report.warnings, []);
+});

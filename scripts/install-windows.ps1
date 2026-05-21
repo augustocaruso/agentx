@@ -481,6 +481,7 @@ Add-UserPath $PrimaryBinDir
 Ensure-OpenCodeExaEnvironment
 
 $InstallArgs = @("--project", $Project, "install", "--rulesync", $Rulesync, "--windows")
+$InstallArgs += "--force"
 if ($NoUx) {
   $InstallArgs += "--no-ux"
 }
@@ -488,7 +489,6 @@ if ($NoOpenCode) {
   $InstallArgs += "--no-install-opencode"
 }
 if ($Force) {
-  $InstallArgs += "--force"
   if ($RunHomeSync) {
     $InstallArgs += "--reset-global"
   }
@@ -497,15 +497,15 @@ if ($NoSetup -and (-not $RunHomeSync)) {
   $InstallArgs += "--no-check"
 }
 
-Write-Host "Running $ProductName install ritual for $Project..."
+Write-Host "Configuring $ProductName for $Project..."
 & $script:NodeCommand $CliTarget @InstallArgs
 $InstallStatus = $LASTEXITCODE
 if ($InstallStatus -eq 1) {
-  Write-Host "$ProductName install completed with warnings; continuing bootstrap."
+  Write-Host "$ProductName install completed with notes; continuing setup."
 } elseif ($InstallStatus -ne 0) {
   exit $InstallStatus
 }
 
 Write-Host "Done."
 Write-Host "$BinaryName command: $PrimaryBin"
-Write-Host "Try: & `"$PrimaryBin`" --project `"$Project`" check --windows"
+Write-Host "$BinaryName is ready for $Project."

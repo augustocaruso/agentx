@@ -300,6 +300,8 @@ function collectHooks(projectRoot: string, homeDir: string, homeMode: boolean): 
     ["global", path.join(homeDir, ".gemini", "settings.json")],
   ]));
   const hooks: HookInfo[] = [];
+  const autoSyncedHooks = new Set(["BeforeTool", "AfterTool", "BeforeAgent"]);
+  const compatibilityNoteHooks = new Set(["AfterAgent", "Notification"]);
 
   for (const [scope, settingsPath] of settings) {
     if (!exists(settingsPath)) continue;
@@ -307,14 +309,17 @@ function collectHooks(projectRoot: string, homeDir: string, homeMode: boolean): 
     const hookRoot = parsed?.hooks;
     if (!hookRoot || typeof hookRoot !== "object") continue;
     for (const name of Object.keys(hookRoot).sort()) {
-      const autoSynced = name === "BeforeTool" || name === "AfterTool" || name === "BeforeAgent";
+      const autoSynced = autoSyncedHooks.has(name);
+      const compatibilityNote = compatibilityNoteHooks.has(name);
       hooks.push({
         name,
         source: settingsPath,
         scope,
-        status: autoSynced ? "ok" : "needs_review",
+        status: autoSynced ? "ok" : compatibilityNote ? "warning" : "needs_review",
         message: autoSynced
           ? `Synced automatically through the ${DISPLAY} OpenCode plugin`
+          : compatibilityNote
+            ? `Tracked as a Gemini-only lifecycle hook; OpenCode has no equivalent event, so ${DISPLAY} does not block install.`
           : "No compatible OpenCode hook projection yet; keep under manual review",
       });
     }

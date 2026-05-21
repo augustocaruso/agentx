@@ -308,12 +308,12 @@ test("live progress events update the active todo without creating a second repo
   assert.match(model.steps[0].message ?? "", /Startup sync/);
 });
 
-test("live progress model compacts noisy bootstrap output before rendering", () => {
+test("live progress model compacts noisy release install output before rendering", () => {
   const model = applyRitualProgressEvent(createLiveRitualModel("update", projectRoot, [
-    { stepId: "install", label: "Apply the installer." },
+    { stepId: "install", label: "Install the selected agentX release." },
   ], { now: 1000 }), {
     stepId: "install",
-    label: "Apply the installer.",
+    label: "Install the selected agentX release.",
     status: "fail",
     message: noisyBootstrapTail,
   });
@@ -486,7 +486,7 @@ test("install, reset and update models expose user-facing next steps", () => {
     status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: `${DISPLAY} bootstrap completed. Full bridge check was refreshed.`,
+    message: `${DISPLAY} was updated and the bridge check was refreshed.`,
     postUpdate: {
       status: "pass",
       command: ["ogb", "check"],
@@ -505,7 +505,7 @@ test("update final model shows warning when the post-update check warns", () => 
     status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: `${DISPLAY} bootstrap completed. Full bridge check ran with warnings; see agentx check/dashboard for details.`,
+    message: `${DISPLAY} was updated. Full bridge check ran with warnings; see agentx check/dashboard for details.`,
     postUpdate: {
       status: "warn",
       command: ["ogb", "check"],
@@ -559,12 +559,12 @@ test("install and reset final models keep nested check blockers specific", () =>
   assert.match(resetModel.next[0], /agentx validate --plain/);
 });
 
-test("update final model surfaces bootstrap tails and useful retry actions", () => {
+test("update final model surfaces release install tails and useful retry actions", () => {
   const model = ritualViewModel("update", {
     status: "error",
-    command: ["bash", "-lc", "bootstrap"],
+    command: ["bash", "-lc", "install-release"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: "Bootstrap exited with code 1.",
+    message: "agentX release install exited with code 1.",
     stderrTail: "npm is not recognized as a command",
     stdoutTail: "Downloading OGB",
   });
@@ -579,7 +579,7 @@ test("update final model surfaces post-update check summary without raw progress
     status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: `${DISPLAY} bootstrap completed. Post-update check needs attention: Post-update check failed.`,
+    message: `${DISPLAY} was updated. Post-update check needs attention: Post-update check failed.`,
     postUpdate: {
       status: "fail",
       command: ["ogb", "check", "--force"],
@@ -603,12 +603,12 @@ test("update final model surfaces post-update check summary without raw progress
   assert.match(model.files[0], /agentx-pass\.json/);
 });
 
-test("update final model compacts noisy bootstrap tails for the rich UI", () => {
+test("update final model compacts noisy release install tails for the rich UI", () => {
   const model = ritualViewModel("update", {
     status: "error",
-    command: ["bash", "-lc", "bootstrap"],
+    command: ["bash", "-lc", "install-release"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: "Bootstrap exited with code 1.",
+    message: "agentX release install exited with code 1.",
     stdoutTail: noisyBootstrapTail,
   });
 

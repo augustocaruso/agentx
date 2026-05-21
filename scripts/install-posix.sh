@@ -17,7 +17,7 @@ usage() {
   cat <<EOF
 Usage: install-posix.sh [--platform darwin|linux] [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [--no-opencode] [--force] [--keep-legacy] [--rulesync MODE]
 
-Installs the $PRODUCT_NAME CLI, then delegates the install ritual to:
+Installs the $PRODUCT_NAME CLI, then runs the managed setup through:
 $BINARY_NAME install
 
 Defaults:
@@ -436,6 +436,7 @@ ensure_path_on_profiles
 ensure_opencode_exa_env
 
 INSTALL_ARGS=(--project "$PROJECT_DIR" install --rulesync "$RULESYNC_MODE")
+INSTALL_ARGS+=(--force)
 if [[ "$RUN_UX" -eq 0 ]]; then
   INSTALL_ARGS+=(--no-ux)
 fi
@@ -443,7 +444,6 @@ if [[ "$INSTALL_OPENCODE" -eq 0 ]]; then
   INSTALL_ARGS+=(--no-install-opencode)
 fi
 if [[ "$FORCE" -eq 1 ]]; then
-  INSTALL_ARGS+=(--force)
   if [[ "$RUN_HOME_SYNC" -eq 1 ]]; then
     INSTALL_ARGS+=(--reset-global)
   fi
@@ -452,20 +452,20 @@ if [[ "$RUN_SETUP" -eq 0 && "$RUN_HOME_SYNC" -eq 0 ]]; then
   INSTALL_ARGS+=(--no-check)
 fi
 
-echo "Running $PRODUCT_NAME install ritual for $PROJECT_DIR..."
+echo "Configuring $PRODUCT_NAME for $PROJECT_DIR..."
 set +e
 "$PRIMARY_BIN" "${INSTALL_ARGS[@]}"
 INSTALL_STATUS=$?
 set -e
 if [[ "$INSTALL_STATUS" -eq 1 ]]; then
-  echo "$PRODUCT_NAME install completed with warnings; continuing bootstrap."
+  echo "$PRODUCT_NAME install completed with notes; continuing setup."
 elif [[ "$INSTALL_STATUS" -ne 0 ]]; then
   exit "$INSTALL_STATUS"
 fi
 
 echo "Done."
 if command -v "$BINARY_NAME" >/dev/null 2>&1; then
-  echo "Try: $BINARY_NAME --project \"$PROJECT_DIR\" check"
+  echo "$BINARY_NAME is ready for $PROJECT_DIR."
 else
-  echo "Try: $PRIMARY_BIN --project \"$PROJECT_DIR\" check"
+  echo "$BINARY_NAME command path: $PRIMARY_BIN"
 fi

@@ -117,13 +117,13 @@ test("buildSelfUpdateCommand strips accidental quotes from project and prefix pa
   assert.equal(script.includes("-Prefix '\""), false);
 });
 
-test("runSelfUpdate dry-run does not execute the bootstrap", () => {
+test("runSelfUpdate dry-run does not execute the release install command", () => {
   const report = runSelfUpdate({ dryRun: true, projectRoot: "/tmp/ogb" });
 
   assert.equal(report.status, "preview");
   assert.equal(report.plan.intent, "update");
   assert.equal(report.command[0], process.platform === "win32" ? "powershell.exe" : "bash");
-  assert.match(report.message, /Would download/);
+  assert.match(report.message, /Would install/);
 });
 
 test("plain self-update report uses the current product brand", () => {
@@ -153,6 +153,39 @@ test("runSelfUpdate dry-run emits update ritual progress", () => {
     "install:skipped",
     "post-check:skipped",
   ]);
+});
+
+test("runSelfUpdate progress presents a cargo-like update instead of bootstrap internals", () => {
+  const events: RitualProgressEvent[] = [];
+  const report = runSelfUpdate({
+    projectRoot: fs.mkdtempSync(path.join(os.tmpdir(), "agentx-update-cargo-")),
+    stdio: "pipe",
+    onProgress: (event) => events.push(event),
+    runCommand: (spec) => ({
+      ok: true,
+      command: spec.command,
+      args: spec.args ?? [],
+      status: 0,
+      signal: null,
+      stdout: "bootstrap ok",
+      stderr: "",
+    }),
+    runPostUpdateCommand: (spec) => ({
+      ok: true,
+      command: spec.command,
+      args: spec.args ?? [],
+      status: 0,
+      signal: null,
+      stdout: "",
+      stderr: "",
+    }),
+  });
+  const progressText = events.map((event) => `${event.label}\n${event.detail ?? ""}\n${event.message ?? ""}`).join("\n");
+
+  assert.equal(report.status, "applied");
+  assert.doesNotMatch(progressText, /bootstrap/i);
+  assert.doesNotMatch(progressText, /Apply the installer/i);
+  assert.match(progressText, /Install the selected agentX release/i);
 });
 
 test("runSelfUpdate forwards post-update check progress in canonical order", () => {
@@ -333,7 +366,7 @@ test("runSelfUpdate surfaces post-update progress summary instead of raw NDJSON"
   assert.match(report.postUpdate?.stdoutTail ?? "", /Reports:/);
 });
 
-test("runSelfUpdate reports bootstrap stderr tail and specific progress failure", () => {
+test("runSelfUpdate reports release install stderr tail and specific progress failure", () => {
   const events: RitualProgressEvent[] = [];
   const report = runSelfUpdate({
     projectRoot: "/tmp/ogb",
@@ -352,12 +385,12 @@ test("runSelfUpdate reports bootstrap stderr tail and specific progress failure"
 
   assert.equal(report.status, "error");
   assert.equal(report.stderrTail, "npm is not recognized as a command");
-  assert.match(report.message, /Bootstrap exited with code 1/);
+  assert.match(report.message, /release install exited with code 1/);
   const installFailure = events.find((event) => event.stepId === "install" && event.status === "fail");
   assert.match(installFailure?.message ?? "", /npm is not recognized/);
 });
 
-test("runSelfUpdate persists detailed update diagnostics when bootstrap fails", () => {
+test("runSelfUpdate persists detailed update diagnostics when release install fails", () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-update-error-"));
   const report = runSelfUpdate({
     projectRoot,
@@ -379,7 +412,7 @@ test("runSelfUpdate persists detailed update diagnostics when bootstrap fails", 
   assert.equal(saved.restartRequired, false);
   assert.equal(saved.selfUpdate.status, "error");
   assert.equal(saved.selfUpdate.stderrTail, "npm is not recognized as a command");
-  assert.match(saved.message, /Bootstrap exited with code 1/);
+  assert.match(saved.message, /release install exited with code 1/);
   assert.match(saved.selfUpdate.stdoutTail, /Downloading agentX/);
   assert.equal(saved.agentxVersion, AGENTX_VERSION);
   assert.equal(typeof saved.finishedAt, "string");

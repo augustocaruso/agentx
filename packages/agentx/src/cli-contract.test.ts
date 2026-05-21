@@ -77,6 +77,34 @@ function runCli(args: string[]) {
   });
 }
 
+test("agentx --version is side-effect free even when legacy project files exist", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agentx-version-contract-"));
+  const homeDir = path.join(root, "home");
+  const projectRoot = path.join(root, "project");
+  const generatedDir = path.join(projectRoot, ".opencode", "generated");
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.writeFileSync(path.join(generatedDir, "ogb-doctor.json"), "{}", "utf8");
+
+  const tsx = path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+  const cli = path.join(process.cwd(), "src", "cli.ts");
+  const result = spawnSync(process.execPath, [tsx, cli, "--project", projectRoot, "--version"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      HOME: homeDir,
+      USERPROFILE: homeDir,
+      NO_COLOR: "1",
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout.trim(), /^\d+\.\d+\.\d+$/);
+  assert.equal(result.stderr, "");
+  assert.equal(fs.existsSync(path.join(generatedDir, "agentx-doctor.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", ".migrated-from-ogb")), false);
+});
+
 function parseNdjson(stdout: string): any[] {
   return stdout.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
 }

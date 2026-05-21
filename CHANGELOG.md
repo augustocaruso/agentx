@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.8 - Cargo-like install/update cleanup
+
+- Treat Gemini `AfterAgent` and `Notification` hooks as compatibility notes instead of install/check blockers; compatible `BeforeTool`/`AfterTool`/`BeforeAgent` hooks still run through the OpenCode startup plugin.
+- Make update progress present the product workflow (`fetch release -> install release -> verify bridge`) instead of exposing bootstrap internals.
+- Make bootstrap installers delegate to `agentx install --force` so managed repairs happen automatically, while keeping `--reset-global` behind explicit force/home-sync behavior.
+- Keep `agentx --version` and help side-effect free even when legacy project files still exist.
+
 ## 0.2.7 - Cleanup pós-rebrand e bootstrap limpo
 
 - Remove vazamentos públicos de `OGB`/`OpenCode Gemini Bridge` e mensagens PT-BR nas superfícies de UI, diagnóstico, telemetria e arquivos gerados.

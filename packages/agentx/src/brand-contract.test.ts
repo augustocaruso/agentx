@@ -207,11 +207,12 @@ test("release/install surfaces keep raw brand literals only in reference declara
 test("validation release/install summaries interpolate brand constants", () => {
   const validation = readRepoFile("packages", "agentx", "src", "validation.ts");
 
-  assert.match(validation, /delegate the ritual to \$\{BINARY\} install/);
-  assert.match(validation, /delegates the install ritual to the \$\{BINARY\} CLI/);
+  assert.match(validation, /thin installers run \$\{BINARY\} install/);
+  assert.match(validation, /runs managed setup through the \$\{BINARY\} CLI/);
   assert.doesNotMatch(validation, /agentx CLI/);
   assert.doesNotMatch(validation, /ogb CLI/);
   assert.doesNotMatch(validation, /agentX installer/);
+  assert.doesNotMatch(validation, /install ritual/);
 });
 
 test("CLI setup command help interpolates the binary brand", () => {

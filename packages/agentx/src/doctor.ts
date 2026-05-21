@@ -192,6 +192,7 @@ function collectWarnings(inv: Inventory, projectRoot: string, homeDir: string): 
   for (const command of inv.commands) if (command.status === "needs_review") pushWarning(`Command needs review: ${command.name}`);
   for (const hook of inv.hooks) {
     if (hook.status === "ok") continue;
+    if (hook.status === "warning") continue;
     if (!hookIsTrusted(hook, projectRoot, homeDir)) pushWarning(`Hook needs review: ${hook.name} - ${hook.message}`);
   }
   for (const extension of inv.extensions) pushWarning(`Extension needs review: ${extension.name} - ${extension.message}`);

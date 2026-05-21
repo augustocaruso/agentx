@@ -283,18 +283,18 @@ export const UPDATE_PROGRESS_STEPS = {
   },
   download: {
     stepId: "download",
-    label: "Download the official release pack.",
-    detail: "Runs the platform bootstrap script for this machine.",
+    label: "Fetch the selected agentX release.",
+    detail: "Downloads the release pack for this platform.",
   },
   install: {
     stepId: "install",
-    label: "Apply the installer.",
-    detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
+    label: "Install the selected agentX release.",
+    detail: `Replaces the local ${DISPLAY} CLI and applies managed repairs.`,
   },
   postCheck: {
     stepId: "post-check",
-    label: "Run the full post-update check.",
-    detail: "Refreshes setup, sync, doctor, validation, security, and dashboard.",
+    label: "Verify the updated bridge.",
+    detail: "Runs one focused repair/check pass after the CLI update.",
   },
 } as const satisfies Record<string, RitualProgressDefinition>;
 

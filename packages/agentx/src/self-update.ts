@@ -540,6 +540,22 @@ export function buildSelfUpdateCommand(options: SelfUpdateOptions = {}, platform
 }
 
 export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport {
+  const fetchStep = {
+    stepId: "download",
+    label: "Fetch the selected agentX release.",
+    detail: "Downloads the release pack for this platform.",
+  } as const;
+  const installStep = {
+    stepId: "install",
+    label: "Install the selected agentX release.",
+    detail: `Replaces the local ${DISPLAY} CLI and applies managed repairs.`,
+  } as const;
+  const verifyStep = {
+    stepId: "post-check",
+    label: "Verify the updated bridge.",
+    detail: "Runs one focused repair/check pass after the CLI update.",
+  } as const;
+
   emitRitualProgress(options.onProgress, {
     stepId: "resolve",
     label: "Resolve the requested release.",
@@ -557,24 +573,18 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
   });
   if (options.dryRun) {
     emitRitualProgress(options.onProgress, {
-      stepId: "download",
-      label: "Download the official release pack.",
-      detail: "Runs the platform bootstrap script for this machine.",
+      ...fetchStep,
       status: "skipped",
       message: "Dry-run preview; download skipped.",
     });
     emitRitualProgress(options.onProgress, {
-      stepId: "install",
-      label: "Apply the installer.",
-      detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
+      ...installStep,
       status: "skipped",
       message: "Dry-run preview; install skipped.",
     });
     const postUpdate = runPostUpdateRitual({ ...options, dryRun: true });
     emitRitualProgress(options.onProgress, {
-      stepId: "post-check",
-      label: "Run the full post-update check.",
-      detail: "Refreshes setup, sync, doctor, validation, security, and dashboard.",
+      ...verifyStep,
       status: progressStatusFromOutcome(postUpdate.status),
       message: postUpdate.message,
     });
@@ -582,24 +592,20 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       status: "preview",
       command,
       plan,
-      message: `Would download the selected ${DISPLAY} release and rerun the official bootstrap installer.`,
+      message: `Would install the selected ${DISPLAY} release and run one verification pass.`,
       postUpdate,
     };
   }
 
   emitRitualProgress(options.onProgress, {
-    stepId: "download",
-    label: "Download the official release pack.",
-    detail: "Runs the platform bootstrap script for this machine.",
+    ...fetchStep,
     status: "running",
-    message: "Bootstrap is running.",
+    message: "Fetching release assets.",
   });
   emitRitualProgress(options.onProgress, {
-    stepId: "install",
-    label: "Apply the installer.",
-    detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
+    ...installStep,
     status: "running",
-    message: "Waiting for bootstrap to finish.",
+    message: "Installing CLI and managed profile repairs.",
   });
   const runCommand = options.runCommand ?? runNativeCommand;
   const result = runCommand({
@@ -611,16 +617,12 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
 
   if (result.error) {
     emitRitualProgress(options.onProgress, {
-      stepId: "download",
-      label: "Download the official release pack.",
-      detail: "Runs the platform bootstrap script for this machine.",
+      ...fetchStep,
       status: "fail",
       message: result.error,
     });
     emitRitualProgress(options.onProgress, {
-      stepId: "install",
-      label: "Apply the installer.",
-      detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
+      ...installStep,
       status: "fail",
       message: result.error,
     });
@@ -628,73 +630,59 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       status: "error",
       command,
       plan,
-      message: `Could not start the ${DISPLAY} bootstrap command: ${result.error}`,
+      message: `Could not start the ${DISPLAY} release install command: ${result.error}`,
       stdoutTail: outputTail(result.stdout),
       stderrTail: outputTail(result.stderr),
     });
   }
   if (result.status !== 0) {
-    const message = `Bootstrap exited with code ${result.status ?? "unknown"}.`;
+    const message = `${DISPLAY} release install exited with code ${result.status ?? "unknown"}.`;
     const stdoutTail = outputTail(result.stdout);
     const stderrTail = outputTail(result.stderr);
     emitRitualProgress(options.onProgress, {
-      stepId: "download",
-      label: "Download the official release pack.",
-      detail: "Runs the platform bootstrap script for this machine.",
+      ...fetchStep,
       status: "fail",
       message,
     });
     emitRitualProgress(options.onProgress, {
-      stepId: "install",
-      label: "Apply the installer.",
-      detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
+      ...installStep,
       status: "fail",
       message: stderrTail ?? stdoutTail ?? message,
     });
     return persistSelfUpdateError(options, { status: "error", command, plan, message, stdoutTail, stderrTail });
   }
   emitRitualProgress(options.onProgress, {
-    stepId: "download",
-    label: "Download the official release pack.",
-    detail: "Runs the platform bootstrap script for this machine.",
+    ...fetchStep,
     status: "pass",
-    message: "Bootstrap completed.",
+    message: "Release assets fetched.",
   });
   emitRitualProgress(options.onProgress, {
-    stepId: "install",
-    label: "Apply the installer.",
-    detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
+    ...installStep,
     status: "pass",
-    message: "Installer completed.",
+    message: `${DISPLAY} CLI installed.`,
   });
   let successStatus: AutoUpdateReport | undefined;
   try {
     if (options.writeStatus !== false) successStatus = writeSelfUpdateSuccessStatus(options);
   } catch {
-    // Updating dashboard status must never turn a successful bootstrap into a failed self-update.
+    // Updating dashboard status must never turn a successful release install into a failed self-update.
   }
   if (options.postUpdate === false) {
     emitRitualProgress(options.onProgress, {
-      stepId: "post-check",
-      label: "Run the full post-update check.",
-      detail: "Refreshes setup, sync, doctor, validation, security, and dashboard.",
+      ...verifyStep,
       status: "skipped",
       message: "Post-update check skipped because setup was disabled.",
     });
   } else {
     emitRitualProgress(options.onProgress, {
-      stepId: "post-check",
-      label: "Run the full post-update check.",
-      detail: "Refreshes setup, sync, doctor, validation, security, and dashboard.",
+      ...verifyStep,
       status: "running",
     });
   }
   const postUpdate = options.postUpdate === false ? undefined : runPostUpdateRitual(options);
   if (postUpdate) {
     emitRitualProgress(options.onProgress, {
-      stepId: "post-check",
-      label: "Run the full post-update check.",
-      detail: "Refreshes setup, sync, doctor, validation, security, and dashboard.",
+      ...verifyStep,
       status: progressStatusFromOutcome(postUpdate.status),
       message: postUpdate.message,
     });
@@ -703,7 +691,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     try {
       writeUpdateReport(options.projectRoot, { ...successStatus, postUpdate });
     } catch {
-      // Updating dashboard status must never turn a successful bootstrap into a failed self-update.
+      // Updating dashboard status must never turn a successful release install into a failed self-update.
     }
   }
   return {
@@ -712,12 +700,12 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     plan,
     postUpdate,
     message: postUpdate?.status === "fail" || postUpdate?.status === "error"
-      ? `${DISPLAY} bootstrap completed. Post-update check needs attention: ${postUpdate.message}`
+      ? `${DISPLAY} was updated. Post-update check needs attention: ${postUpdate.message}`
       : postUpdate?.status === "warn"
-      ? `${DISPLAY} bootstrap completed. Full bridge check ran with warnings; see ${BINARY} check/dashboard for details.`
+      ? `${DISPLAY} was updated. Full bridge check ran with warnings; see ${BINARY} check/dashboard for details.`
       : postUpdate?.status === "skipped"
-        ? `${DISPLAY} bootstrap completed. Post-update check was skipped because setup was disabled.`
-        : `${DISPLAY} bootstrap completed. Full bridge check was refreshed.`,
+        ? `${DISPLAY} was updated. Post-update check was skipped because setup was disabled.`
+        : `${DISPLAY} was updated and the bridge check was refreshed.`,
   };
 }
 

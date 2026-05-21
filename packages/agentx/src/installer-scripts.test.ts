@@ -14,12 +14,17 @@ function assertScriptExists(name: string): void {
   assert.equal(fs.existsSync(path.join(repoRoot, "scripts", name)), true, `Expected scripts/${name} to exist.`);
 }
 
-test("posix installer contract delegates the ritual to agentx install", () => {
+test("posix installer contract runs managed setup through agentx install", () => {
   assertScriptExists("install-posix.sh");
   const text = script("install-posix.sh");
 
   assert.match(text, /INSTALL_ARGS=\(--project "\$PROJECT_DIR" install --rulesync "\$RULESYNC_MODE"\)/);
-  assert.match(text, /Running \$PRODUCT_NAME install ritual/);
+  assert.match(text, /INSTALL_ARGS\+=\(--force\)/);
+  assert.ok(text.indexOf("INSTALL_ARGS+=(--force)") < text.indexOf('if [[ "$RUN_UX" -eq 0 ]]'));
+  assert.doesNotMatch(text.match(/if \[\[ "\$FORCE"[\s\S]*?\nfi/)?.[0] ?? "", /INSTALL_ARGS\+=\(--force\)/);
+  assert.match(text, /Configuring \$PRODUCT_NAME for/);
+  assert.match(text, /\$PRODUCT_NAME install completed with notes; continuing setup/);
+  assert.doesNotMatch(text, /install ritual|continuing bootstrap/);
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-check/);
@@ -127,12 +132,17 @@ test("installers fail early when Node is older than 22", () => {
   assert.match(windows, /Node\.js >=22 is required before installing \$ProductName/);
 });
 
-test("windows installer contract delegates the ritual to agentx install", () => {
+test("windows installer contract runs managed setup through agentx install", () => {
   const text = script("install-windows.ps1");
 
   assert.match(text, /\$script:NodeCommand = Require-Node22/);
   assert.match(text, /\$InstallArgs = @\("--project", \$Project, "install", "--rulesync", \$Rulesync, "--windows"\)/);
-  assert.match(text, /Running \$ProductName install ritual/);
+  assert.match(text, /\$InstallArgs \+= "--force"/);
+  assert.ok(text.indexOf('$InstallArgs += "--force"') < text.indexOf("if ($NoUx)"));
+  assert.doesNotMatch(text.match(/if \(\$Force\)[\s\S]*?\n\}/)?.[0] ?? "", /\$InstallArgs \+= "--force"/);
+  assert.match(text, /Configuring \$ProductName for/);
+  assert.match(text, /\$ProductName install completed with notes; continuing setup/);
+  assert.doesNotMatch(text, /install ritual|continuing bootstrap/);
   assert.match(text, /& \$script:NodeCommand \$CliTarget @InstallArgs/);
   assert.match(
     text,

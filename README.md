@@ -108,7 +108,7 @@ node dist/cli.js --project /caminho/do/projeto setup-opencode
 ```
 
 Instalação rápida por GitHub Release. Se existir uma instalação antiga do
-`ogb`, o bootstrap remove o binário/pacote legado antes de instalar `agentx`;
+`ogb`, o instalador remove o binário/pacote legado antes de instalar `agentx`;
 os dados locais são preservados e migrados no primeiro run.
 
 ```bash
@@ -137,22 +137,22 @@ agentx --project "$PWD" install --force
 ```
 
 O `install` e o wrapper publico para reinstalar perfil OpenCode, plugin de
-startup, comandos globais/projeto e rodar `agentx check` no final. O bootstrap
-externo continua sendo o caminho para instalar o binario do zero.
+startup, comandos globais/projeto e rodar a verificação final. O comando de
+GitHub Release continua sendo o caminho para instalar o binario do zero.
 
 Update depois que o `agentx` ja esta instalado:
 
 ```bash
 agentx --project "$PWD" update
 agentx --project "$PWD" update --dry-run
-agentx --project "$PWD" update --release v0.2.7
+agentx --project "$PWD" update --release v0.2.8
 agentx --project "$PWD" check-update
 agentx --project "$PWD" auto-update
 ```
 
-O `update` baixa a release escolhida, roda o bootstrap oficial, reaplica
-o perfil agentX/OpenCode e em seguida roda `agentx check --force` para regenerar sync,
-doctor, validation, security-check e dashboard. Ele nao copia secrets, sessoes
+O `update` instala a release escolhida, reaplica o perfil agentX/OpenCode e em
+seguida roda uma verificação reparadora para regenerar sync, doctor, validation,
+security-check e dashboard. Ele nao copia secrets, sessoes
 ou conteudo unico do Gemini CLI da pessoa; esse conteudo continua sendo lido
 localmente pelo sync.
 O `auto-update` compara a versao local com a ultima GitHub Release, aplica a

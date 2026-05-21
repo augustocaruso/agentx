@@ -214,7 +214,7 @@ function postUpdateNext(report: SelfUpdateReport): string[] {
     ...(report.postUpdate?.summary?.next ?? []),
     ...(report.postUpdate?.status === "fail" || report.postUpdate?.status === "error"
       ? ["Run `agentx check --plain --force` to inspect the post-update failure directly.", "Run `agentx dashboard --plain` for the last persisted bridge state."]
-      : ["Run `agentx update --plain` so the bootstrap log is printed without the rich UI.", "Check Node/npm/PowerShell PATH and network access, then retry the same release."]),
+      : ["Run `agentx update --plain` so the release install log is printed without the rich UI.", "Check Node/npm/PowerShell PATH and network access, then retry the same release."]),
   ], 4);
 }
 
@@ -275,7 +275,7 @@ function installModel(report: InstallReport): RitualViewModel {
       ? checkNext(report.check, ["Run `agentx dashboard --plain` for the persisted bridge state.", "Run `agentx check --plain` for the classic report."])
       : report.outcome === "preview"
         ? [`Run ${BINARY} install without --dry-run to apply this plan.`]
-        : ["OpenCode profile is ready.", `Run ${BINARY} check any time you want the full ritual.`],
+        : ["OpenCode profile is ready.", "Restart OpenCode to load updated plugin/sidebar code."],
     files: report.check ? [report.check.files.pass, report.check.files.dashboard] : [],
   };
 }
@@ -357,11 +357,11 @@ function updateModel(report: SelfUpdateReport): RitualViewModel {
     : toneFromOutcome(report.status);
   const releaseFlagIndex = report.plan.delegation.args.indexOf("--release");
   const release = releaseFlagIndex >= 0 ? report.plan.delegation.args[releaseFlagIndex + 1] : undefined;
-  const bootstrapDetail = report.status === "preview"
-    ? "Release pack download and installer would run."
+  const installDetail = report.status === "preview"
+    ? "Release install would run."
     : report.status === "applied"
-      ? "Release pack installed."
-      : "Release pack install did not complete.";
+      ? "Release installed."
+      : "Release install did not complete.";
   return {
     title: titleForKind("update"),
     subtitle: report.message,
@@ -373,7 +373,7 @@ function updateModel(report: SelfUpdateReport): RitualViewModel {
       { label: "mode", value: report.status === "preview" ? "dry-run" : "apply" },
     ],
     steps: [
-      { label: "download + bootstrap", status: tone, detail: bootstrapDetail },
+      { label: "release install", status: tone, detail: installDetail },
       ...(report.postUpdate ? [{ label: "post-update check", status: postUpdateTone, detail: report.postUpdate.message }] : []),
     ],
     callouts: report.status === "error" || postUpdateNeedsAttention ? postUpdateCallouts(report) : [],

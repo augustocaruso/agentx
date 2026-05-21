@@ -548,7 +548,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["bootstrap-windows.ps1 keep legacy opt-in", scripts.windowsBootstrap, "[switch]$KeepLegacy"],
     ["install-posix.sh repairs blocked OpenCode config dir", scripts.posixInstaller, "repair_directory_blocker \"$HOME/.config/opencode\" \"posix-installer\""],
     ["install-posix.sh delegates install", scripts.posixInstaller, "install --rulesync"],
-    ["install-posix.sh ritual message", scripts.posixInstaller, "Running $PRODUCT_NAME install ritual"],
+    ["install-posix.sh setup message", scripts.posixInstaller, "Configuring $PRODUCT_NAME for"],
     ["install-posix.sh no ux flag", scripts.posixInstaller, "--no-ux"],
     ["install-posix.sh no opencode flag", scripts.posixInstaller, "--no-install-opencode"],
     ["install-posix.sh no check flag", scripts.posixInstaller, "--no-check"],
@@ -580,7 +580,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["install-windows.ps1 repairs blocked OpenCode config dir", scripts.windowsInstaller, "Repair-DirectoryBlocker (Join-Path $HOME \".config\\opencode\") \"windows-installer\""],
     ["install-windows.ps1 clears read-only OpenCode config dir", scripts.windowsInstaller, "Repair-ReadOnlyDirectory (Join-Path $HOME \".config\\opencode\") \"windows-installer\""],
     ["install-windows.ps1 delegates install", scripts.windowsInstaller, "\"install\", \"--rulesync\""],
-    ["install-windows.ps1 ritual message", scripts.windowsInstaller, "Running $ProductName install ritual"],
+    ["install-windows.ps1 setup message", scripts.windowsInstaller, "Configuring $ProductName for"],
     ["install-windows.ps1 no ux flag", scripts.windowsInstaller, "--no-ux"],
     ["install-windows.ps1 no opencode flag", scripts.windowsInstaller, "--no-install-opencode"],
     ["install-windows.ps1 no check flag", scripts.windowsInstaller, "--no-check"],
@@ -601,7 +601,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     status: missing.length ? "fail" : "pass",
     message: missing.length
       ? `Missing expected release/bootstrap token(s): ${missing.join(", ")}.`
-      : `Bootstrap scripts for macOS, Linux, fish, and Windows download the release pack, set Exa websearch env, and thin installers delegate the ritual to ${BINARY} install with the expected platform flags.`,
+      : `Release scripts for macOS, Linux, fish, and Windows download the pack, set Exa websearch env, and thin installers run ${BINARY} install with the expected platform flags.`,
     details: { repoRoot },
   });
 }
@@ -658,7 +658,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "SetEnvironmentVariable(\"Path\"",
     "SetEnvironmentVariable(\"OPENCODE_ENABLE_EXA\"",
     "Ensure-OpenCodeExaEnvironment",
-    "Running $ProductName install ritual",
+    "Configuring $ProductName for",
     "Verified $BinaryName",
     "$BinaryName command:",
   ];
@@ -678,7 +678,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
       ? `Missing expected installer token(s): ${missing.join(", ")}.`
       : forbidden.length
         ? `Forbidden unsafe installer token(s): ${forbidden.join(", ")}.`
-        : `PowerShell installer has safe native command capture, build, install, Exa websearch env, and delegates the install ritual to the ${BINARY} CLI.`,
+        : `PowerShell installer has safe native command capture, build, install, Exa websearch env, and runs managed setup through the ${BINARY} CLI.`,
   });
 }
 

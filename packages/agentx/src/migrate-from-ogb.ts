@@ -11,10 +11,6 @@ const LEGACY_GENERATED_PREFIX = "ogb-";
 const NEW_GENERATED_PREFIX = "agentx-";
 const LEGACY_SYNC_STATE_FILE = "ogb-sync-state.json";
 const NEW_SYNC_STATE_FILE = "agentx-sync-state.json";
-const LEGACY_PROJECT_MANAGED_RELPATHS = [
-  ".opencode/plugins/ogb-startup-sync.js",
-  ".opencode/tui-plugins/ogb-sidebar.js",
-] as const;
 
 export interface MigrateFromOgbInput {
   projectRoot: string;
@@ -96,9 +92,6 @@ function detectLegacyProjectArtifacts(legacy: LegacyPaths): boolean {
     if (fs.existsSync(file)) return true;
   }
   if (fs.existsSync(path.join(legacy.projectGenerated, LEGACY_SYNC_STATE_FILE))) return true;
-  for (const relPath of LEGACY_PROJECT_MANAGED_RELPATHS) {
-    if (fs.existsSync(path.join(path.dirname(legacy.projectGenerated), "..", ...relPath.split("/")))) return true;
-  }
   return hasLegacyPrefixedEntry(legacy.projectGenerated);
 }
 
@@ -112,15 +105,16 @@ function moveOrCopy(from: string, to: string): void {
   }
 }
 
-function renameLegacyPrefixedFiles(dir: string, renamed: RenamedEntry[], warnings: string[]): void {
+function renameLegacyPrefixedFiles(dir: string, renamed: RenamedEntry[], warnings: string[], options: { warnOnCollision?: boolean } = {}): void {
   if (!isDir(dir)) return;
+  const warnOnCollision = options.warnOnCollision ?? true;
   for (const name of fs.readdirSync(dir)) {
     if (!name.startsWith(LEGACY_GENERATED_PREFIX)) continue;
     const target = `${NEW_GENERATED_PREFIX}${name.slice(LEGACY_GENERATED_PREFIX.length)}`;
     const fromPath = path.join(dir, name);
     const toPath = path.join(dir, target);
     if (fs.existsSync(toPath)) {
-      warnings.push(`skipped ${fromPath} (target ${toPath} already exists)`);
+      if (warnOnCollision) warnings.push(`skipped ${fromPath} (target ${toPath} already exists)`);
       continue;
     }
     fs.renameSync(fromPath, toPath);
@@ -243,7 +237,7 @@ export function migrateFromOgb(input: MigrateFromOgbInput): MigrationReport {
     const to = next.projectConfig[i];
     if (!fs.existsSync(from)) continue;
     if (fs.existsSync(to)) {
-      warnings.push(`skipped ${from} (target ${to} already exists)`);
+      if (!markerExists) warnings.push(`skipped ${from} (target ${to} already exists)`);
       continue;
     }
     fs.renameSync(from, to);
@@ -251,7 +245,7 @@ export function migrateFromOgb(input: MigrateFromOgbInput): MigrationReport {
   }
 
   const mergedProjectState = mergeLegacyProjectSyncState(legacy.projectGenerated, warnings);
-  renameLegacyPrefixedFiles(legacy.projectGenerated, renamedFiles, warnings);
+  renameLegacyPrefixedFiles(legacy.projectGenerated, renamedFiles, warnings, { warnOnCollision: !markerExists });
 
   fs.mkdirSync(next.homeRoot, { recursive: true });
   fs.writeFileSync(marker, `migrated ${new Date().toISOString()}\n`, "utf8");

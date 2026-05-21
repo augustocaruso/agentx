@@ -44,7 +44,7 @@ test("plain help catalog and command details include descriptions and examples",
   assert.match(catalog, /Recommended/);
   assert.match(catalog, /install\s+Install or reinstall/);
   assert.match(catalog, /Use `agentx help <command>`/);
-  assert.match(check, /Run the complete bridge health ritual/);
+  assert.match(check, /Run the complete bridge health check/);
   assert.match(check, /Usage: agentx check/);
   assert.match(check, /Examples/);
   assert.match(check, /Actions/);
