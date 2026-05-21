@@ -568,13 +568,13 @@ test("formatPassReport prints a compact human report", () => {
 
   const text = formatPassReport(report);
 
-  assert.match(text, /^OGB check WARN/m);
-  assert.match(text, /^Duration  1\.2s/m);
-  assert.match(text, /Checks\n  OK    setup-opencode/);
+  assert.match(text, /^agentX check ⚠/m);
+  assert.match(text, /Duration\s+1\.2s/);
+  assert.match(text, /Checks\n {2}✓ setup-opencode/);
   assert.match(text, /rulesync: applied, 42ms; mcp 12ms, commands error 30ms/);
   assert.match(text, /Needs Attention/);
-  assert.match(text, /Auto fallback esta ligado, mas o plugin externo nao carregou\./);
-  assert.match(text, /Notes\n- Antigravity skill skipped: defuddle/);
-  assert.match(text, /report:    \.opencode[/\\]generated[/\\]agentx-pass\.json/);
+  assert.match(text, /Auto fallback is enabled but the external plugin did not load\./);
+  assert.match(text, /Notes\n {2}• Antigravity skill skipped: defuddle/);
+  assert.match(text, /report:\s+\.opencode[/\\]generated[/\\]agentx-pass\.json/);
   assert.doesNotMatch(text, /Automacao|Pendencias|Relatorio/);
 });

@@ -132,12 +132,12 @@ test("runDashboard combines generated reports into JSON and Markdown", () => {
   assert.equal(report.limits.providers, 2);
   assert.equal(fs.existsSync(paths.dashboardPath), true);
   assert.equal(fs.existsSync(paths.telemetryStatusPath), true);
-  assert.match(markdown, /OpenCode Gemini Bridge Dashboard/);
+  assert.match(markdown, /agentX Dashboard/);
   assert.match(markdown, /Startup sync: PASS/);
   assert.match(markdown, /Telemetry:/);
   assert.match(markdown, /Usage limits: OK - 2 provider/);
-  assert.match(markdown, /OGB update: CURRENT/);
-  assert.match(markdown, /Model routing: 1 configured agent\(s\), OGB active, 1 decision/);
+  assert.match(markdown, /agentX update: CURRENT/);
+  assert.match(markdown, /Model routing: 1 configured agent\(s\), agentX active, 1 decision/);
   assert.match(markdown, /Runtime fallback: plugin active, config present, 1 agent chain/);
   assert.match(markdown, /Model resolution: All referenced routed\/fallback models/);
   assert.match(markdown, /2 MCPs/);
@@ -211,7 +211,7 @@ test("runDashboard keeps a clean bridge passing when only OpenCode restart is pe
   assert.equal(report.outcome, "pass");
   assert.equal(report.update.status, "updated");
   assert.equal(report.update.restartRequired, true);
-  assert.match(markdown, /OGB update: UPDATED v0\.0\.39 - restart OpenCode/);
+  assert.match(markdown, /agentX update: UPDATED v0\.0\.39 - restart OpenCode/);
   assert.ok(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")));
   assert.equal(report.warnings.some((warning) => warning.includes("reinicie o OpenCode")), false);
 });
@@ -256,7 +256,7 @@ test("runDashboard consumes restart-required update after current-version pass r
   assert.equal(saved.status, "current");
   assert.equal(saved.restartRequired, false);
   assert.match(saved.message, /check pos-update foi regenerado/);
-  assert.match(markdown, /OGB update: CURRENT v/);
+  assert.match(markdown, /agentX update: CURRENT v/);
   assert.equal(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")), false);
 });
 
@@ -651,7 +651,7 @@ test("runDashboard does not fail home/global dashboard from stale project-mode r
   assert.equal(report.warnings.some((warning) => warning.includes("Auto-update do OGB falhou")), false);
   assert.match(markdown, /Validation: WARN - validation foi gerado pelo ogb 0\.0\.53/);
   assert.match(markdown, /Security: WARN - security foi gerado pelo ogb 0\.0\.53/);
-  assert.match(markdown, /OGB update: UNKNOWN/);
+  assert.match(markdown, /agentX update: UNKNOWN/);
   assert.doesNotMatch(markdown, /Generated config marker: Missing ogb generated config marker/);
   assert.doesNotMatch(markdown, /Missing \.opencode\/agents\/YOLO\.md/);
 });

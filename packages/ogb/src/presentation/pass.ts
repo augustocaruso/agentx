@@ -1,14 +1,16 @@
 import path from "node:path";
 import type { PassBlocker, PassReport, PassStep, PassSyncSummary } from "../pass.js";
+import { formatDuration, kvRow, sectionHeader, statusRow } from "./format.js";
+import { ICONS, INDENT, type Tone } from "./theme.js";
 
-function statusText(status: PassStep["status"] | PassReport["outcome"] | PassBlocker["severity"]): string {
-  if (status === "pass") return "OK";
-  if (status === "fail") return "FAIL";
-  return "WARN";
+function toneFromStep(status: PassStep["status"] | PassReport["outcome"] | PassBlocker["severity"]): Tone {
+  if (status === "pass") return "pass";
+  if (status === "fail") return "fail";
+  return "warn";
 }
 
-function stepStatusDetail(step: PassStep): string {
-  return step.detail ? `  ${step.detail}` : "";
+function stepDetail(step: PassStep): string | undefined {
+  return step.detail ? step.detail : undefined;
 }
 
 function relativeReportPath(projectRoot: string, filePath: string): string {
@@ -19,11 +21,6 @@ function relativeReportPath(projectRoot: string, filePath: string): string {
 
 function plural(count: number, singular: string, pluralText = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralText}`;
-}
-
-function formatDuration(durationMs: number): string {
-  if (durationMs < 1000) return `${durationMs}ms`;
-  return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
 }
 
 function rulesyncTimingDetail(sync: PassSyncSummary): string {
@@ -42,69 +39,64 @@ function syncSummaryLine(sync: PassSyncSummary): string {
   const parts = [
     plural(sync.builtInAgents, "agent"),
     plural(sync.extensionAgents, "subagent"),
-    plural(sync.builtInCommands, "comando"),
-    plural(sync.extensionCommands, "comando de extensao", "comandos de extensao"),
+    plural(sync.builtInCommands, "command"),
+    plural(sync.extensionCommands, "extension command"),
     plural(sync.skills, "skill"),
   ].filter((item) => !item.startsWith("0 "));
-  return parts.length > 0 ? parts.join(", ") : "sem arquivos projetados";
+  return parts.length > 0 ? parts.join(", ") : "no projected artifacts";
 }
 
 function friendlyBlockerMessage(item: PassBlocker): string {
   if (/opencode-auto-fallback.*plugin is not active/i.test(item.message)) {
-    return "Auto fallback esta ligado, mas o plugin externo nao carregou.";
+    return "Auto fallback is enabled but the external plugin did not load.";
   }
-  if (item.source === "validation" && item.severity === "warn") return "Validation encontrou avisos.";
-  if (item.source === "security" && item.severity === "warn") return "Security-check encontrou avisos.";
-  if (item.source === "dashboard" && item.severity === "warn") return "Dashboard herdou avisos dos checks anteriores.";
-  if (item.source === "patch" && item.severity === "warn") return "Um patch OGB precisa de revisao.";
+  if (item.source === "validation" && item.severity === "warn") return "Validation surfaced warnings.";
+  if (item.source === "security" && item.severity === "warn") return "Security check surfaced warnings.";
+  if (item.source === "dashboard" && item.severity === "warn") return "Dashboard inherited warnings from earlier checks.";
+  if (item.source === "patch" && item.severity === "warn") return "An agentX patch needs review.";
   return item.message;
 }
 
 export function formatPassReport(report: PassReport): string {
-  const lines = [
-    `OGB check ${statusText(report.outcome)}`,
-    `Project   ${report.projectRoot}`,
-    ...(report.timing ? [`Duration  ${formatDuration(report.timing.durationMs)}`] : []),
-    "",
-    "Checks",
-    ...report.steps.map((step) => `  ${statusText(step.status).padEnd(5)} ${step.name}${stepStatusDetail(step)}`),
-  ];
+  const lines: string[] = [];
+  lines.push(`agentX check ${ICONS[toneFromStep(report.outcome)]}`);
+  lines.push(kvRow("Project", report.projectRoot));
+  if (report.timing) lines.push(kvRow("Duration", formatDuration(report.timing.durationMs)));
+
+  lines.push(sectionHeader("Checks"));
+  for (const step of report.steps) {
+    lines.push(statusRow(toneFromStep(step.status), step.name, stepDetail(step)));
+  }
 
   if (report.sync) {
-    lines.push(
-      "",
-      "Sync",
-      `  ${syncSummaryLine(report.sync)}`,
-      `  rulesync: ${report.sync.rulesyncStatus}${rulesyncTimingDetail(report.sync)}`,
-    );
+    lines.push(sectionHeader("Sync"));
+    lines.push(`${INDENT}${syncSummaryLine(report.sync)}`);
+    lines.push(`${INDENT}rulesync: ${report.sync.rulesyncStatus}${rulesyncTimingDetail(report.sync)}`);
   }
 
   if ((report.sync?.notes.length ?? 0) > 0) {
-    lines.push("", "Notes");
-    for (const note of report.sync!.notes) lines.push(`- ${note}`);
+    lines.push(sectionHeader("Notes"));
+    for (const note of report.sync!.notes) lines.push(`${INDENT}${ICONS.neutral} ${note}`);
   }
 
   if (report.acceptedHooks.length > 0) {
-    lines.push("", "Trusted Hooks");
-    for (const hook of report.acceptedHooks) lines.push(`- ${hook}`);
+    lines.push(sectionHeader("Trusted Hooks"));
+    for (const hook of report.acceptedHooks) lines.push(`${INDENT}${ICONS.neutral} ${hook}`);
   }
 
   if (report.blockers.length > 0) {
-    lines.push("", "Needs Attention");
+    lines.push(sectionHeader("Needs Attention"));
     for (const item of report.blockers) {
-      lines.push(`  ${statusText(item.severity).padEnd(5)} ${item.source}: ${friendlyBlockerMessage(item)}`);
-      lines.push(`        fix: ${item.action}`);
+      lines.push(statusRow(toneFromStep(item.severity), `${item.source}: ${friendlyBlockerMessage(item)}`));
+      lines.push(`${INDENT}${INDENT}fix: ${item.action}`);
     }
   } else {
-    lines.push("", "No pending fixes.");
+    lines.push(sectionHeader("No pending fixes."));
   }
 
-  lines.push(
-    "",
-    "Files",
-    `  report:    ${relativeReportPath(report.projectRoot, report.files.pass)}`,
-    `  dashboard: ${relativeReportPath(report.projectRoot, report.files.dashboard)}`,
-  );
+  lines.push(sectionHeader("Files"));
+  lines.push(kvRow("report:", relativeReportPath(report.projectRoot, report.files.pass)));
+  lines.push(kvRow("dashboard:", relativeReportPath(report.projectRoot, report.files.dashboard)));
   return `${lines.join("\n")}\n`;
 }
 
