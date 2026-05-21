@@ -855,6 +855,21 @@ function git(context: PatchContext, args: string[], timeoutMs = 60_000): NativeC
   });
 }
 
+function comparableResolvedPath(context: PatchContext, value: string): string {
+  const resolved = path.resolve(value.trim());
+  const real = fs.existsSync(resolved) ? fs.realpathSync.native(resolved) : resolved;
+  const normalized = real.replaceAll("\\", "/");
+  return context.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function standaloneGitWorktreeRoot(context: PatchContext, extensionPath: string): string | undefined {
+  const topLevel = git(context, ["-C", extensionPath, "rev-parse", "--show-toplevel"]);
+  if (commandFailed(topLevel)) return undefined;
+  const root = topLevel.stdout.trim();
+  if (!root) return undefined;
+  return comparableResolvedPath(context, root) === comparableResolvedPath(context, extensionPath) ? root : undefined;
+}
+
 function normalizeGitStatusPath(value: string): string {
   return value.trim().replace(/^"|"$/g, "").replaceAll("\\", "/");
 }
@@ -888,6 +903,10 @@ function parseGitStatus(stdout: string): { changed: string[]; untracked: string[
     }
   }
   return { changed, untracked, ignored };
+}
+
+function emptyGitStatus(): { changed: string[]; untracked: string[]; ignored: string[] } {
+  return { changed: [], untracked: [], ignored: [] };
 }
 
 function uniqueSnapshotDir(baseDir: string): string {
@@ -1069,7 +1088,14 @@ function manifestFileEntries(manifest: Record<string, unknown> | undefined): Arr
   return Array.isArray(files) ? files.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null) : [];
 }
 
-function recoverManifestBaseline(context: PatchContext, extensionPath: string, relPath: string, expected: Record<string, unknown>): { content?: string; source?: string } {
+function recoverManifestBaseline(
+  context: PatchContext,
+  extensionPath: string,
+  relPath: string,
+  expected: Record<string, unknown>,
+  options: { useGit?: boolean } = {},
+): { content?: string; source?: string } {
+  if (options.useGit === false) return {};
   const expectedSha = typeof expected.sha256 === "string" ? expected.sha256 : "";
   const expectedNormalizedSha = typeof expected.normalized_sha256 === "string" ? expected.normalized_sha256 : "";
   const history = git(context, ["-C", extensionPath, "rev-list", "--all", "--", relPath], 60_000);
@@ -1111,7 +1137,8 @@ function wholeFilePatch(relPath: string, oldText: string, newText: string, basel
   return `${lines.join("\n")}\n`;
 }
 
-function inspectManifestDrift(context: PatchContext, extensionPath: string): ManifestDrift {
+function inspectManifestDrift(context: PatchContext, extensionPath: string, options: { useGit?: boolean } = {}): ManifestDrift {
+  const useGit = options.useGit !== false;
   const manifest = readJsonFile(path.join(extensionPath, MEDNOTES_INTEGRITY_MANIFEST));
   const entries = manifestFileEntries(manifest);
   if (entries.length === 0) return emptyManifestDrift();
@@ -1123,7 +1150,7 @@ function inspectManifestDrift(context: PatchContext, extensionPath: string): Man
     const fullPath = path.resolve(extensionPath, relPath);
     if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) {
       drift.missing.push(relPath);
-      const recovered = recoverManifestBaseline(context, extensionPath, relPath, entry);
+      const recovered = recoverManifestBaseline(context, extensionPath, relPath, entry, { useGit });
       if (recovered.content !== undefined) {
         drift.baselineRecoveredCount += 1;
         drift.gitDiffEmptyCount += 1;
@@ -1144,10 +1171,10 @@ function inspectManifestDrift(context: PatchContext, extensionPath: string): Man
     }
 
     drift.changed.push(relPath);
-    const directDiff = git(context, ["-C", extensionPath, "diff", "--binary", "--", relPath], 60_000);
-    if (!commandFailed(directDiff) && directDiff.stdout.trim()) continue;
+    const directDiff = useGit ? git(context, ["-C", extensionPath, "diff", "--binary", "--", relPath], 60_000) : undefined;
+    if (directDiff && !commandFailed(directDiff) && directDiff.stdout.trim()) continue;
     drift.gitDiffEmptyCount += 1;
-    const recovered = recoverManifestBaseline(context, extensionPath, relPath, entry);
+    const recovered = recoverManifestBaseline(context, extensionPath, relPath, entry, { useGit });
     if (recovered.content !== undefined) {
       drift.baselineRecoveredCount += 1;
       drift.patches.push(wholeFilePatch(relPath, recovered.content, current, recovered.source ?? "git"));
@@ -1922,29 +1949,33 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
   if (!extension) return { status: "skipped", message: "No Gemini extension context was provided." };
   const extensionPath = extension.extensionPath;
   const existingSnapshotResend = context.dryRun ? undefined : resendExistingMedNotesSnapshots(context, extensionPath);
-  const insideWorkTree = git(context, ["-C", extensionPath, "rev-parse", "--is-inside-work-tree"]);
-  if (commandFailed(insideWorkTree)) return existingSnapshotResend ?? { status: "skipped", message: `${extension.name} is not a git worktree.` };
-
-  const status = git(context, ["-C", extensionPath, "status", "--porcelain=v1", "-uall"]);
-  if (commandFailed(status)) {
-    return {
-      status: "failed",
-      message: `Could not inspect local drift: ${status.stderr ?? status.error ?? "git status failed"}`,
-      nextAction: "Revise a extensao manualmente; o update foi bloqueado para nao sobrescrever alteracoes locais sem snapshot.",
-    };
+  const gitRoot = standaloneGitWorktreeRoot(context, extensionPath);
+  let drift = emptyGitStatus();
+  if (gitRoot) {
+    const status = git(context, ["-C", extensionPath, "status", "--porcelain=v1", "-uall"]);
+    if (commandFailed(status)) {
+      return {
+        status: "failed",
+        message: `Could not inspect local drift: ${status.stderr || status.error || "git status failed"}`,
+        nextAction: "Revise a extensao manualmente; o update foi bloqueado para nao sobrescrever alteracoes locais sem snapshot.",
+      };
+    }
+    drift = parseGitStatus(status.stdout);
   }
-  const drift = parseGitStatus(status.stdout);
-  const manifestDrift = inspectManifestDrift(context, extensionPath);
+  const manifestDrift = inspectManifestDrift(context, extensionPath, { useGit: Boolean(gitRoot) });
   const changedPaths = uniqueStrings([...drift.changed, ...manifestDrift.changed, ...manifestDrift.missing]);
   if (changedPaths.length === 0 && drift.untracked.length === 0) {
     const ignored = drift.ignored.length ? ` Ignored non-extension drift: ${drift.ignored.slice(0, 5).join(", ")}.` : "";
     if (existingSnapshotResend && existingSnapshotResend.status !== "skipped") return existingSnapshotResend;
     const existing = existingSnapshotResend?.message ? ` ${existingSnapshotResend.message}` : "";
+    if (!gitRoot) {
+      return { status: "skipped", message: `${extension.name} is not a standalone git worktree and has no manifest drift to snapshot.${existing}` };
+    }
     return { status: "skipped", message: `${extension.name} has no allowlisted local drift.${ignored}${existing}` };
   }
 
-  const head = git(context, ["-C", extensionPath, "rev-parse", "HEAD"]);
-  const gitHead = commandFailed(head) ? "unknown" : head.stdout.trim();
+  const head = gitRoot ? git(context, ["-C", extensionPath, "rev-parse", "HEAD"]) : undefined;
+  const gitHead = !head || commandFailed(head) ? "no-extension-git" : head.stdout.trim();
   const snapshotId = safeSnapshotPart(`${context.now.toISOString()}-${gitHead.slice(0, 12)}`);
   const snapshotBase = context.adapter.join(
     context.homeDir,
@@ -1991,13 +2022,19 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
     }
 
     const pathspecs = medNotesPathspecs();
-    const tracked = git(context, ["-C", extensionPath, "diff", "--binary", "--", ...pathspecs]);
-    const staged = git(context, ["-C", extensionPath, "diff", "--cached", "--binary", "--", ...pathspecs]);
-    if (commandFailed(tracked)) throw new Error(tracked.stderr ?? tracked.error ?? "git diff failed");
-    if (commandFailed(staged)) throw new Error(staged.stderr ?? staged.error ?? "git diff --cached failed");
+    let trackedStdout = "";
+    let stagedStdout = "";
+    if (gitRoot) {
+      const tracked = git(context, ["-C", extensionPath, "diff", "--binary", "--", ...pathspecs]);
+      const staged = git(context, ["-C", extensionPath, "diff", "--cached", "--binary", "--", ...pathspecs]);
+      if (commandFailed(tracked)) throw new Error(tracked.stderr || tracked.error || "git diff failed");
+      if (commandFailed(staged)) throw new Error(staged.stderr || staged.error || "git diff --cached failed");
+      trackedStdout = tracked.stdout;
+      stagedStdout = staged.stdout;
+    }
     const untrackedDiff = writeUntrackedDiff(context, snapshotDir, drift.untracked);
-    const trackedWithManifest = combineDiffs(tracked.stdout, ...manifestDrift.patches);
-    const extensionFullDiff = combineDiffs(trackedWithManifest, staged.stdout, untrackedDiff);
+    const trackedWithManifest = combineDiffs(trackedStdout, ...manifestDrift.patches);
+    const extensionFullDiff = combineDiffs(trackedWithManifest, stagedStdout, untrackedDiff);
     const generatedScripts = generatedScriptsFromDrift(extensionPath, [...changedPaths, ...drift.untracked]);
     const snapshotUseful = Boolean(extensionFullDiff.trim() || generatedScripts.length > 0);
     if (!snapshotUseful) {
@@ -2005,7 +2042,7 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
     }
 
     fs.writeFileSync(trackedDiffPath, trackedWithManifest, "utf8");
-    fs.writeFileSync(stagedDiffPath, staged.stdout, "utf8");
+    fs.writeFileSync(stagedDiffPath, stagedStdout, "utf8");
     fs.writeFileSync(untrackedDiffPath, untrackedDiff, "utf8");
     fs.writeFileSync(extensionFullDiffPath, extensionFullDiff, "utf8");
 

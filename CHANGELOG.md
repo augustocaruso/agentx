@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4 - Check não varre a home como repo de extensão
+
+- Faz o patch pré-update do Medical Notes Workbench usar `git status/diff` só quando a pasta da extensão é um worktree Git próprio.
+- Evita que uma `.git` acidental na home faça `agentx check`/`ogb update` varrer `~/Library`, fotos e caches como se fossem drift da extensão.
+- Adiciona regressão para extensão instalada dentro de um Git pai na home.
+
 ## 0.2.3 - Instalador preserva scripts runtime
 
 - Faz os instaladores POSIX e Windows copiarem `scripts/` para a pasta estável do CLI, junto de `dist/` e dependências runtime.

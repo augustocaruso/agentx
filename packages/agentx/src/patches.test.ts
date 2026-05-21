@@ -382,6 +382,47 @@ test("medical notes pre-update snapshot ignores installer metadata drift", { ski
   assert.equal(fs.existsSync(path.join(homeDir, ".gemini", "medical-notes-workbench", "feedback", "pre-update-snapshots")), false);
 });
 
+test("medical notes pre-update snapshot ignores parent home git worktree", { skip: !hasGit() }, () => {
+  const homeDir = tempRoot();
+  git(homeDir, ["init"]);
+  git(homeDir, ["config", "user.email", "test@example.com"]);
+  git(homeDir, ["config", "user.name", "Test"]);
+  const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  fs.mkdirSync(extensionPath, { recursive: true });
+  const gemini = "baseline\n";
+  fs.writeFileSync(path.join(extensionPath, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench", version: "0.3.10" }), "utf8");
+  fs.writeFileSync(path.join(extensionPath, "GEMINI.md"), gemini, "utf8");
+  fs.writeFileSync(path.join(extensionPath, "extension-integrity-manifest.json"), JSON.stringify({
+    schema: "medical-notes-workbench.extension-integrity-manifest.v1",
+    app_version: "0.3.10",
+    files: [{
+      path: "GEMINI.md",
+      kind: "prompt",
+      sha256: sha256Text(gemini),
+      normalized_sha256: sha256Text(gemini),
+      size_bytes: Buffer.byteLength(gemini, "utf8"),
+      line_count: 1,
+    }],
+  }), "utf8");
+
+  const report = runBeforeGeminiExtensionUpdatePatches({
+    projectRoot: homeDir,
+    homeDir,
+    registry: OGB_PATCHES,
+    extension: {
+      name: "medical-notes-workbench",
+      extensionPath,
+      manifestPath: path.join(extensionPath, "gemini-extension.json"),
+      currentVersion: "0.3.10",
+    },
+  });
+
+  assert.equal(report.outcome, "skipped");
+  assert.equal(report.results[0]?.status, "skipped");
+  assert.match(report.results[0]?.message ?? "", /not a standalone git worktree/i);
+  assert.equal(fs.existsSync(path.join(homeDir, ".gemini", "medical-notes-workbench", "feedback", "pre-update-snapshots")), false);
+});
+
 test("medical notes pre-update snapshot captures allowlisted diffs and scripts", { skip: !hasGit() }, () => {
   const homeDir = tempRoot();
   const extensionPath = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
