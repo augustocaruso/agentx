@@ -14,6 +14,7 @@ import { flattenGeminiMd } from "./flatten.js";
 import { findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS, type HelpAction, type HelpCommand } from "./help-catalog.js";
 import { DISPLAY, GITHUB_REPO } from "./brand.js";
 import { migrateFromOgb, type MigrationReport } from "./migrate-from-ogb.js";
+import { printError, printNotice } from "./presentation/format.js";
 import { cleanupHomeProjectArtifacts, printHomeCleanupReport } from "./home-cleanup.js";
 import { printInstallReport, runInstall } from "./install.js";
 import { buildInventory, writeInventory } from "./inventory.js";
@@ -89,7 +90,7 @@ function commonProjectOptions() {
 function structuredOutputConflict(opts: { json?: boolean; plain?: boolean; progressJson?: boolean }): boolean {
   if (!opts.progressJson) return false;
   if (!opts.json && !opts.plain) return false;
-  console.error("error: --progress-json cannot be combined with --json or --plain.");
+  printError("--progress-json cannot be combined with --json or --plain.");
   process.exitCode = 1;
   return true;
 }
@@ -231,8 +232,8 @@ function runInteractiveHelpSelection(selection: InteractiveHelpSelection): void 
     stdio: "inherit",
   });
   if (result.error) {
-    console.error(`Could not run ${formatHelpRunLine(selection.args)}: ${result.error.message}`);
-    console.error("Next: run the command manually from your shell, or run `agentx help --plain` to inspect the command list.");
+    printError(`Could not run ${formatHelpRunLine(selection.args)}: ${result.error.message}`);
+    printNotice("Next: run the command manually from your shell, or run `agentx help --plain` to inspect the command list.");
     process.exitCode = 2;
     return;
   }
@@ -241,7 +242,7 @@ function runInteractiveHelpSelection(selection: InteractiveHelpSelection): void 
     return;
   }
   if (result.signal) {
-    console.error(`${formatHelpRunLine(selection.args)} stopped with signal ${result.signal}.`);
+    printError(`${formatHelpRunLine(selection.args)} stopped with signal ${result.signal}.`);
     process.exitCode = 1;
   }
 }
@@ -410,7 +411,7 @@ async function withWorkflowTelemetry<T>(workflow: string, action: () => T | Prom
 }
 
 function warnLegacyCommand(message: string): void {
-  console.error(message);
+  printNotice(message);
 }
 
 type CheckCliOptions = {
@@ -554,7 +555,7 @@ async function runUpdateCli(opts: UpdateCliOptions, legacyWarning?: string): Pro
       const message = error instanceof Error ? error.message : String(error);
       process.exitCode = 2;
       if (opts.json) console.log(JSON.stringify({ status: "error", message }, null, 2));
-      else if (!opts.progressJson) console.error(message);
+      else if (!opts.progressJson) printError(message);
       return { status: "error", message, error: message };
     }
     if ("error" in report) return report;
@@ -598,11 +599,11 @@ program.command("help")
   .action(async (commandName: string | undefined, opts: { plain?: boolean; json?: boolean }) => {
     const selected = findHelpCommand(commandName);
     if (commandName && !selected) {
-      const message = `Unknown OGB command: ${commandName}`;
+      const message = `Unknown agentX command: ${commandName}`;
       if (opts.json) console.log(JSON.stringify({ ok: false, error: message, commands: HELP_COMMANDS.map((command) => command.name) }, null, 2));
       else {
-        console.error(message);
-        console.error("Run `agentx help` to browse available commands.");
+        printError(message);
+        printNotice("Run `agentx help` to browse available commands.");
       }
       process.exitCode = 1;
       return;
