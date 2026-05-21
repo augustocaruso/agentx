@@ -17,7 +17,7 @@ import { readStateRecord, stateRecordPath, writeStateRecord } from "./state-stor
 import { readTelemetryConfig } from "./telemetry.js";
 import { OGB_VERSION } from "./types.js";
 
-export const PATCH_STATE_SCHEMA = "opencode-gemini-bridge.patches.v1";
+export const PATCH_STATE_SCHEMA = "agentx.patches.v2";
 
 export type PatchPhase =
   | "pre-install"
@@ -36,7 +36,7 @@ export type PatchPlatform = SupportedInstallerPlatform | "all";
 export type PatchCategory = "cleanup" | "compatibility" | "guardrail" | "migration" | "security";
 export type PatchLifecycleStatus = "active" | "retirement-due" | "superseded";
 
-export const PATCH_LIFECYCLE_SCHEMA = "opencode-gemini-bridge.patch-lifecycle.v1";
+export const PATCH_LIFECYCLE_SCHEMA = "agentx.patch-lifecycle.v2";
 
 export interface PatchStateEntry {
   id: string;
@@ -820,7 +820,7 @@ const MEDNOTES_INTEGRITY_MANIFEST = "extension-integrity-manifest.json";
 const MEDNOTES_CAPTURE_SCRIPT_REL = "scripts/mednotes/capture_extension_diff.py";
 const MEDNOTES_MAX_GIT_HISTORY_COMMITS = 600;
 const MEDNOTES_TELEMETRY_ENVELOPE_SCHEMA = "medical-notes-workbench.workflow-telemetry-envelope.v1";
-const OGB_TELEMETRY_ENVELOPE_SCHEMA = "opencode-gemini-bridge.workflow-telemetry-envelope.v1";
+const OGB_TELEMETRY_ENVELOPE_SCHEMA = "agentx.workflow-telemetry-envelope.v2";
 const MEDNOTES_RUN_RECORD_SCHEMA = "medical-notes-workbench.workflow-run-record.v1";
 const MEDNOTES_PRE_UPDATE_SNAPSHOT_SCHEMA = "medical-notes-workbench.pre-update-extension-snapshot.v1";
 const MEDNOTES_TRUSTED_DEBUG_PAYLOAD_LEVEL = "trusted_extension_debug";
@@ -1616,7 +1616,7 @@ function buildOgbMedicalNotesSnapshotEnvelope(
     installId: settings.installId,
     payloadLevel: MEDNOTES_TRUSTED_DEBUG_PAYLOAD_LEVEL,
     client: {
-      app: "opencode-gemini-bridge",
+      app: "agentx",
       appVersion: OGB_VERSION,
       platform: context.platform,
       capture: "medical-notes-workbench-pre-update-snapshot",
@@ -1684,7 +1684,7 @@ function digestUrl(value) {
       "Authorization": "Bearer " + token,
       "Content-Type": "application/json",
       "X-MedNotes-Telemetry-Schema": "medical-notes-workbench.workflow-telemetry-envelope.v1",
-      "X-OGB-Telemetry-Schema": "opencode-gemini-bridge.workflow-telemetry-envelope.v1",
+      "X-OGB-Telemetry-Schema": "agentx.workflow-telemetry-envelope.v2",
     },
     body,
   });

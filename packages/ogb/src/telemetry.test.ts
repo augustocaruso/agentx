@@ -180,7 +180,7 @@ test("envelope respects max byte limit by truncating without breaking schema", (
       rawPayloads: Object.fromEntries(records.map((record) => [record.runId, { content: "b".repeat(120_000) }])),
     });
 
-    assert.equal(envelope.schema, "opencode-gemini-bridge.workflow-telemetry-envelope.v1");
+    assert.equal(envelope.schema, "agentx.workflow-telemetry-envelope.v2");
     assert.equal(envelope.truncated, true);
     assert.ok(Buffer.byteLength(JSON.stringify(envelope), "utf8") <= 16 * 1024);
   });

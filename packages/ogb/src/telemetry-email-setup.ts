@@ -288,13 +288,13 @@ function ensureEndpointPath(url: string): string {
 
 async function sendTestEmail(endpointUrl: string, token: string, fetchImpl: typeof fetch = fetch): Promise<Record<string, unknown>> {
   const envelope = {
-    schema: "opencode-gemini-bridge.workflow-telemetry-envelope.v1",
+    schema: "agentx.workflow-telemetry-envelope.v2",
     envelopeId: `setup-test-${crypto.randomBytes(8).toString("hex")}`,
     generatedAt: new Date().toISOString(),
     installId: "setup-test",
     payloadLevel: "diagnostic_redacted",
     client: {
-      app: "opencode-gemini-bridge",
+      app: "agentx",
       source: "ogb telemetry setup-email",
     },
     records: [{
@@ -352,7 +352,7 @@ function writePrivateJson(filePath: string, value: unknown): void {
 
 function writeDistributionDefaults(filePath: string, endpointUrl: string, token: string, payloadLevel: TelemetryPayloadLevel): void {
   writePrivateJson(filePath, {
-    schema: "opencode-gemini-bridge.telemetry-defaults.v1",
+    schema: "agentx.telemetry-defaults.v2",
     enabled: true,
     endpoint_url: endpointUrl,
     auth_token: token,

@@ -1,6 +1,6 @@
 import type { OgbConfig } from "./ogb-config.js";
 
-export const UX_PROFILE_SCHEMA = "opencode-gemini-bridge.ux-profile.v1";
+export const UX_PROFILE_SCHEMA = "agentx.ux-profile.v2";
 
 export interface UxProfileGlobalConfig {
   schemaUrl: string;

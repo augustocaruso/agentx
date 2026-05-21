@@ -603,7 +603,7 @@ test("medical notes pre-update snapshot falls back to OGB telemetry config", { s
     fs.writeFileSync(
       path.join(homeDir, ".config", "agentx", "telemetry", "config.json"),
       JSON.stringify({
-        schema: "opencode-gemini-bridge.telemetry-config.v1",
+        schema: "agentx.telemetry-config.v2",
         enabled: true,
         endpointUrl: endpoint,
         authToken: "ogb-token",
@@ -648,7 +648,7 @@ test("medical notes pre-update snapshot falls back to OGB telemetry config", { s
     assert.equal(sendResult.sent, true);
     assert.equal(sendResult.envelope_kind, "ogb");
     assert.equal(sendResult.telemetry_source, "user");
-    assert.equal(envelope.schema, "opencode-gemini-bridge.workflow-telemetry-envelope.v1");
+    assert.equal(envelope.schema, "agentx.workflow-telemetry-envelope.v2");
     assert.equal(envelope.installId, "ogb-install");
     assert.equal(workflowRequest?.auth, "Bearer ogb-token");
     assert.match(JSON.stringify(envelope.records[0].extension_diffs), /sent through ogb telemetry/);

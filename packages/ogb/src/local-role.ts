@@ -3,7 +3,7 @@ import os from "node:os";
 import { createPlatformAdapter } from "./platform-adapter.js";
 import { OGB_VERSION } from "./types.js";
 
-export const LOCAL_ROLE_SCHEMA = "opencode-gemini-bridge.local-role.v1";
+export const LOCAL_ROLE_SCHEMA = "agentx.local-role.v2";
 
 export type LocalRole = "maintainer" | "user";
 

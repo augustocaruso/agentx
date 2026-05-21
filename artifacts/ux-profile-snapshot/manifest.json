@@ -1,7 +1,7 @@
 {
   "schema": "opencode-gemini-bridge.ux-profile-authoring.manifest.v1",
   "version": "0.1.62",
-  "presetSchema": "opencode-gemini-bridge.ux-profile.v1",
+  "presetSchema": "agentx.ux-profile.v2",
   "selected": [
     {
       "id": "tui:mouse",

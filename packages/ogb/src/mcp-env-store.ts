@@ -5,7 +5,8 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { shouldStoreMcpEnvLiteral } from "./mcp-projection.js";
 import { createPlatformAdapter } from "./platform-adapter.js";
 
-const STORE_SCHEMA = "opencode-gemini-bridge.mcp-env.v1";
+const STORE_SCHEMA = "agentx.mcp-env.v2";
+const LEGACY_STORE_SCHEMAS = new Set<string>(["opencode-gemini-bridge.mcp-env.v1"]);
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 interface McpEnvStore {
@@ -50,7 +51,8 @@ function expandGeminiExtensionValue(value: string, extensionDir: string): string
 
 function readStore(filePath: string): McpEnvStore | undefined {
   const parsed = readJsonc(filePath);
-  if (parsed?.schema !== STORE_SCHEMA || !parsed.values || typeof parsed.values !== "object" || Array.isArray(parsed.values)) return undefined;
+  const schemaOk = parsed?.schema === STORE_SCHEMA || (typeof parsed?.schema === "string" && LEGACY_STORE_SCHEMAS.has(parsed.schema));
+  if (!schemaOk || !parsed.values || typeof parsed.values !== "object" || Array.isArray(parsed.values)) return undefined;
   const values: Record<string, string> = {};
   for (const [key, value] of Object.entries(parsed.values)) {
     if (ENV_NAME.test(key) && typeof value === "string") values[key] = value;

@@ -5,11 +5,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { OGB_VERSION } from "./types.js";
 
-export const TELEMETRY_RUN_RECORD_SCHEMA = "opencode-gemini-bridge.workflow-run-record.v1";
-export const TELEMETRY_ENVELOPE_SCHEMA = "opencode-gemini-bridge.workflow-telemetry-envelope.v1";
-export const TELEMETRY_STATUS_SCHEMA = "opencode-gemini-bridge.telemetry-status.v1";
-export const TELEMETRY_SENT_SCHEMA = "opencode-gemini-bridge.workflow-telemetry-sent.v1";
-export const TELEMETRY_DEFAULTS_SCHEMA = "opencode-gemini-bridge.telemetry-defaults.v1";
+export const TELEMETRY_RUN_RECORD_SCHEMA = "agentx.workflow-run-record.v2";
+export const TELEMETRY_ENVELOPE_SCHEMA = "agentx.workflow-telemetry-envelope.v2";
+export const TELEMETRY_STATUS_SCHEMA = "agentx.telemetry-status.v2";
+export const TELEMETRY_SENT_SCHEMA = "agentx.workflow-telemetry-sent.v2";
+export const TELEMETRY_DEFAULTS_SCHEMA = "agentx.telemetry-defaults.v2";
+
+export const TELEMETRY_LEGACY_SCHEMAS = new Set<string>([
+  "opencode-gemini-bridge.workflow-run-record.v1",
+  "opencode-gemini-bridge.workflow-telemetry-envelope.v1",
+  "opencode-gemini-bridge.telemetry-status.v1",
+  "opencode-gemini-bridge.workflow-telemetry-sent.v1",
+  "opencode-gemini-bridge.telemetry-defaults.v1",
+]);
 export const TELEMETRY_PAYLOAD_LEVELS = ["diagnostic_redacted", "full_logs"] as const;
 export type TelemetryPayloadLevel = typeof TELEMETRY_PAYLOAD_LEVELS[number];
 
@@ -249,7 +257,7 @@ function configFromRaw(raw: any): TelemetryConfig {
 
 function configToJson(config: TelemetryConfig): Record<string, unknown> {
   return {
-    schema: "opencode-gemini-bridge.telemetry-config.v1",
+    schema: "agentx.telemetry-config.v2",
     enabled: config.enabled,
     endpointUrl: config.endpointUrl,
     authToken: config.authToken,
@@ -825,7 +833,7 @@ function clientContext(): Record<string, unknown> {
     node: process.version,
     platform: process.platform,
     arch: process.arch,
-    app: "opencode-gemini-bridge",
+    app: "agentx",
     appVersion: OGB_VERSION,
   };
 }

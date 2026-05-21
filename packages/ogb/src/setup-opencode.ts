@@ -90,7 +90,7 @@ const COMMAND_REGISTRATION_SKIP = new Set(["sync"]);
 function hydrateMcpEnvironment() {
   try {
     const parsed = JSON.parse(fs.readFileSync(MCP_ENV_FILE, "utf8"));
-    const values = parsed && parsed.schema === "opencode-gemini-bridge.mcp-env.v1" && parsed.values && typeof parsed.values === "object" && !Array.isArray(parsed.values)
+    const values = parsed && parsed.schema === "agentx.mcp-env.v2" && parsed.values && typeof parsed.values === "object" && !Array.isArray(parsed.values)
       ? parsed.values
       : {};
     for (const [key, value] of Object.entries(values)) {
