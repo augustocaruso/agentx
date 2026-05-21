@@ -347,6 +347,36 @@ test("runValidation validates home/global OpenCode files without project artifac
   }
 });
 
+test("runValidation accepts the centralized Windows installer package dir token", () => {
+  const homeDir = tempHome();
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
+  fs.mkdirSync(extensionDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "GEMINI.md"), "Global extension rules\n", "utf8");
+
+  setupUx({
+    homeDir,
+    projectRoot: homeDir,
+    resetGlobal: true,
+    force: true,
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+  });
+  syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true, force: true });
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    const report = runValidation({ projectRoot: homeDir, homeDir, silent: true, windows: true });
+    const installerCheck = report.checks.find((check) => check.name === "Windows installer static check");
+
+    assert.equal(installerCheck?.status, "pass");
+    assert.doesNotMatch(installerCheck?.message ?? "", /Missing expected installer token/);
+  } finally {
+    process.env.PATH = originalPath;
+  }
+});
+
 test("runValidation fails the legacy relative global startup plugin spec", () => {
   const homeDir = tempHome();
   const configDir = path.join(homeDir, ".config", "opencode");

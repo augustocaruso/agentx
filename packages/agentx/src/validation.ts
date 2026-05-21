@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession } from "./backup-policy.js";
-import { BINARY, GITHUB_REPO, PACKAGE, RELEASE_ASSET } from "./brand.js";
+import { BINARY, GITHUB_REPO, RELEASE_ASSET } from "./brand.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
@@ -617,7 +617,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "Resolve-DefaultPrefix",
     "npm prefix -g",
     "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $CliDir, \"install\")",
-    `$StableCliDirName = if ($env:AGENTX_STABLE_CLI_DIR) { $env:AGENTX_STABLE_CLI_DIR } else { "${PACKAGE}-cli" }`,
+    `$StableCliDirName = if ($env:AGENTX_STABLE_CLI_DIR) { $env:AGENTX_STABLE_CLI_DIR } else { "$PackageName-cli" }`,
     "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $InstallDir, \"install\", \"--omit=dev\")",
     "Install-StableCli $CliDir $CliInstallDir",
     "$CliTarget = Join-Path $CliInstallDir \"dist\\cli.js\"",
