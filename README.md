@@ -1,4 +1,4 @@
-# agentX
+# agentX Bridge
 
 **Data de consolidação:** 2026-05-04
 **Estrutura reorganizada:** 2026-05-06
