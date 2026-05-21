@@ -344,6 +344,9 @@ function Install-StableCli($SourceDir, $InstallDir) {
   if (Test-Path (Join-Path $SourceDir "telemetry-email-worker")) {
     Copy-Item -Path (Join-Path $SourceDir "telemetry-email-worker") -Destination (Join-Path $InstallDir "telemetry-email-worker") -Recurse -Force
   }
+  if (Test-Path (Join-Path $SourceDir "scripts")) {
+    Copy-Item -Path (Join-Path $SourceDir "scripts") -Destination (Join-Path $InstallDir "scripts") -Recurse -Force
+  }
   Copy-Item -Path (Join-Path $SourceDir "dist") -Destination (Join-Path $InstallDir "dist") -Recurse -Force
 
   Invoke-NativeCommand $script:NpmCommand @("--prefix", $InstallDir, "install", "--omit=dev")

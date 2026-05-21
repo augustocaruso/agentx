@@ -554,6 +554,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["install-posix.sh Linux fish config", scripts.posixInstaller, ".config/fish/config.fish"],
     ["install-posix.sh fish env syntax", scripts.posixInstaller, "set -gx OPENCODE_ENABLE_EXA 1"],
     ["install-posix.sh installs stable CLI folder", scripts.posixInstaller, "install_stable_cli"],
+    ["install-posix.sh copies stable CLI scripts", scripts.posixInstaller, "cp -R \"$source_dir/scripts\" \"$install_dir/scripts\""],
     ["install-posix.sh copies runtime dependencies", scripts.posixInstaller, "npm --prefix \"$install_dir\" install --omit=dev"],
     ["install-posix.sh removes broken shim before wrapper", scripts.posixInstaller, "rm -f \"$PRIMARY_BIN\""],
     ["install-posix.sh node shim fallback", scripts.posixInstaller, "exec node"],
@@ -577,6 +578,11 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["install-windows.ps1 home sync", scripts.windowsInstaller, "RunHomeSync"],
     ["install-windows.ps1 reset global", scripts.windowsInstaller, "--reset-global"],
     ["install-windows.ps1 Exa websearch env", scripts.windowsInstaller, "OPENCODE_ENABLE_EXA"],
+    [
+      "install-windows.ps1 copies stable CLI scripts",
+      scripts.windowsInstaller,
+      "Copy-Item -Path (Join-Path $SourceDir \"scripts\") -Destination (Join-Path $InstallDir \"scripts\") -Recurse -Force",
+    ],
   ] as const;
   const missing = required.filter(([, text, needle]) => !text.includes(needle)).map(([label]) => label);
 
@@ -618,6 +624,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "npm prefix -g",
     "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $CliDir, \"install\")",
     `$StableCliDirName = if ($env:AGENTX_STABLE_CLI_DIR) { $env:AGENTX_STABLE_CLI_DIR } else { "$PackageName-cli" }`,
+    "Copy-Item -Path (Join-Path $SourceDir \"scripts\") -Destination (Join-Path $InstallDir \"scripts\") -Recurse -Force",
     "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $InstallDir, \"install\", \"--omit=dev\")",
     "Install-StableCli $CliDir $CliInstallDir",
     "$CliTarget = Join-Path $CliInstallDir \"dist\\cli.js\"",

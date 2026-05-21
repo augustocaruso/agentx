@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 - Instalador preserva scripts runtime
+
+- Faz os instaladores POSIX e Windows copiarem `scripts/` para a pasta estável do CLI, junto de `dist/` e dependências runtime.
+- Fecha o caso em que `agentx`/`ogb update` instalava o CLI sem `scripts/gemini_antigravity_converter.py`, deixando a conversão Antigravity quebrar depois da release.
+- Adiciona regressões e validação estática para bloquear release pack com instalador estável incompleto.
+
 ## 0.2.0 - Rebrand para agentX
 
 - Renomeia o pacote/binário principal para `agentx`/agentX, mantendo compatibilidade explícita com o legado `ogb` onde ainda é necessário.

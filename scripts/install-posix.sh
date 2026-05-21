@@ -267,6 +267,9 @@ install_stable_cli() {
   if [[ -d "$source_dir/telemetry-email-worker" ]]; then
     cp -R "$source_dir/telemetry-email-worker" "$install_dir/telemetry-email-worker"
   fi
+  if [[ -d "$source_dir/scripts" ]]; then
+    cp -R "$source_dir/scripts" "$install_dir/scripts"
+  fi
   cp -R "$source_dir/dist" "$install_dir/dist"
 
   npm --prefix "$install_dir" install --omit=dev

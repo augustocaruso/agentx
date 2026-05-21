@@ -102,6 +102,7 @@ test("posix installer installs agentx into a stable local folder instead of a gl
   assert.match(text, /STABLE_CLI_DIR_NAME="\$\{AGENTX_STABLE_CLI_DIR:-\$PACKAGE_NAME-cli\}"/);
   assert.match(text, /CLI_INSTALL_DIR="\$HOME\/\.ai\/opencode-pack\/\$STABLE_CLI_DIR_NAME"/);
   assert.match(text, /install_stable_cli "\$CLI_DIR" "\$CLI_INSTALL_DIR"/);
+  assert.match(text, /cp -R "\$source_dir\/scripts" "\$install_dir\/scripts"/);
   assert.match(text, /npm --prefix "\$install_dir" install --omit=dev/);
   assert.match(text, /write_primary_binary "\$PRIMARY_BIN" "\$CLI_TARGET"/);
   assert.doesNotMatch(text, /npm pack --pack-destination/);
@@ -127,6 +128,10 @@ test("windows installer contract delegates the ritual to agentx install", () => 
   assert.match(text, /\$InstallArgs = @\("--project", \$Project, "install", "--rulesync", \$Rulesync, "--windows"\)/);
   assert.match(text, /Running \$ProductName install ritual/);
   assert.match(text, /& \$script:NodeCommand \$CliTarget @InstallArgs/);
+  assert.match(
+    text,
+    /Copy-Item -Path \(Join-Path \$SourceDir "scripts"\) -Destination \(Join-Path \$InstallDir "scripts"\) -Recurse -Force/,
+  );
   assert.doesNotMatch(text, /& \$PrimaryBin @InstallArgs/);
   assert.match(text, /%USERPROFILE%\\\.ai\\opencode-pack\\\$StableCliDirName\\dist\\cli\.js/);
   assert.match(text, /\$PrimaryBin = Join-Path \$Prefix "\$BinaryName\.cmd"/);
