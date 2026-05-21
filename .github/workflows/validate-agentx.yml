@@ -103,7 +103,7 @@ jobs:
           $repo = $PWD.Path
           Set-Content -Path (Join-Path $bin "gemini.cmd") -Value "@echo off`r`necho gemini-smoke`r`n"
           Set-Content -Path (Join-Path $bin "opencode.cmd") -Value "@echo off`r`nif ""%1""==""--version"" (`r`n  echo opencode-smoke`r`n  exit /b 0`r`n)`r`nif ""%1""==""debug"" (`r`n  echo {""agent"":{},""command"":{}}`r`n  exit /b 0`r`n)`r`necho opencode-smoke`r`n"
-          Set-Content -Path (Join-Path $bin "ogb.cmd") -Value "@echo off`r`nnode ""$repo\packages\agentx\dist\cli.js"" %*`r`n"
+          Set-Content -Path (Join-Path $bin "agentx.cmd") -Value "@echo off`r`nnode ""$repo\packages\agentx\dist\cli.js"" %*`r`n"
           $env:Path = "$bin;$env:Path"
           New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE ".gemini") | Out-Null
           Set-Content -Path (Join-Path $env:USERPROFILE ".gemini/GEMINI.md") -Value "Global smoke rules"

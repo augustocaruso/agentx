@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.13 - Windows release smoke uses agentx
+
+- Updates the Windows home-mode release smoke to create the current `agentx` command shim instead of the legacy `ogb` shim.
+- Keeps the 0.2.12 internal Antigravity command renderer fallback as the product fix for Windows command-skill projection.
+
 ## 0.2.12 - Internal Antigravity command renderer fallback
 
 - Falls back to a TypeScript renderer for Gemini command -> Antigravity launcher skill projection when the external Python converter cannot run.

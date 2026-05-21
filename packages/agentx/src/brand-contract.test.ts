@@ -215,6 +215,13 @@ test("validation release/install summaries interpolate brand constants", () => {
   assert.doesNotMatch(validation, /install ritual/);
 });
 
+test("Windows validation smoke exercises the current binary", () => {
+  const workflow = readRepoFile(".github", "workflows", "validate-agentx.yml");
+
+  assert.match(workflow, /Join-Path \$bin "agentx\.cmd"/);
+  assert.doesNotMatch(workflow, /Join-Path \$bin "ogb\.cmd"/);
+});
+
 test("CLI setup command help interpolates the binary brand", () => {
   const cli = readRepoFile("packages", "agentx", "src", "cli.ts");
 
