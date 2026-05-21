@@ -43,20 +43,20 @@ test("plain help catalog and command details include descriptions and examples",
 
   assert.match(catalog, /Recommended/);
   assert.match(catalog, /install\s+Install or reinstall/);
-  assert.match(catalog, /Use `ogb help <command>`/);
+  assert.match(catalog, /Use `agentx help <command>`/);
   assert.match(check, /Run the complete bridge health ritual/);
-  assert.match(check, /Usage: ogb check/);
+  assert.match(check, /Usage: agentx check/);
   assert.match(check, /Examples/);
   assert.match(check, /Actions/);
-  assert.match(check, /ogb check --no-extension-update/);
-  assert.match(check, /ogb check --no-patches/);
+  assert.match(check, /agentx check --no-extension-update/);
+  assert.match(check, /agentx check --no-patches/);
 });
 
 test("interactive help exposes runnable commands and blocks commands that need required arguments", () => {
   assert.deepEqual(runArgsForHelpCommand(findHelpCommand("check")!), ["check"]);
   assert.deepEqual(runArgsForHelpCommand(findHelpCommand("telemetry")!), ["telemetry", "status"]);
   assert.equal(runArgsForHelpCommand(findHelpCommand("install-extension")!), undefined);
-  assert.equal(formatHelpRunLine(["telemetry", "status"]), "ogb telemetry status");
+  assert.equal(formatHelpRunLine(["telemetry", "status"]), "agentx telemetry status");
 });
 
 test("interactive help exposes concrete actions for selected commands", () => {

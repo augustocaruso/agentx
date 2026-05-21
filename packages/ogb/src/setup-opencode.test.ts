@@ -63,7 +63,7 @@ test("setupOpenCode installs startup plugin, config, and project OpenCode config
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /agentx-plugin-status\.json/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /startup-sync/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /REINICIE OPENCODE/);
-  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /ogb dashboard refreshed/);
+  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /agentx dashboard refreshed/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /telemetry record/);
   assert.match(fs.readFileSync(projectPath(projectRoot, TUI_SIDEBAR_PLUGIN_PATH), "utf8"), /sidebar_content/);
 

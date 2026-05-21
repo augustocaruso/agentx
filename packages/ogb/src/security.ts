@@ -6,7 +6,7 @@ import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-p
 import { resolveProjectPaths } from "./paths.js";
 import { writeStateRecord } from "./state-store.js";
 import { readTrustFile } from "./trust.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface SecurityOptions {
   projectRoot?: string;
@@ -243,7 +243,7 @@ function checkYoloAgent(yoloPath: string, displayPath: string): SecurityFinding 
 function checkExtensionProjection(mapPath: string): SecurityFinding {
   const map = readJsonc(mapPath);
   if (!map) {
-    return { name: "Extension projection safety", status: "warn", message: `Missing extension map: ${mapPath}. Run ogb sync.` };
+    return { name: "Extension projection safety", status: "warn", message: `Missing extension map: ${mapPath}. Run agentx sync.` };
   }
 
   const projectedRisk: string[] = [];
@@ -341,7 +341,7 @@ export function runSecurityCheck(options: SecurityOptions = {}): SecurityReport 
       ? "warn"
       : "pass";
   const report: SecurityReport = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     generatedAt: new Date().toISOString(),
     outcome,

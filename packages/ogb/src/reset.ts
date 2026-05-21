@@ -12,7 +12,7 @@ import { resolveProjectPaths } from "./paths.js";
 import { emitRitualProgress, progressStatusFromFindings, progressStatusFromOutcome, type RitualProgressSink } from "./ritual-progress.js";
 import { setupUx, type SetupUxReport } from "./setup-ux.js";
 import { syncToOpenCode, type SyncReport } from "./sync.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 import type { RulesyncMode } from "./rulesync.js";
 
 export interface ResetOptions {
@@ -59,7 +59,7 @@ export interface ResetReport {
 
 export class ResetNotHomeError extends Error {
   constructor(projectRoot: string, homeDir: string) {
-    super(`ogb reset so pode ser rodado no home. Project: ${projectRoot}. Home: ${homeDir}. Rode: cd "${homeDir}" && ogb reset`);
+    super(`agentx reset so pode ser rodado no home. Project: ${projectRoot}. Home: ${homeDir}. Rode: cd "${homeDir}" && agentx reset`);
   }
 }
 
@@ -160,7 +160,7 @@ function clearStartupSyncStatus(homeDir: string): void {
 
 async function promptResetConfirmation(plan: ResetPlan): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new ResetConfirmationError("ogb reset precisa de confirmacao interativa. Rode em um terminal ou use --yes se voce ja revisou o plano.");
+    throw new ResetConfirmationError("agentx reset precisa de confirmacao interativa. Rode em um terminal ou use --yes se voce ja revisou o plano.");
   }
 
   console.log("OGB reset");
@@ -231,7 +231,7 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
         message: "Reset cancelled before changes.",
       });
       return {
-        version: OGB_VERSION,
+        version: AGENTX_VERSION,
         homeDir: paths.homeDir,
         outcome: "cancelled",
         plan: installerPlan,
@@ -358,7 +358,7 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
       });
     }
     return {
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       homeDir: paths.homeDir,
       outcome: "preview",
       plan: installerPlan,
@@ -491,7 +491,7 @@ export async function runReset(options: ResetOptions = {}): Promise<ResetReport>
   );
 
   return {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     homeDir: paths.homeDir,
     outcome: "pass",
     plan: installerPlan,

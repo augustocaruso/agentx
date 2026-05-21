@@ -15,7 +15,7 @@ import {
 } from "./ritual-progress.js";
 import { readStateRecord, stateRecordPath, writeStateRecord } from "./state-store.js";
 import { readTelemetryConfig } from "./telemetry.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export const PATCH_STATE_SCHEMA = "agentx.patches.v2";
 
@@ -255,7 +255,7 @@ const PATCH_PROGRESS_BY_PHASE: Record<PatchPhase, RitualProgressDefinition | und
 function emptyPatchState(now = new Date()): PatchState {
   return {
     schema: PATCH_STATE_SCHEMA,
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     updatedAt: now.toISOString(),
     applied: {},
     runs: [],
@@ -326,7 +326,7 @@ function compareVersions(a: string | undefined, b: string | undefined): number {
   return 0;
 }
 
-function patchLifecycleStatus(patch: OgbPatch, currentVersion = OGB_VERSION): PatchLifecycleStatus {
+function patchLifecycleStatus(patch: OgbPatch, currentVersion = AGENTX_VERSION): PatchLifecycleStatus {
   if (patch.supersededBy) return "superseded";
   if (patch.retireAfter && compareVersions(currentVersion, patch.retireAfter) >= 0) return "retirement-due";
   return "active";
@@ -342,7 +342,7 @@ function duplicatePatchIds(registry: readonly OgbPatch[]): Set<string> {
   return duplicates;
 }
 
-function patchPolicyWarnings(patch: OgbPatch, duplicates: Set<string>, currentVersion = OGB_VERSION): string[] {
+function patchPolicyWarnings(patch: OgbPatch, duplicates: Set<string>, currentVersion = AGENTX_VERSION): string[] {
   const warnings: string[] = [];
   if (duplicates.has(patch.id)) warnings.push("Patch id is duplicated in the registry.");
   if ((patch.category === "cleanup" || patch.category === "migration") && !patch.retireAfter) {
@@ -435,7 +435,7 @@ function resultFromPatchError(patch: OgbPatch, error: unknown, context?: PatchCo
     extension: context?.extension,
     status: "failed",
     message,
-    nextAction: `Revise o patch ${patch.id}; rode ogb check --plain para ver o diagnostico completo.`,
+    nextAction: `Revise o patch ${patch.id}; rode agentx check --plain para ver o diagnostico completo.`,
   };
 }
 
@@ -466,7 +466,7 @@ function normalizePatchResult(patch: OgbPatch, result: PatchResult, context?: Pa
 function updateStateAfterRun(state: PatchState, report: PatchRunReport, now: Date): PatchState {
   const next: PatchState = {
     ...state,
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     updatedAt: now.toISOString(),
     applied: { ...state.applied },
     runs: [...state.runs],
@@ -589,7 +589,7 @@ export function inspectPatches(options: InspectPatchesOptions = {}): PatchLifecy
   const warnings = supported.flatMap((patch) => patch.policyWarnings.map((warning) => `${patch.id}: ${warning}`));
   return {
     schema: PATCH_LIFECYCLE_SCHEMA,
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     generatedAt: now.toISOString(),
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
@@ -732,7 +732,7 @@ export function runPatchesForPhase(options: RunPatchesOptions): PatchRunReport {
   const outcome = outcomeForResults(results);
   const report: PatchRunReport = {
     schema: PATCH_STATE_SCHEMA,
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
     homeMode: paths.homeMode,
@@ -1375,7 +1375,7 @@ function medNotesPreUpdateRecord(snapshot: Record<string, unknown>, snapshotDir:
     recorded_at: stringField(snapshot.recorded_at) || new Date().toISOString(),
     workflow: "/mednotes:telemetry",
     source: "ogb_update_patch",
-    command: "ogb update",
+    command: "agentx update",
     exit_code: 0,
     duration_ms: 0,
     status: "completed_with_warnings",
@@ -1617,7 +1617,7 @@ function buildOgbMedicalNotesSnapshotEnvelope(
     payloadLevel: MEDNOTES_TRUSTED_DEBUG_PAYLOAD_LEVEL,
     client: {
       app: "agentx",
-      appVersion: OGB_VERSION,
+      appVersion: AGENTX_VERSION,
       platform: context.platform,
       capture: "medical-notes-workbench-pre-update-snapshot",
     },
@@ -1626,7 +1626,7 @@ function buildOgbMedicalNotesSnapshotEnvelope(
       recordedAt: stringField(record.recorded_at) || context.now.toISOString(),
       workflow: "medical-notes-workbench/pre-update-snapshot",
       source: "ogb_update_patch",
-      command: "ogb update",
+      command: "agentx update",
       status: "completed_with_warnings",
       outcome: "warn",
       phase: "before-gemini-extension-update",
@@ -1857,7 +1857,7 @@ function resendExistingMedNotesSnapshots(context: PatchContext, extensionPath: s
       status: "warning",
       message: `Existing Medical Notes pre-update snapshot(s) found, but telemetry email was not sent. ${messages.slice(0, 3).join(" ")}`,
       writes: uniqueWrites(writes),
-      nextAction: "Verifique endpoint/token da telemetria ou rode ogb update novamente depois que a telemetria estiver configurada.",
+      nextAction: "Verifique endpoint/token da telemetria ou rode agentx update novamente depois que a telemetria estiver configurada.",
     };
   }
   if (alreadySent > 0 || skippedEmpty > 0) {
@@ -2095,7 +2095,7 @@ export const OGB_PATCHES: readonly OgbPatch[] = [
     description: "Retries telemetry delivery for Medical Notes Workbench snapshots after Gemini extension updates install fresh telemetry defaults.",
     category: "guardrail",
     reason: "Let a single OGB update capture drift before replacement and email the saved snapshot after the updated extension is installed.",
-    introducedIn: OGB_VERSION,
+    introducedIn: AGENTX_VERSION,
     removalCondition: "Remove only when pre-update telemetry credentials are guaranteed before every Gemini extension update.",
     phase: "post-extension-update",
     platforms: ["all"],

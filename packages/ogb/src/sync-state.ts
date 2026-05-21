@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveProjectPaths } from "./paths.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface ManagedFileState {
   path: string;
@@ -54,7 +54,7 @@ export function readSyncState(projectRoot = process.cwd(), homeDir?: string): Sy
 
 export function writeSyncState(state: SyncState, projectRoot = process.cwd(), homeDir?: string): void {
   const statePath = resolveProjectPaths(projectRoot, homeDir).syncStatePath;
-  state.version = OGB_VERSION;
+  state.version = AGENTX_VERSION;
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }

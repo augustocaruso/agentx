@@ -219,16 +219,16 @@ function postUpdateNext(report: SelfUpdateReport): string[] {
   return uniqueLines([
     ...(report.postUpdate?.summary?.next ?? []),
     ...(report.postUpdate?.status === "fail" || report.postUpdate?.status === "error"
-      ? ["Run `ogb check --plain --force` to inspect the post-update failure directly.", "Run `ogb dashboard --plain` for the last persisted bridge state."]
-      : ["Run `ogb update --plain` so the bootstrap log is printed without the rich UI.", "Check Node/npm/PowerShell PATH and network access, then retry the same release."]),
+      ? ["Run `agentx check --plain --force` to inspect the post-update failure directly.", "Run `agentx dashboard --plain` for the last persisted bridge state."]
+      : ["Run `agentx update --plain` so the bootstrap log is printed without the rich UI.", "Check Node/npm/PowerShell PATH and network access, then retry the same release."]),
   ], 4);
 }
 
 function unexpectedErrorNext(kind: RitualKind, message: string): string[] {
-  const command = `ogb ${kind} --plain`;
+  const command = `agentx ${kind} --plain`;
   const generic = [
     `Run \`${command}\` to see the classic logs without the rich UI.`,
-    "Then run `ogb dashboard --plain` to inspect the last persisted bridge status.",
+    "Then run `agentx dashboard --plain` to inspect the last persisted bridge status.",
   ];
   if (/ENOENT|not found|command not found|no such file|n.o . reconhecido/i.test(message)) {
     return [
@@ -278,10 +278,10 @@ function installModel(report: InstallReport): RitualViewModel {
     steps,
     callouts: checkCallouts(report.check, report.warnings),
     next: tone === "fail"
-      ? checkNext(report.check, ["Run `ogb dashboard --plain` for the persisted bridge state.", "Run `ogb check --plain` for the classic report."])
+      ? checkNext(report.check, ["Run `agentx dashboard --plain` for the persisted bridge state.", "Run `agentx check --plain` for the classic report."])
       : report.outcome === "preview"
-        ? ["Run ogb install without --dry-run to apply this plan."]
-        : ["OpenCode profile is ready.", "Run ogb check any time you want the full ritual."],
+        ? ["Run agentx install without --dry-run to apply this plan."]
+        : ["OpenCode profile is ready.", "Run agentx check any time you want the full ritual."],
     files: report.check ? [report.check.files.pass, report.check.files.dashboard] : [],
   };
 }
@@ -345,12 +345,12 @@ function resetModel(report: ResetReport): RitualViewModel {
     steps,
     callouts: checkCallouts(report.check, report.warnings),
     next: report.outcome === "preview"
-      ? ["Run ogb reset --yes without --dry-run to apply this plan."]
+      ? ["Run agentx reset --yes without --dry-run to apply this plan."]
       : report.outcome === "cancelled"
         ? ["Nothing was changed."]
         : report.check?.outcome === "fail"
-          ? checkNext(report.check, ["Run `ogb check --plain` for the classic report."])
-          : ["Global OpenCode profile was rebuilt.", "Run ogb check if you want another verification pass."],
+          ? checkNext(report.check, ["Run `agentx check --plain` for the classic report."])
+          : ["Global OpenCode profile was rebuilt.", "Run agentx check if you want another verification pass."],
     files: [report.globalConfigPath, ...(report.check ? [report.check.files.pass, report.check.files.dashboard] : [])],
   };
 }
@@ -384,9 +384,9 @@ function updateModel(report: SelfUpdateReport): RitualViewModel {
     ],
     callouts: report.status === "error" || postUpdateNeedsAttention ? postUpdateCallouts(report) : [],
     next: report.status === "preview"
-      ? ["Run ogb update without --dry-run to apply this release."]
+      ? ["Run agentx update without --dry-run to apply this release."]
       : report.status === "applied" && !postUpdateNeedsAttention
-        ? ["Restart OpenCode so the new plugin/sidebar code is loaded.", "Then run ogb check if you want a fresh human-readable pass."]
+        ? ["Restart OpenCode so the new plugin/sidebar code is loaded.", "Then run agentx check if you want a fresh human-readable pass."]
         : postUpdateNext(report),
     files: report.postUpdate?.files ?? [],
   };

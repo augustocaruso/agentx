@@ -3,7 +3,7 @@ import path from "node:path";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
 import { sha256Text } from "./file-hash.js";
 import { resolveProjectPaths } from "./paths.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface BidirectionalSyncOptions {
   projectRoot?: string;
@@ -158,7 +158,7 @@ export function runBidirectionalSync(options: BidirectionalSyncOptions = {}): Bi
     .filter((change) => change.status === "conflict")
     .map((change) => `Conflict: ${change.target} differs from ${change.source}`);
   const report: BidirectionalSyncReport = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     mode: "rules-only",
     dryRun: Boolean(options.dryRun),

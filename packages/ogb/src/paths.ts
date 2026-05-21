@@ -24,7 +24,7 @@ export interface ProjectPaths {
   updateStatusPath: string;
   limitsPath: string;
   quotaPath: string;
-  ogbConfigPath: string;
+  agentxConfigPath: string;
   ohMyOpenAgentConfigPath: string;
   trustPath: string;
   pluginStatusPath: string;
@@ -69,7 +69,7 @@ export function resolveProjectPaths(projectRoot = process.cwd(), homeDir = os.ho
   const generatedDir = homeMode
     ? path.join(bridgeConfigDir, "generated")
     : path.join(root, ".opencode", "generated");
-  const ogbConfigPath = homeMode
+  const agentxConfigPath = homeMode
     ? path.join(bridgeConfigDir, "agentx.config.jsonc")
     : path.join(root, ".opencode", "agentx.config.jsonc");
   const trustPath = homeMode
@@ -98,7 +98,7 @@ export function resolveProjectPaths(projectRoot = process.cwd(), homeDir = os.ho
     updateStatusPath: path.join(generatedDir, "agentx-update-status.json"),
     limitsPath: path.join(generatedDir, "agentx-limits.json"),
     quotaPath: path.join(generatedDir, "agentx-quota.json"),
-    ogbConfigPath,
+    agentxConfigPath,
     ohMyOpenAgentConfigPath: path.join(root, ".opencode", "oh-my-openagent.jsonc"),
     trustPath,
     pluginStatusPath: path.join(generatedDir, "agentx-plugin-status.json"),

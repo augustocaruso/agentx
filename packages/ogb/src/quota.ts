@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { bridgeConfigDirForHome, createBackupSession, type BackupRecord } from "./backup-policy.js";
 import { resolveProjectPaths } from "./paths.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 // Gemini Code Assist quota compatibility layer.
 // The flow mirrors the MIT-licensed opencode-gemini-auth plugin's /gquota path:
@@ -590,7 +590,7 @@ export function summarizeQuotaBuckets(buckets: RetrieveUserQuotaBucket[]): { sum
 
 function baseReport(projectRoot: string, status: QuotaReport["status"], message?: string): QuotaReport {
   return {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: new Date().toISOString(),
     status,

@@ -1,6 +1,6 @@
 import { resolveProjectPaths } from "./paths.js";
 import { syncToOpenCode, type SyncReport } from "./sync.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface StartupSyncOptions {
   projectRoot?: string;
@@ -35,7 +35,7 @@ export function runStartupSync(options: StartupSyncOptions = {}): StartupSyncRep
     });
     warnings.push(...sync.warnings);
     return {
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       projectRoot: paths.projectRoot,
       homeMode: paths.homeMode,
       outcome: "pass",
@@ -46,7 +46,7 @@ export function runStartupSync(options: StartupSyncOptions = {}): StartupSyncRep
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
     return {
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       projectRoot: paths.projectRoot,
       homeMode: paths.homeMode,
       outcome: "fail",

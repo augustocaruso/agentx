@@ -19,7 +19,7 @@ import {
 } from "./native-capability-registry.js";
 import { globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { spawnCommandSync } from "./process.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export type NativeCapabilitySourceKind = "gemini-extension" | "gemini-skill" | "gemini-mcp" | "opencode-plugin" | "opencode-mcp";
 export type NativeCapabilityAction = "blocked" | "fallback_compat" | "install_native" | "replicate_compat" | "use_existing_native";
@@ -354,8 +354,8 @@ export function resolveNativeCapabilities(options: ResolveNativeCapabilitiesOpti
   return {
     _generated: {
       tool: "ogb",
-      version: OGB_VERSION,
-      warning: "DO NOT EDIT. Regenerate with ogb sync.",
+      version: AGENTX_VERSION,
+      warning: "DO NOT EDIT. Regenerate with agentx sync.",
     },
     projectRoot: options.projectRoot,
     homeDir: options.homeDir,

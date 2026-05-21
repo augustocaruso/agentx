@@ -9,7 +9,7 @@ import { resolveProjectPaths } from "./paths.js";
 import type { ProfileWriteReason, ProfileWriteStatus, ProfileWriter } from "./profile-writer.js";
 import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState } from "./sync-state.js";
 import { TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar-source.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export { TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar-source.js";
 
@@ -71,7 +71,7 @@ function writeManagedText(options: {
     };
   }
 
-  const state = readSyncState(options.projectRoot) ?? emptySyncState(OGB_VERSION);
+  const state = readSyncState(options.projectRoot) ?? emptySyncState(AGENTX_VERSION);
   const previousHash = managedHashFor(state, options.relPath, "ogb");
   const exists = fs.existsSync(absPath);
   const currentText = exists ? fs.readFileSync(absPath, "utf8") : "";
@@ -300,7 +300,7 @@ function ensureTuiConfigFile(options: {
 
   if (!next.changed) {
     if (options.stateProjectRoot) {
-      const state = readSyncState(options.stateProjectRoot) ?? emptySyncState(OGB_VERSION);
+      const state = readSyncState(options.stateProjectRoot) ?? emptySyncState(AGENTX_VERSION);
       upsertManagedFile(state, { path: options.relPath, sha256: sha256Text(next.text), source: "ogb", ...TUI_SYNC_METADATA });
       writeSyncState(state, options.stateProjectRoot);
     }
@@ -337,7 +337,7 @@ function ensureTuiConfigFile(options: {
   fs.mkdirSync(path.dirname(absPath), { recursive: true });
   fs.writeFileSync(absPath, next.text, "utf8");
   if (options.stateProjectRoot) {
-    const state = readSyncState(options.stateProjectRoot) ?? emptySyncState(OGB_VERSION);
+    const state = readSyncState(options.stateProjectRoot) ?? emptySyncState(AGENTX_VERSION);
     upsertManagedFile(state, { path: options.relPath, sha256: sha256Text(next.text), source: "ogb", ...TUI_SYNC_METADATA });
     writeSyncState(state, options.stateProjectRoot);
   }

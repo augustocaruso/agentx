@@ -110,9 +110,9 @@ export interface ResolvedAgentFallback {
 
 export function readOgbConfig(projectRoot?: string, homeDir?: string): OgbConfig {
   const paths = resolveProjectPaths(projectRoot, homeDir);
-  if (!fs.existsSync(paths.ogbConfigPath)) return {};
+  if (!fs.existsSync(paths.agentxConfigPath)) return {};
   try {
-    return parseJsonc(fs.readFileSync(paths.ogbConfigPath, "utf8")) ?? {};
+    return parseJsonc(fs.readFileSync(paths.agentxConfigPath, "utf8")) ?? {};
   } catch {
     return {};
   }

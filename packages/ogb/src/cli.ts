@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
@@ -11,6 +12,7 @@ import { externalOpenCodePlugins } from "./external-integrations.js";
 import { formatCommand, installGeminiExtension, updateGeminiExtensions } from "./extensions.js";
 import { flattenGeminiMd } from "./flatten.js";
 import { findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS, type HelpAction, type HelpCommand } from "./help-catalog.js";
+import { migrateFromOgb, type MigrationReport } from "./migrate-from-ogb.js";
 import { cleanupHomeProjectArtifacts, printHomeCleanupReport } from "./home-cleanup.js";
 import { printInstallReport, runInstall } from "./install.js";
 import { buildInventory, writeInventory } from "./inventory.js";
@@ -40,7 +42,7 @@ import { syncToOpenCode } from "./sync.js";
 import { formatTelemetryEmailSetupResult, setupTelemetryEmailReceiver, TelemetrySetupError } from "./telemetry-email-setup.js";
 import { disableTelemetry, enableTelemetry, previewTelemetryEnvelope, printTelemetrySendResult, printTelemetryStatus, recordWorkflowRun, safeRecordWorkflowRun, sendTelemetry, telemetryStatus, TELEMETRY_PAYLOAD_LEVELS, type TelemetryPayloadLevel } from "./telemetry.js";
 import { runTrustExtension, runTrustReview } from "./trust.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 import { runValidation } from "./validation.js";
 import { ritualViewModel, shouldUseRitualUi } from "./ritual-view-model.js";
 import {
@@ -58,9 +60,9 @@ import {
 
 export const program = new Command();
 
-export const LEGACY_PASS_WARNING = "warning: ogb pass is deprecated; use ogb check.";
-export const LEGACY_SELF_UPDATE_WARNING = "warning: ogb self-update is deprecated; use ogb update.";
-export const LEGACY_UPGRADE_WARNING = "warning: ogb upgrade-ogb is deprecated; use ogb update.";
+export const LEGACY_PASS_WARNING = "warning: agentx pass is deprecated; use agentx check.";
+export const LEGACY_SELF_UPDATE_WARNING = "warning: agentx self-update is deprecated; use agentx update.";
+export const LEGACY_UPGRADE_WARNING = "warning: agentx upgrade-ogb is deprecated; use agentx update.";
 
 type InteractiveHelpSelection = {
   command: HelpCommand;
@@ -229,7 +231,7 @@ function runInteractiveHelpSelection(selection: InteractiveHelpSelection): void 
   });
   if (result.error) {
     console.error(`Could not run ${formatHelpRunLine(selection.args)}: ${result.error.message}`);
-    console.error("Next: run the command manually from your shell, or run `ogb help --plain` to inspect the command list.");
+    console.error("Next: run the command manually from your shell, or run `agentx help --plain` to inspect the command list.");
     process.exitCode = 2;
     return;
   }
@@ -281,8 +283,8 @@ function maybePostExtensionSync(opts: { dryRun?: boolean; skipSync?: boolean; sk
   const { project } = commonProjectOptions();
   const paths = resolveProjectPaths(project);
   if (opts.dryRun) {
-    if (!opts.skipSync) console.log("Would run ogb sync after extension command.");
-    if (!opts.skipDoctor) console.log("Would run ogb doctor after extension command.");
+    if (!opts.skipSync) console.log("Would run agentx sync after extension command.");
+    if (!opts.skipDoctor) console.log("Would run agentx doctor after extension command.");
     return;
   }
 
@@ -583,7 +585,7 @@ async function readTelemetryPayload(raw: string | undefined): Promise<unknown> {
 program
   .name("ogb")
   .description("OpenCode Gemini Bridge")
-  .version(OGB_VERSION)
+  .version(AGENTX_VERSION)
   .option("--project <path>", "Project root", process.cwd());
 program.addHelpCommand(false);
 
@@ -599,7 +601,7 @@ program.command("help")
       if (opts.json) console.log(JSON.stringify({ ok: false, error: message, commands: HELP_COMMANDS.map((command) => command.name) }, null, 2));
       else {
         console.error(message);
-        console.error("Run `ogb help` to browse available commands.");
+        console.error("Run `agentx help` to browse available commands.");
       }
       process.exitCode = 1;
       return;
@@ -1135,7 +1137,7 @@ program.command("install")
   .option("--no-plugins", "Do not run global OpenCode plugin installers")
   .option("--no-project-profile", "Do not write the project OGB fallback/profile config")
   .option("--no-cleanup-home", "Do not clean old OGB project artifacts from the home directory")
-  .option("--no-check", "Skip the final ogb check")
+  .option("--no-check", "Skip the final agentx check")
   .option("--accept-hooks", "Legacy: record unsupported Gemini hook events as reviewed during the final check")
   .option("--windows", "Include Windows installer/static checks during the final check")
   .option("--json", "Print JSON report")
@@ -1179,7 +1181,7 @@ program.command("setup-opencode")
   .description("Install the OpenCode startup sync plugin and validate the setup")
   .option("--dry-run", "Preview files and validation without writing")
   .option("--force", "Overwrite files previously changed outside ogb management")
-  .option("--skip-doctor", "Do not run ogb doctor after setup")
+  .option("--skip-doctor", "Do not run agentx doctor after setup")
   .option("--skip-command-check", "Do not verify the startup command")
   .option("--strict", "Exit non-zero when setup has warnings")
   .option("--command <path>", "Command used by the startup plugin instead of the current ogb CLI")
@@ -1270,7 +1272,7 @@ program.command("reset")
             kind: "reset",
             steps,
             run: () => {
-              throw new ResetConfirmationError("ogb reset --progress-json precisa de --yes ou --dry-run para manter stdout como NDJSON puro.");
+              throw new ResetConfirmationError("agentx reset --progress-json precisa de --yes ou --dry-run para manter stdout como NDJSON puro.");
             },
           });
         }
@@ -1379,8 +1381,8 @@ program.command("install-extension")
   .option("--no-auto-update", "Do not request Gemini CLI auto-update")
   .option("--pre-release", "Enable Gemini CLI pre-release updates")
   .option("--trust", "Acknowledge extension install risk and allow local hooks/scripts")
-  .option("--skip-sync", "Do not run ogb sync after install")
-  .option("--skip-doctor", "Do not run ogb doctor after install")
+  .option("--skip-sync", "Do not run agentx sync after install")
+  .option("--skip-doctor", "Do not run agentx doctor after install")
   .option("--force", "Pass force to the post-install sync")
   .action((source, opts) => {
     const report = installGeminiExtension({
@@ -1413,8 +1415,8 @@ program.command("update-extensions")
   .option("--dry-run", "Preview Gemini update and bridge follow-up without writing")
   .option("--auto-consent", "Answer Gemini CLI consent prompts automatically")
   .option("--yes", "Alias for --auto-consent")
-  .option("--skip-sync", "Do not run ogb sync after update")
-  .option("--skip-doctor", "Do not run ogb doctor after update")
+  .option("--skip-sync", "Do not run agentx sync after update")
+  .option("--skip-doctor", "Do not run agentx doctor after update")
   .option("--force", "Pass force to the post-update sync")
   .action((name, opts) => {
     const report = updateGeminiExtensions({
@@ -1443,6 +1445,28 @@ function isCliEntryPoint(): boolean {
   }
 }
 
+function announceMigration(report: MigrationReport): void {
+  if (report.status !== "migrated") return;
+  const movedDir = report.movedHomeDir
+    ? ` Moved ${report.movedHomeDir.from} → ${report.movedHomeDir.to}.`
+    : "";
+  const renamed = report.renamedFiles.length > 0
+    ? ` Renamed ${report.renamedFiles.length} legacy ogb-* file(s) to agentx-*.`
+    : "";
+  process.stderr.write(`agentX: migrated state from the legacy ogb layout.${movedDir}${renamed}\n`);
+  for (const warning of report.warnings) process.stderr.write(`agentX migration warning: ${warning}\n`);
+}
+
+function maybeMigrateFromOgb(): void {
+  try {
+    const report = migrateFromOgb({ homeDir: os.homedir(), projectRoot: process.cwd() });
+    announceMigration(report);
+  } catch (err) {
+    process.stderr.write(`agentX migration failed: ${(err as Error).message ?? String(err)}\n`);
+  }
+}
+
 if (isCliEntryPoint()) {
+  maybeMigrateFromOgb();
   program.parse();
 }

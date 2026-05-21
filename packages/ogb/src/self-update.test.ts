@@ -6,7 +6,7 @@ import test from "node:test";
 import { buildPostUpdateRitualCommand, buildSelfUpdateCommand, checkOgbUpdate, runAutoUpdate, runSelfUpdate, writeSelfUpdateSuccessStatus } from "./self-update.js";
 import { resolveProjectPaths } from "./paths.js";
 import { RITUAL_PROGRESS_SCHEMA_VERSION, type RitualProgressEvent } from "./ritual-progress.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 test("buildSelfUpdateCommand uses GitHub bootstrap on POSIX platforms", () => {
   const command = buildSelfUpdateCommand({
@@ -355,7 +355,7 @@ test("runSelfUpdate persists detailed update diagnostics when bootstrap fails", 
   assert.equal(saved.selfUpdate.stderrTail, "npm is not recognized as a command");
   assert.match(saved.message, /Bootstrap exited with code 1/);
   assert.match(saved.selfUpdate.stdoutTail, /Downloading OGB/);
-  assert.equal(saved.ogbVersion, OGB_VERSION);
+  assert.equal(saved.ogbVersion, AGENTX_VERSION);
   assert.equal(typeof saved.finishedAt, "string");
 });
 
@@ -380,7 +380,7 @@ test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   assert.equal(saved.status, "updated");
   assert.equal(saved.latestTag, "v0.0.53");
   assert.equal(saved.restartRequired, true);
-  assert.equal(saved.ogbVersion, OGB_VERSION);
+  assert.equal(saved.ogbVersion, AGENTX_VERSION);
   assert.equal(typeof saved.generatedAt, "string");
   assert.match(saved.message, /full bridge check/);
   assert.doesNotMatch(saved.message, /reset --yes/);
@@ -426,7 +426,7 @@ test("checkOgbUpdate reports available releases and writes status", async () => 
   assert.equal(saved.status, "available");
   assert.equal(saved.checkedAt, "2026-05-06T12:00:00.000Z");
   assert.equal(typeof saved.generatedAt, "string");
-  assert.equal(saved.ogbVersion, OGB_VERSION);
+  assert.equal(saved.ogbVersion, AGENTX_VERSION);
 });
 
 test("checkOgbUpdate reports current when latest tag matches current version", async () => {

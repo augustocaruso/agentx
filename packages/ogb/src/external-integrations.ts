@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { BackupSession } from "./backup-policy.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 import type { GeminiExtensionProjectionMap } from "./extension-projection.js";
 import { fallbackModelId, type ModelFallbackEntry, type OgbConfig } from "./ogb-config.js";
 import { globalOpenCodeConfigDir } from "./opencode-paths.js";
@@ -138,7 +138,7 @@ export function autoFallbackConfigFromProjection(config: OgbConfig, map: GeminiE
     $schema: "https://raw.githubusercontent.com/HyeokjaeLee/opencode-auto-fallback/main/docs/fallback.schema.json",
     _generated: {
       tool: "ogb",
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       warning: "Generated from .opencode/ogb.config.jsonc modelFallbacks.",
     },
     enabled: fallback.enabled === true,
@@ -176,7 +176,7 @@ export function projectExternalIntegrations(options: {
     backupSession: options.backupSession,
     value: {
       version: 1,
-      generatedBy: `ogb ${OGB_VERSION}`,
+      generatedBy: `ogb ${AGENTX_VERSION}`,
       quotaPanel: usesExternalQuotaUi(options.config) ? "external" : "ogb",
       externalQuotaPlugin: enabled(options.config.externalPlugins?.quotaUi)
         ? options.config.externalPlugins?.quotaUi?.plugin || OPENCODE_QUOTA_PLUGIN

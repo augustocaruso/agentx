@@ -6,7 +6,7 @@ import test from "node:test";
 import { runDashboard } from "./dashboard.js";
 import { resolveProjectPaths } from "./paths.js";
 import { readStateRecord, writeStateRecord } from "./state-store.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-state-"));
@@ -28,7 +28,7 @@ test("state store contract writes and reads stamped reports by kind", () => {
   assert.equal(read.legacy, false);
   assert.equal(read.data?.outcome, "pass");
   assert.equal(typeof read.data?.generatedAt, "string");
-  assert.equal(read.data?.ogbVersion, OGB_VERSION);
+  assert.equal(read.data?.ogbVersion, AGENTX_VERSION);
 });
 
 test("state store writes patch state in the generated bridge directory", () => {
@@ -78,9 +78,9 @@ test("state store treats schema-only numeric version reports as legacy", () => {
 test("state store legacy status remains compatible with dashboard", () => {
   const projectRoot = tempRoot();
   const paths = resolveProjectPaths(projectRoot);
-  writeJson(paths.doctorPath, { version: OGB_VERSION, projectRoot, errors: [], warnings: [], inventory: {} });
-  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
-  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+  writeJson(paths.doctorPath, { version: AGENTX_VERSION, projectRoot, errors: [], warnings: [], inventory: {} });
+  writeJson(paths.validationPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
   writeJson(paths.pluginStatusPath, { state: "pass", finishedAt: "2026-05-06T12:02:00.000Z" });
   writeJson(paths.updateStatusPath, {
     status: "updated",

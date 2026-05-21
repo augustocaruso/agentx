@@ -191,7 +191,7 @@ export function diagnoseOpenCodeMcpConfig(
       const environment = isRecord(rawConfig.environment) ? rawConfig.environment : {};
       const missing = expected.envKeys.filter((key) => !(key in environment));
       if (missing.length > 0) {
-        warnings.push(`OpenCode MCP shape warning: ${name}.environment is missing Gemini env key(s): ${missing.join(", ")}. Run ogb sync.`);
+        warnings.push(`OpenCode MCP shape warning: ${name}.environment is missing Gemini env key(s): ${missing.join(", ")}. Run agentx sync.`);
       }
     }
 
@@ -205,7 +205,7 @@ export function diagnoseOpenCodeMcpConfig(
         const foundInStore = storedEnvKeys.has(envName);
         const foundInProcess = options.processEnv?.[envName] !== undefined;
         if (!foundInStore && !foundInProcess) {
-          warnings.push(`OpenCode MCP environment warning: ${name}.environment.${key} references ${openCodeEnvReference(envName)}, but ${envName} is missing from the OGB MCP env store and current process environment. Run ogb sync from the Gemini MCP source with the literal present, or set ${envName} before launching OpenCode.`);
+          warnings.push(`OpenCode MCP environment warning: ${name}.environment.${key} references ${openCodeEnvReference(envName)}, but ${envName} is missing from the OGB MCP env store and current process environment. Run agentx sync from the Gemini MCP source with the literal present, or set ${envName} before launching OpenCode.`);
         }
       }
     }

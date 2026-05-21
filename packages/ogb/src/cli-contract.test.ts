@@ -26,9 +26,9 @@ test("legacy installer API verbs stay available with explicit warnings", () => {
   assert.equal(command("pass").description(), "Deprecated alias for check");
   assert.equal(command("self-update").description(), "Deprecated alias for update");
   assert.equal(command("upgrade-ogb").description(), "Deprecated alias for update");
-  assert.equal(LEGACY_PASS_WARNING, "warning: ogb pass is deprecated; use ogb check.");
-  assert.equal(LEGACY_SELF_UPDATE_WARNING, "warning: ogb self-update is deprecated; use ogb update.");
-  assert.equal(LEGACY_UPGRADE_WARNING, "warning: ogb upgrade-ogb is deprecated; use ogb update.");
+  assert.equal(LEGACY_PASS_WARNING, "warning: agentx pass is deprecated; use agentx check.");
+  assert.equal(LEGACY_SELF_UPDATE_WARNING, "warning: agentx self-update is deprecated; use agentx update.");
+  assert.equal(LEGACY_UPGRADE_WARNING, "warning: agentx upgrade-ogb is deprecated; use agentx update.");
 });
 
 test("user-facing installer verbs keep a stable plain output escape hatch", () => {

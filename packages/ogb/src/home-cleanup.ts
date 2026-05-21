@@ -4,7 +4,7 @@ import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { bridgeConfigDirForHome, createBackupSession, type BackupRecord } from "./backup-policy.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS } from "./built-ins.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface HomeCleanupOptions {
   homeDir?: string;
@@ -293,7 +293,7 @@ export function cleanupHomeProjectArtifacts(options: HomeCleanupOptions = {}): H
   if (!options.dryRun) pruneEmptyDirs(homeDir);
 
   return {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     homeDir,
     backupDir: options.dryRun || usedBackup ? backupSession.backupDir : undefined,
     backups: backupSession.backups,

@@ -229,8 +229,8 @@ test("update ritual final report avoids Ink fullscreen clears on short terminals
         "dashboard: validation failed",
       ],
       next: [
-        "Run `ogb check --plain --force` to inspect the post-update failure directly.",
-        "Run `ogb dashboard --plain` for the last persisted bridge state.",
+        "Run `agentx check --plain --force` to inspect the post-update failure directly.",
+        "Run `agentx dashboard --plain` for the last persisted bridge state.",
       ],
     },
     files: [`${projectRoot}/.opencode/generated/agentx-pass.json`, `${projectRoot}/.opencode/generated/agentx-dashboard.md`],
@@ -376,7 +376,7 @@ test("unexpected command errors get PATH-specific next actions", () => {
   const failed = failLiveRitualModel(started, new Error("ENOENT: opencode.cmd not found"), { now: 2000 });
 
   assert.match(failed.next[0], /PATH/);
-  assert.match(failed.next[1], /ogb update --plain/);
+  assert.match(failed.next[1], /agentx update --plain/);
 });
 
 test("check ritual view model highlights projected bridge assets", () => {
@@ -498,7 +498,7 @@ test("update final model shows warning when the post-update check warns", () => 
     status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: "OGB bootstrap completed. Full bridge check ran with warnings; see ogb check/dashboard for details.",
+    message: "OGB bootstrap completed. Full bridge check ran with warnings; see agentx check/dashboard for details.",
     postUpdate: {
       status: "warn",
       command: ["ogb", "check"],
@@ -518,7 +518,7 @@ test("install and reset final models keep nested check blockers specific", () =>
       severity: "fail",
       source: "validation",
       message: "Validation falhou: Global OpenCode config: opencode.json is missing.",
-      action: "Rode `ogb validate --plain` para ver os checks detalhados.",
+      action: "Rode `agentx validate --plain` para ver os checks detalhados.",
     }],
   });
   const install: InstallReport = {
@@ -547,9 +547,9 @@ test("install and reset final models keep nested check blockers specific", () =>
   const resetModel = ritualViewModel("reset", reset);
 
   assert.match(installModel.callouts[0], /Global OpenCode config/);
-  assert.match(installModel.next[0], /ogb validate --plain/);
+  assert.match(installModel.next[0], /agentx validate --plain/);
   assert.match(resetModel.callouts[0], /Global OpenCode config/);
-  assert.match(resetModel.next[0], /ogb validate --plain/);
+  assert.match(resetModel.next[0], /agentx validate --plain/);
 });
 
 test("update final model surfaces bootstrap tails and useful retry actions", () => {
@@ -564,7 +564,7 @@ test("update final model surfaces bootstrap tails and useful retry actions", () 
 
   assert.equal(model.statusLabel, "FAIL");
   assert.match(model.callouts.join("\n"), /npm is not recognized/);
-  assert.match(model.next[0], /ogb update --plain/);
+  assert.match(model.next[0], /agentx update --plain/);
 });
 
 test("update final model surfaces post-update check summary without raw progress JSON", () => {

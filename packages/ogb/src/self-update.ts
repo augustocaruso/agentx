@@ -6,7 +6,7 @@ import { createPlatformAdapter } from "./platform-adapter.js";
 import { normalizePathInput, resolveProjectPaths } from "./paths.js";
 import { emitRitualProgress, progressStatusFromOutcome, RITUAL_PROGRESS_SCHEMA_VERSION, type RitualProgressJsonEvent, type RitualProgressSink, type RitualProgressStatus, type RitualProgressSummary } from "./ritual-progress.js";
 import { writeStateRecord } from "./state-store.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 import type { RulesyncMode } from "./rulesync.js";
 
 const DEFAULT_REPO = "augustocaruso/opencode-gemini-bridge";
@@ -159,7 +159,7 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
   const checkedAt = now.toISOString();
   const check: UpdateCheckReport = {
     status: latestTag ? "available" : "unknown",
-    currentVersion: OGB_VERSION,
+    currentVersion: AGENTX_VERSION,
     latestVersion: normalizeTagVersion(latestTag),
     latestTag,
     checkedAt,
@@ -169,7 +169,7 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
   };
   const report: AutoUpdateReport = {
     status: "updated",
-    currentVersion: OGB_VERSION,
+    currentVersion: AGENTX_VERSION,
     latestVersion: check.latestVersion,
     latestTag,
     checkedAt,
@@ -191,7 +191,7 @@ function writeSelfUpdateErrorStatus(options: SelfUpdateOptions, report: SelfUpda
   const latestTag = selectedVersion === "latest" ? undefined : selectedVersion;
   const check: UpdateCheckReport = {
     status: "unknown",
-    currentVersion: OGB_VERSION,
+    currentVersion: AGENTX_VERSION,
     latestVersion: normalizeTagVersion(latestTag),
     latestTag,
     checkedAt,
@@ -199,7 +199,7 @@ function writeSelfUpdateErrorStatus(options: SelfUpdateOptions, report: SelfUpda
   };
   const updateReport: AutoUpdateReport = {
     status: "error",
-    currentVersion: OGB_VERSION,
+    currentVersion: AGENTX_VERSION,
     latestVersion: check.latestVersion,
     latestTag,
     checkedAt,
@@ -711,7 +711,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     message: postUpdate?.status === "fail" || postUpdate?.status === "error"
       ? `OGB bootstrap completed. Post-update check needs attention: ${postUpdate.message}`
       : postUpdate?.status === "warn"
-      ? "OGB bootstrap completed. Full bridge check ran with warnings; see ogb check/dashboard for details."
+      ? "OGB bootstrap completed. Full bridge check ran with warnings; see agentx check/dashboard for details."
       : postUpdate?.status === "skipped"
         ? "OGB bootstrap completed. Post-update check was skipped because setup was disabled."
         : "OGB bootstrap completed. Full bridge check was refreshed.",
@@ -720,7 +720,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
 
 export async function checkOgbUpdate(options: UpdateCheckOptions = {}): Promise<UpdateCheckReport> {
   const repo = normalizeRepo(options.repo);
-  const currentVersion = normalizeTagVersion(options.currentVersion ?? OGB_VERSION) ?? OGB_VERSION;
+  const currentVersion = normalizeTagVersion(options.currentVersion ?? AGENTX_VERSION) ?? AGENTX_VERSION;
   const checkedAt = (options.now ?? new Date()).toISOString();
 
   try {

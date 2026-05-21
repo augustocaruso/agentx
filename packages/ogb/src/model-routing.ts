@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { LimitsReport, ProviderUsage, UsageLine } from "./limits.js";
 import type { ModelFallbackEntry, ModelRuntimeOptions, ResolvedAgentFallback } from "./ogb-config.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface RoutedModel extends ModelRuntimeOptions {
   model: string;
@@ -212,7 +212,7 @@ export function createModelRoutingContext(options: ModelRoutingOptions): {
 
   const usage = usageByProvider(limits);
   const report: ModelRoutingReport = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: options.projectRoot,
     generatedAt: new Date().toISOString(),
     enabled: options.enabled !== false,

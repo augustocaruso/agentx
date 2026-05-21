@@ -4,7 +4,7 @@ import { runPass, type PassReport } from "./pass.js";
 import { resolveProjectPaths } from "./paths.js";
 import { emitRitualProgress, progressStatusFromOutcome, type RitualProgressSink } from "./ritual-progress.js";
 import { setupUx, type SetupUxReport } from "./setup-ux.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 import type { RulesyncMode } from "./rulesync.js";
 import { writeStateRecord } from "./state-store.js";
 
@@ -69,13 +69,13 @@ function statusFromCommands(commands: SetupCommand[]): ProgressStatus {
 }
 
 function setupProfileStatus(report: SetupUxReport): ProgressStatus {
-  const profileWrites = report.writes.filter((write) => write.path !== report.ogbConfigPath);
+  const profileWrites = report.writes.filter((write) => write.path !== report.agentxConfigPath);
   return statusFromWrites(profileWrites);
 }
 
 function setupProjectProfileStatus(report: SetupUxReport): ProgressStatus {
-  if (!report.ogbConfigPath) return "pass";
-  return writeNeedsAttention(report.writes.find((write) => write.path === report.ogbConfigPath)) ? "warn" : "pass";
+  if (!report.agentxConfigPath) return "pass";
+  return writeNeedsAttention(report.writes.find((write) => write.path === report.agentxConfigPath)) ? "warn" : "pass";
 }
 
 function openCodeProgressMessage(command: SetupCommand | undefined): string {
@@ -290,7 +290,7 @@ export function runInstall(options: InstallOptions = {}): InstallReport {
   ];
 
   const report: InstallReport = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     homeDir: paths.homeDir,
     homeMode: paths.homeMode,

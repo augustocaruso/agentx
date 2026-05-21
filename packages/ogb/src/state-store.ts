@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveProjectPaths } from "./paths.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export type StateReportKind =
   | "install"
@@ -85,7 +85,7 @@ export function writeStateRecord(kind: StateReportKind, data: Record<string, unk
   const filePath = stateRecordPath(kind, options);
   const stamped = {
     generatedAt: (options.now ?? new Date()).toISOString(),
-    ogbVersion: OGB_VERSION,
+    ogbVersion: AGENTX_VERSION,
     ...data,
   };
   fs.mkdirSync(path.dirname(filePath), { recursive: true });

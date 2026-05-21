@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveProjectPaths } from "./paths.js";
 import { refreshQuota, type QuotaReport } from "./quota.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 const OPENUSAGE_API = "http://127.0.0.1:6736/v1/usage";
 const ANTHROPIC_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
@@ -611,7 +611,7 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
   if (geminiCodeAssist.status !== "ok" && !hasGeminiProvider(providers)) warnings.push("Gemini Code Assist quota unavailable; /gquota remains the manual fallback.");
 
   const report: LimitsReport = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     generatedAt: new Date().toISOString(),
     status: statusFrom(openusage, openaiChatGPT, anthropicClaude, geminiCodeAssist, providers),

@@ -15,7 +15,7 @@ import { ensureProjectConfig, type ProjectConfigResult } from "./project-config.
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState } from "./sync-state.js";
 import { ensureTuiSidebar } from "./tui-sidebar.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export const STARTUP_SYNC_PLUGIN_PATH = ".opencode/plugins/ogb-startup-sync.js";
 export const STARTUP_SYNC_CONFIG_PATH = ".opencode/generated/agentx-startup-sync.json";
@@ -49,7 +49,7 @@ const OGB_DIRECT_COMMANDS = {
   },
   doctor: {
     description: "Mostra diagnostico do OpenCode Gemini Bridge",
-    template: "Executa ogb doctor e imprime o resultado diretamente no chat.",
+    template: "Executa agentx doctor e imprime o resultado diretamente no chat.",
   },
   resources: {
     description: "Lista recursos projetados pelo bridge",
@@ -57,15 +57,15 @@ const OGB_DIRECT_COMMANDS = {
   },
   validate: {
     description: "Valida o bridge de ponta a ponta sem chamar modelo por padrao",
-    template: "Executa ogb validate e imprime o resultado diretamente no chat.",
+    template: "Executa agentx validate e imprime o resultado diretamente no chat.",
   },
   "security-check": {
     description: "Verifica riscos obvios de seguranca do bridge",
-    template: "Executa ogb security-check e imprime o resultado diretamente no chat.",
+    template: "Executa agentx security-check e imprime o resultado diretamente no chat.",
   },
   telemetry: {
     description: "Mostra e envia telemetria local do OpenCode Gemini Bridge",
-    template: "Executa ogb telemetry status por padrao, ou a acao informada.",
+    template: "Executa agentx telemetry status por padrao, ou a acao informada.",
   },
   "agent-sync": {
     description: "Planeja adocao segura do agent-rules-sync",
@@ -81,7 +81,7 @@ const OGB_DIRECT_COMMANDS = {
   },
   "upgrade-ogb": {
     description: "Atualiza o OpenCode Gemini Bridge pela release oficial",
-    template: "Executa ogb update e depois ogb doctor diretamente no chat.",
+    template: "Executa agentx update e depois agentx doctor diretamente no chat.",
   },
 };
 const BRIDGE_COMMANDS = new Set([...Object.keys(OGB_DIRECT_COMMANDS), "sync"]);
@@ -1321,7 +1321,7 @@ async function updateDashboard({ cwd, client, syncPlan }) {
   await log(client, {
     service: "ogb-startup-sync",
     level: result.ok ? "info" : "warn",
-    message: result.ok ? "ogb dashboard refreshed" : "ogb dashboard refresh failed",
+    message: result.ok ? "agentx dashboard refreshed" : "agentx dashboard refresh failed",
     extra: {
       cwd,
       command: plan.command,
@@ -1343,7 +1343,7 @@ async function updateLimits({ cwd, client, syncPlan, reason }) {
   await log(client, {
     service: "ogb-startup-sync",
     level: result.ok ? "info" : "warn",
-    message: result.ok ? "ogb limits refreshed" : "ogb limits refresh failed",
+    message: result.ok ? "agentx limits refreshed" : "agentx limits refresh failed",
     extra: {
       cwd,
       reason,
@@ -1391,7 +1391,7 @@ async function recordTelemetry({ cwd, client, syncPlan, reason, result, update, 
   await log(client, {
     service: "ogb-startup-sync",
     level: telemetry.ok ? "info" : "warn",
-    message: telemetry.ok ? "ogb telemetry recorded" : "ogb telemetry record failed",
+    message: telemetry.ok ? "agentx telemetry recorded" : "agentx telemetry record failed",
     extra: {
       cwd,
       command: plan.command,
@@ -1535,7 +1535,7 @@ async function runCommand({ cwd, client, reason, notifications, failureBackoffMs
   await log(client, {
     service: "ogb-startup-sync",
     level: result.ok ? "info" : "warn",
-    message: result.ok ? "ogb sync completed" : "ogb sync failed",
+    message: result.ok ? "agentx sync completed" : "agentx sync failed",
     extra: status,
   });
 
@@ -1558,7 +1558,7 @@ async function runCommand({ cwd, client, reason, notifications, failureBackoffMs
   } else if (!result.ok && notifications.failure()) {
     await showToast(client, cwd, {
       title: "OGB SYNC FALHOU",
-      message: shortFailure(result) || "Rode /bridge ou ogb dashboard para ver o motivo.",
+      message: shortFailure(result) || "Rode /bridge ou agentx dashboard para ver o motivo.",
       variant: "error",
       duration: 6500,
     });
@@ -1879,7 +1879,7 @@ function writeManagedText(options: {
     };
   }
 
-  const state = readSyncState(options.projectRoot) ?? emptySyncState(OGB_VERSION);
+  const state = readSyncState(options.projectRoot) ?? emptySyncState(AGENTX_VERSION);
   const previousHash = managedHashFor(state, options.relPath, "ogb");
   const exists = fs.existsSync(absPath);
   const currentText = exists ? fs.readFileSync(absPath, "utf8") : "";
@@ -2033,7 +2033,7 @@ export function setupOpenCode(options: SetupOpenCodeOptions = {}): SetupOpenCode
       message,
     });
     return {
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       projectRoot: paths.projectRoot,
       homeMode: true,
       opencodeConfig: skippedConfig,
@@ -2128,7 +2128,7 @@ export function setupOpenCode(options: SetupOpenCodeOptions = {}): SetupOpenCode
   }
 
   return {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     homeMode: false,
     opencodeConfig,

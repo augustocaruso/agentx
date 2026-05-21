@@ -6,7 +6,7 @@ import { sha256Text } from "./file-hash.js";
 import { PLAN_NATIVE_READ_PERMISSIONS, PLAN_READ_ONLY_BASH_PERMISSIONS } from "./opencode-permissions.js";
 import { resolveProjectPaths } from "./paths.js";
 import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState } from "./sync-state.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface ProjectConfigResult {
   path: string;
@@ -104,7 +104,7 @@ export function ensureProjectConfig(options: ProjectConfigOptions = {}): Project
     };
   }
 
-  const state = readSyncState(projectRoot) ?? emptySyncState(OGB_VERSION);
+  const state = readSyncState(projectRoot) ?? emptySyncState(AGENTX_VERSION);
   const existed = fs.existsSync(configPath);
   let currentHash: string | undefined;
   if (existed) currentHash = sha256Text(fs.readFileSync(configPath, "utf8"));

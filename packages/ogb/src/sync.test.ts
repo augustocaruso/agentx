@@ -7,7 +7,7 @@ import { sha256Text } from "./file-hash.js";
 import { mcpEnvStorePath, readMcpEnvValues } from "./mcp-env-store.js";
 import { syncToOpenCode } from "./sync.js";
 import { TUI_CONFIG_PATH, TUI_SIDEBAR_PLUGIN_PATH, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 function tempProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-sync-"));
@@ -53,8 +53,8 @@ test("syncToOpenCode writes bridge-native generated config without Rulesync", ()
   assert.equal(report.rulesync.status, "skipped");
   assert.deepEqual(generated._generated, {
     tool: "ogb",
-    version: OGB_VERSION,
-    warning: "DO NOT EDIT. Regenerate with ogb sync.",
+    version: AGENTX_VERSION,
+    warning: "DO NOT EDIT. Regenerate with agentx sync.",
   });
   assert.deepEqual(generated.instructions, [".opencode/generated/GEMINI.expanded.md"]);
   assert.deepEqual(generated.mcp.local.command, ["node", "server.js"]);
@@ -151,7 +151,7 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.equal(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode/AGENTS.md"), false);
   assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/agentx/generated/GEMINI.expanded.md"));
   assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/agentx/generated/agentx-extension-map.json"));
-  assert.equal(extensionMap._generated.version, OGB_VERSION);
+  assert.equal(extensionMap._generated.version, AGENTX_VERSION);
   assert.equal(extensionMap.extensions[0].scope, "global");
   assert.equal(extensionMap.extensions[0].commands[0].target, ".config/opencode/commands/notes/review.md");
   assert.equal(extensionMap.extensions[0].agents[0].target, ".config/opencode/agents/researcher.md");
@@ -449,7 +449,7 @@ test("syncToOpenCode removes previously managed non-YOLO built-in agents", () =>
   fs.writeFileSync(oldAgentPath, oldAgent, "utf8");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), JSON.stringify({
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     managedFiles: [
       {
         path: ".opencode/agents/study.md",
@@ -513,7 +513,7 @@ test("syncToOpenCode projects built-in OpenCode commands", () => {
   assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "commands", "study.md")), false);
   assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "commands", "automate.md")), false);
   assert.doesNotMatch(doctorCommand, /^agent:/m);
-  assert.match(bridgeCommand, /ogb check/);
+  assert.match(bridgeCommand, /agentx check/);
   assert.match(bridgeCommand, /Nao use glob/);
   assert.match(resourcesCommand, /MCPs ativos/);
 });
@@ -577,7 +577,7 @@ test("syncToOpenCode prefers validated native Superpowers plugin over managed pr
   fs.writeFileSync(path.join(staleSkillDir, "SKILL.md"), staleSkillText, "utf8");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), JSON.stringify({
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     managedFiles: [
       {
         path: ".opencode/skills/superpowers/SKILL.md",
@@ -832,7 +832,7 @@ test("syncToOpenCode refreshes managed global extension skills instead of duplic
   const globalStatePath = path.join(homeDir, ".config", "agentx", "generated", "agentx-sync-state.json");
   fs.mkdirSync(path.dirname(globalStatePath), { recursive: true });
   fs.writeFileSync(globalStatePath, JSON.stringify({
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     managedFiles: [{
       path: ".config/opencode/skills/obsidian-ops/SKILL.md",
       sha256: sha256Text(oldGlobalSkill),
@@ -850,7 +850,7 @@ test("syncToOpenCode refreshes managed global extension skills instead of duplic
   const projectStatePath = path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json");
   fs.mkdirSync(path.dirname(projectStatePath), { recursive: true });
   fs.writeFileSync(projectStatePath, JSON.stringify({
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     managedFiles: [{
       path: ".opencode/skills/obsidian-ops/SKILL.md",
       sha256: sha256Text(oldProjectSkill),
@@ -1346,7 +1346,7 @@ test("syncToOpenCode migrates old Antigravity agent compatibility skills to nati
   fs.writeFileSync(path.join(agentsDir, "researcher.md"), "---\ndescription: Research notes.\n---\n# Researcher\n");
   fs.writeFileSync(path.join(oldSkillDir, "SKILL.md"), oldSkill, "utf8");
   fs.writeFileSync(statePath, JSON.stringify({
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     managedFiles: [
       {
         path: ".gemini/antigravity/skills/agent-researcher/SKILL.md",
@@ -1582,7 +1582,7 @@ test("syncToOpenCode routes extension subagent to fallback when primary provider
   fs.writeFileSync(path.join(extensionDir, "agents", "helper.md"), "---\ndescription: Helper.\n---\n# Helper\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-limits.json"), JSON.stringify({
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-04T12:00:00.000Z",
     status: "ok",

@@ -26,7 +26,7 @@ test("startup plugin uses the dedicated startup command and quiet lifecycle", ()
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function limitsPlanFrom\(syncPlan\)/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function scheduleLimitsRefresh\(\)/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /OGB_LIMITS_REFRESH_MS/);
-  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /ogb limits refreshed/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /agentx limits refreshed/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function safeUpdateArgs/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /\["auto-update", "update", "self-update", "upgrade-ogb"\]/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function withoutProjectArgs/);

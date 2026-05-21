@@ -353,7 +353,7 @@ test("runDoctor warns when the global TUI sidebar plugin is stale", () => {
 
   assert.equal(report.warnings.some((warning) =>
     warning.includes("Global OGB TUI sidebar plugin is stale")
-    && warning.includes("ogb check")
+    && warning.includes("agentx check")
     && warning.includes("repair it automatically")
     && warning.includes("restart OpenCode")
   ), true);
@@ -373,7 +373,7 @@ test("runDoctor warns when the global startup plugin is stale", () => {
 
   assert.equal(report.warnings.some((warning) =>
     warning.includes("Global OGB startup plugin is stale")
-    && warning.includes("ogb check")
+    && warning.includes("agentx check")
     && warning.includes("repair it automatically")
     && warning.includes("restart OpenCode")
   ), true);

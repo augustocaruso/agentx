@@ -11,7 +11,7 @@ test("resolveProjectPaths uses global agentX state paths when project root is ho
   assert.equal(isHomeProject(homeDir, homeDir), true);
   assert.equal(paths.homeMode, true);
   assert.equal(paths.generatedDir, path.join(homeDir, ".config", "agentx", "generated"));
-  assert.equal(paths.ogbConfigPath, path.join(homeDir, ".config", "agentx", "agentx.config.jsonc"));
+  assert.equal(paths.agentxConfigPath, path.join(homeDir, ".config", "agentx", "agentx.config.jsonc"));
 });
 
 test("resolveProjectPaths treats accidentally quoted home paths as home mode", () => {

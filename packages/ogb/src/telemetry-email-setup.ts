@@ -295,7 +295,7 @@ async function sendTestEmail(endpointUrl: string, token: string, fetchImpl: type
     payloadLevel: "diagnostic_redacted",
     client: {
       app: "agentx",
-      source: "ogb telemetry setup-email",
+      source: "agentx telemetry setup-email",
     },
     records: [{
       runId: "setup-test",
@@ -400,7 +400,7 @@ export async function setupTelemetryEmailReceiver(options: TelemetryEmailSetupOp
     if (!endpointUrl) {
       throw new TelemetrySetupError(
         "could not detect Worker URL from wrangler deploy output",
-        "Open the Cloudflare Workers dashboard, copy the worker URL, then run `ogb telemetry enable` with that endpoint.",
+        "Open the Cloudflare Workers dashboard, copy the worker URL, then run `agentx telemetry enable` with that endpoint.",
       );
     }
   }

@@ -621,7 +621,7 @@ test("medical notes pre-update snapshot falls back to OGB telemetry config", { s
     git(extensionPath, ["config", "user.name", "Test"]);
     git(extensionPath, ["add", "."]);
     git(extensionPath, ["commit", "-m", "baseline"]);
-    fs.writeFileSync(path.join(extensionPath, "scripts", "baseline.py"), "print('sent through ogb telemetry')\n", "utf8");
+    fs.writeFileSync(path.join(extensionPath, "scripts", "baseline.py"), "print('sent through agentx telemetry')\n", "utf8");
 
     const report = runBeforeGeminiExtensionUpdatePatches({
       projectRoot: homeDir,
@@ -651,8 +651,8 @@ test("medical notes pre-update snapshot falls back to OGB telemetry config", { s
     assert.equal(envelope.schema, "agentx.workflow-telemetry-envelope.v2");
     assert.equal(envelope.installId, "ogb-install");
     assert.equal(workflowRequest?.auth, "Bearer ogb-token");
-    assert.match(JSON.stringify(envelope.records[0].extension_diffs), /sent through ogb telemetry/);
-    assert.match(JSON.stringify(JSON.parse(workflowRequest?.body ?? "{}")), /sent through ogb telemetry/);
+    assert.match(JSON.stringify(envelope.records[0].extension_diffs), /sent through agentx telemetry/);
+    assert.match(JSON.stringify(JSON.parse(workflowRequest?.body ?? "{}")), /sent through agentx telemetry/);
   } finally {
     server.kill();
   }

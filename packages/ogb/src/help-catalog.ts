@@ -28,8 +28,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: "Install or reinstall the OGB OpenCode profile.",
     description: "Applies the managed OpenCode profile, global plugins, fallback wiring, startup sync wiring, and then runs the full check unless disabled.",
-    usage: "ogb install [--dry-run] [--force] [--reset-global] [--progress-json]",
-    examples: ["ogb install", "ogb install --dry-run", "ogb install --reset-global", "ogb install --dry-run --progress-json"],
+    usage: "agentx install [--dry-run] [--force] [--reset-global] [--progress-json]",
+    examples: ["agentx install", "agentx install --dry-run", "agentx install --reset-global", "agentx install --dry-run --progress-json"],
   },
   {
     name: "update",
@@ -38,8 +38,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: "Update OGB from the release pack and run the post-update ritual.",
     description: "Downloads the selected release, runs the platform bootstrap installer, and refreshes the bridge check afterward.",
-    usage: "ogb update [--release <tag>] [--dry-run] [--plain] [--progress-json]",
-    examples: ["ogb update", "ogb update --release v0.1.3", "ogb update --dry-run", "ogb update --dry-run --progress-json"],
+    usage: "agentx update [--release <tag>] [--dry-run] [--plain] [--progress-json]",
+    examples: ["agentx update", "agentx update --release v0.1.3", "agentx update --dry-run", "agentx update --dry-run --progress-json"],
   },
   {
     name: "check",
@@ -48,8 +48,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: "Run the complete bridge health ritual.",
     description: "Runs setup, Gemini extension update, sync, doctor, validation, security-check, and dashboard in one user-facing flow.",
-    usage: "ogb check [--force] [--no-extension-update] [--no-patches] [--plain] [--json] [--progress-json]",
-    examples: ["ogb check", "ogb check --force", "ogb check --no-extension-update", "ogb check --no-patches", "ogb check --plain", "ogb check --progress-json"],
+    usage: "agentx check [--force] [--no-extension-update] [--no-patches] [--plain] [--json] [--progress-json]",
+    examples: ["agentx check", "agentx check --force", "agentx check --no-extension-update", "agentx check --no-patches", "agentx check --plain", "agentx check --progress-json"],
   },
   {
     name: "reset",
@@ -57,8 +57,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: "Rebuild the global OGB/OpenCode profile from home.",
     description: "Only runs in the home directory. Cleans old accidental home-project artifacts, reapplies global config, syncs, and verifies.",
-    usage: "ogb reset --yes [--dry-run] [--progress-json]",
-    examples: ["cd ~ && ogb reset --yes", "cd ~ && ogb reset --dry-run --yes", "cd ~ && ogb reset --dry-run --yes --progress-json"],
+    usage: "agentx reset --yes [--dry-run] [--progress-json]",
+    examples: ["cd ~ && agentx reset --yes", "cd ~ && agentx reset --dry-run --yes", "cd ~ && agentx reset --dry-run --yes --progress-json"],
     actions: [
       {
         label: "Preview reset from home",
@@ -84,8 +84,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: "Show the current bridge status summary.",
     description: "Combines doctor, validation, security, startup sync, update, telemetry, limits, model routing, and extension state.",
-    usage: "ogb dashboard [--json] [--no-refresh] [--write-only] [--strict]",
-    examples: ["ogb dashboard", "ogb bridge", "ogb dashboard --json", "ogb dashboard --no-refresh", "ogb dashboard --write-only", "ogb dashboard --strict"],
+    usage: "agentx dashboard [--json] [--no-refresh] [--write-only] [--strict]",
+    examples: ["agentx dashboard", "ogb bridge", "agentx dashboard --json", "agentx dashboard --no-refresh", "agentx dashboard --write-only", "agentx dashboard --strict"],
     actions: [
       {
         label: "Show dashboard",
@@ -124,8 +124,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Inspect",
     summary: "Browse OGB commands and actions.",
     description: "Opens the interactive command guide, prints classic help, or explains one command in detail.",
-    usage: "ogb help [command] [--plain] [--json]",
-    examples: ["ogb help", "ogb help check", "ogb help dashboard --plain", "ogb help --json"],
+    usage: "agentx help [command] [--plain] [--json]",
+    examples: ["agentx help", "agentx help check", "agentx help dashboard --plain", "agentx help --json"],
     actions: [
       {
         label: "Open interactive guide",
@@ -139,7 +139,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
       },
       {
         label: "Explain check",
-        description: "Shows detailed help and runnable actions for ogb check.",
+        description: "Shows detailed help and runnable actions for agentx check.",
         args: ["help", "check"],
       },
       {
@@ -184,24 +184,24 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Inspect",
     summary: "Inspect inventory and compatibility state.",
     description: "Checks generated files, resources, plugin state, extensions, MCPs, commands, skills, agents, and startup sync status.",
-    usage: "ogb doctor [--json] [--strict]",
-    examples: ["ogb doctor", "ogb doctor --strict"],
+    usage: "agentx doctor [--json] [--strict]",
+    examples: ["agentx doctor", "agentx doctor --strict"],
   },
   {
     name: "validate",
     category: "Inspect",
     summary: "Run end-to-end config validation without calling a model by default.",
     description: "Validates generated context, OpenCode config, instructions, MCPs, plugin references, commands, and optional Windows static checks.",
-    usage: "ogb validate [--windows] [--plain] [--json]",
-    examples: ["ogb validate", "ogb validate --windows", "ogb validate --json"],
+    usage: "agentx validate [--windows] [--plain] [--json]",
+    examples: ["agentx validate", "agentx validate --windows", "agentx validate --json"],
   },
   {
     name: "security-check",
     category: "Inspect",
     summary: "Scan generated bridge files for safety issues.",
     description: "Checks obvious secrets, YOLO guardrails, MCP env materialization, extension projection safety, and trusted hook/script hashes.",
-    usage: "ogb security-check [--json] [--strict]",
-    examples: ["ogb security-check", "ogb security-check --strict"],
+    usage: "agentx security-check [--json] [--strict]",
+    examples: ["agentx security-check", "agentx security-check --strict"],
   },
   {
     name: "limits",
@@ -209,32 +209,32 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Inspect",
     summary: "Refresh provider usage limits for the OGB UI.",
     description: "Reads OpenUsage when available and falls back to native provider auth where supported.",
-    usage: "ogb limits [--json] [--cached]",
-    examples: ["ogb limits", "ogb quota --cached"],
+    usage: "agentx limits [--json] [--cached]",
+    examples: ["agentx limits", "agentx quota --cached"],
   },
   {
     name: "sync",
     category: "Sync",
     summary: "Generate the OpenCode projection from Gemini resources.",
     description: "Projects context, MCPs, agents, commands, skills, model routing, sidebar files, and external integration files.",
-    usage: "ogb sync [--force] [--dry-run] [--rulesync <mode>]",
-    examples: ["ogb sync", "ogb sync --force", "ogb sync --dry-run"],
+    usage: "agentx sync [--force] [--dry-run] [--rulesync <mode>]",
+    examples: ["agentx sync", "agentx sync --force", "agentx sync --dry-run"],
   },
   {
     name: "startup-sync",
     category: "Sync",
     summary: "Run the lightweight startup projection used by the OpenCode plugin.",
     description: "Designed for OpenCode startup. It treats global warnings as non-fatal and writes startup status for dashboard diagnostics.",
-    usage: "ogb startup-sync [--force] [--json]",
-    examples: ["ogb startup-sync", "ogb startup-sync --json"],
+    usage: "agentx startup-sync [--force] [--json]",
+    examples: ["agentx startup-sync", "agentx startup-sync --json"],
   },
   {
     name: "bidirectional-sync",
     category: "Sync",
     summary: "Sync user-owned rule files between Gemini, OpenCode, and Codex.",
     description: "Moves rule files conservatively with backups and conflict detection. This is not part of the recommended daily path yet.",
-    usage: "ogb bidirectional-sync [--dry-run] [--force]",
-    examples: ["ogb bidirectional-sync --dry-run", "ogb bidirectional-sync --force"],
+    usage: "agentx bidirectional-sync [--dry-run] [--force]",
+    examples: ["agentx bidirectional-sync --dry-run", "agentx bidirectional-sync --force"],
   },
   {
     name: "setup-opencode",
@@ -283,24 +283,24 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Setup",
     summary: "Remove accidental project artifacts from the home directory.",
     description: "Backs up and removes old home-project files and prunes empty leftovers. Used by reset/install flows.",
-    usage: "ogb cleanup-home [--dry-run] [--json]",
-    examples: ["ogb cleanup-home --dry-run", "ogb cleanup-home"],
+    usage: "agentx cleanup-home [--dry-run] [--json]",
+    examples: ["agentx cleanup-home --dry-run", "agentx cleanup-home"],
   },
   {
     name: "init",
     category: "Setup",
     summary: "Create a conservative project config for OGB.",
     description: "Initializes a project-level OGB config when the target is not the home/global scope.",
-    usage: "ogb init [--dry-run] [--force]",
-    examples: ["ogb init", "ogb init --dry-run"],
+    usage: "agentx init [--dry-run] [--force]",
+    examples: ["agentx init", "agentx init --dry-run"],
   },
   {
     name: "install-extension",
     category: "Extensions",
     summary: "Install a Gemini CLI extension, then sync and doctor.",
     description: "Wraps Gemini extension installation and runs the bridge follow-up checks. Local risky extensions require explicit trust.",
-    usage: "ogb install-extension <source> [--trust] [--dry-run]",
-    examples: ["ogb install-extension https://github.com/org/ext", "ogb install-extension ./my-ext --trust"],
+    usage: "agentx install-extension <source> [--trust] [--dry-run]",
+    examples: ["agentx install-extension https://github.com/org/ext", "agentx install-extension ./my-ext --trust"],
     runnable: false,
     runHint: "This command needs an extension source first. Pick one of the examples and replace the source.",
   },
@@ -309,66 +309,66 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Extensions",
     summary: "Update Gemini CLI extensions, then sync and doctor.",
     description: "Updates one or all Gemini CLI extensions and refreshes the OpenCode projection afterward. Use --auto-consent for unattended runs.",
-    usage: "ogb update-extensions [name] [--dry-run] [--auto-consent]",
-    examples: ["ogb update-extensions --dry-run", "ogb update-extensions --auto-consent", "ogb update-extensions gemini-md-export --auto-consent"],
+    usage: "agentx update-extensions [name] [--dry-run] [--auto-consent]",
+    examples: ["agentx update-extensions --dry-run", "agentx update-extensions --auto-consent", "agentx update-extensions gemini-md-export --auto-consent"],
   },
   {
     name: "trust-report",
     category: "Extensions",
     summary: "Audit mapped Gemini extension hooks/scripts.",
     description: "Shows hook/script surface and legacy trust hash status. Compatible extension hooks sync automatically through the OGB plugin.",
-    usage: "ogb trust-report [extension] [--json]",
-    examples: ["ogb trust-report", "ogb trust-report browsermcp-extension"],
+    usage: "agentx trust-report [extension] [--json]",
+    examples: ["agentx trust-report", "agentx trust-report browsermcp-extension"],
   },
   {
     name: "trust-extension",
     category: "Extensions",
     summary: "Record legacy review hashes for extension hooks/scripts.",
     description: "Stores reviewed hashes for extension hook/script resources after manual review; this is not needed to activate compatible hooks.",
-    usage: "ogb trust-extension <extension> [--all-hooks] [--all-scripts]",
-    examples: ["ogb trust-extension browsermcp-extension --all-hooks"],
+    usage: "agentx trust-extension <extension> [--all-hooks] [--all-scripts]",
+    examples: ["agentx trust-extension browsermcp-extension --all-hooks"],
     runnable: false,
-    runHint: "This command needs an extension name first. Use `ogb trust-report` to see available extensions.",
+    runHint: "This command needs an extension name first. Use `agentx trust-report` to see available extensions.",
   },
   {
     name: "check-update",
     category: "Debug",
     summary: "Check GitHub Releases for a newer OGB version.",
     description: "Writes update status for dashboard without installing anything.",
-    usage: "ogb check-update [--json] [--no-write]",
-    examples: ["ogb check-update", "ogb check-update --json"],
+    usage: "agentx check-update [--json] [--no-write]",
+    examples: ["agentx check-update", "agentx check-update --json"],
   },
   {
     name: "auto-update",
     category: "Debug",
     summary: "Automatically update when a newer release exists.",
-    description: "Used by automation/plugin flows. User-facing installs should prefer ogb update.",
-    usage: "ogb auto-update [--dry-run] [--no-write]",
-    examples: ["ogb auto-update --dry-run"],
+    description: "Used by automation/plugin flows. User-facing installs should prefer agentx update.",
+    usage: "agentx auto-update [--dry-run] [--no-write]",
+    examples: ["agentx auto-update --dry-run"],
   },
   {
     name: "inventory",
     category: "Debug",
     summary: "Inventory Gemini and OpenCode resources.",
     description: "Writes or prints counts for GEMINI.md files, imports, skills, MCPs, agents, commands, hooks, and extensions.",
-    usage: "ogb inventory [-o <path>]",
-    examples: ["ogb inventory", "ogb inventory -o inventory.json"],
+    usage: "agentx inventory [-o <path>]",
+    examples: ["agentx inventory", "agentx inventory -o inventory.json"],
   },
   {
     name: "flatten",
     category: "Debug",
     summary: "Expand GEMINI.md imports for OpenCode.",
     description: "Generates the expanded Gemini context file and reports missing imports or cycles.",
-    usage: "ogb flatten [-i <path>] [-o <path>] [--dry-run]",
-    examples: ["ogb flatten", "ogb flatten --dry-run"],
+    usage: "agentx flatten [-i <path>] [-o <path>] [--dry-run]",
+    examples: ["agentx flatten", "agentx flatten --dry-run"],
   },
   {
     name: "launch",
     category: "Debug",
     summary: "Sync/doctor and launch OpenCode.",
     description: "Runs the import/sync preparation and starts OpenCode with optional agent or YOLO shortcut.",
-    usage: "ogb launch [--agent <name>] [--yolo]",
-    examples: ["ogb launch", "ogb launch --yolo"],
+    usage: "agentx launch [--agent <name>] [--yolo]",
+    examples: ["agentx launch", "agentx launch --yolo"],
   },
   {
     name: "adopt-agent-sync",
@@ -382,17 +382,17 @@ export const HELP_COMMANDS: HelpCommand[] = [
     name: "import",
     category: "Legacy",
     summary: "Legacy first-time Gemini to OpenCode import flow.",
-    description: "Older entrypoint for inventory, flatten, Rulesync-backed sync, and doctor. Prefer ogb install or ogb check.",
-    usage: "ogb import [--dry-run] [--force]",
-    examples: ["ogb import --dry-run"],
+    description: "Older entrypoint for inventory, flatten, Rulesync-backed sync, and doctor. Prefer agentx install or agentx check.",
+    usage: "agentx import [--dry-run] [--force]",
+    examples: ["agentx import --dry-run"],
   },
   {
     name: "telemetry",
     category: "Telemetry",
     summary: "Manage local-first OGB workflow telemetry.",
     description: "Parent command for telemetry setup, status, preview, send, enable, and disable.",
-    usage: "ogb telemetry <subcommand>",
-    examples: ["ogb telemetry status", "ogb telemetry preview"],
+    usage: "agentx telemetry <subcommand>",
+    examples: ["agentx telemetry status", "agentx telemetry preview"],
     runArgs: ["telemetry", "status"],
     actions: [
       {
@@ -468,10 +468,10 @@ function shellishSplit(value: string): string[] {
 
 function argsFromHelpExample(example: string): string[] | undefined {
   const trimmed = example.trim();
-  const homePrefix = /^cd\s+~\s+&&\s+ogb\s+(.+)$/u.exec(trimmed);
+  const homePrefix = /^cd\s+~\s+&&\s+(?:agentx|ogb)\s+(.+)$/u.exec(trimmed);
   if (homePrefix) return shellishSplit(homePrefix[1]);
-  const ogbPrefix = /^ogb\s+(.+)$/u.exec(trimmed);
-  if (ogbPrefix) return shellishSplit(ogbPrefix[1]);
+  const binPrefix = /^(?:agentx|ogb)\s+(.+)$/u.exec(trimmed);
+  if (binPrefix) return shellishSplit(binPrefix[1]);
   return undefined;
 }
 
@@ -538,7 +538,7 @@ export function runArgsForHelpCommand(command: HelpCommand): string[] | undefine
 }
 
 export function formatHelpRunLine(args: readonly string[]): string {
-  return `ogb ${args.join(" ")}`;
+  return `agentx ${args.join(" ")}`;
 }
 
 export function findHelpCommand(name: string | undefined, commands: readonly HelpCommand[] = HELP_COMMANDS): HelpCommand | undefined {
@@ -621,6 +621,6 @@ export function formatHelpCatalog(commands: readonly HelpCommand[] = HELP_COMMAN
     lines.push("", category);
     for (const command of items) lines.push(`  ${command.name.padEnd(18)} ${command.summary}`);
   }
-  lines.push("", "Use `ogb help <command>` for details. In an interactive terminal, run `ogb help` for the navigable guide.");
+  lines.push("", "Use `agentx help <command>` for details. In an interactive terminal, run `agentx help` for the navigable guide.");
   return `${lines.join("\n")}\n`;
 }

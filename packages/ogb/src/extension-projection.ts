@@ -20,7 +20,7 @@ import {
 } from "./model-routing.js";
 import { resolveProjectPaths } from "./paths.js";
 import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState } from "./sync-state.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export interface ExtensionProjectionOptions {
   projectRoot?: string;
@@ -590,7 +590,7 @@ export function projectGeminiExtensionCommands(options: ExtensionProjectionOptio
   const projectedAgents: string[] = [];
   const modelFallbacks: GeminiExtensionProjectionMap["modelFallbacks"] = [];
   const warnings: string[] = [];
-  const state = readSyncState(paths.projectRoot) ?? emptySyncState(OGB_VERSION);
+  const state = readSyncState(paths.projectRoot) ?? emptySyncState(AGENTX_VERSION);
   const keep = new Set<string>();
   const keepAgents = new Set<string>();
 
@@ -781,8 +781,8 @@ export function projectGeminiExtensionCommands(options: ExtensionProjectionOptio
   const map: GeminiExtensionProjectionMap = {
     _generated: {
       tool: "ogb",
-      version: OGB_VERSION,
-      warning: "DO NOT EDIT. Regenerate with ogb sync.",
+      version: AGENTX_VERSION,
+      warning: "DO NOT EDIT. Regenerate with agentx sync.",
     },
     projectRoot: paths.projectRoot,
     generatedAt: new Date().toISOString(),

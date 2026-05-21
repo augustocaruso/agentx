@@ -8,7 +8,7 @@ import { isSecretLikeRelPath, secretPatternLabels } from "../src/security.js";
 import { STARTUP_SYNC_PLUGIN_SOURCE } from "../src/setup-opencode.js";
 import { readSyncState, type ManagedFileState } from "../src/sync-state.js";
 import { TUI_SIDEBAR_PLUGIN_SOURCE } from "../src/tui-sidebar.js";
-import { OGB_VERSION } from "../src/types.js";
+import { AGENTX_VERSION } from "../src/types.js";
 import { UX_PROFILE_SCHEMA, type UxProfilePreset } from "../src/ux-profile.js";
 import { UX_PROFILE_PRESET } from "../src/ux-profile.generated.js";
 
@@ -867,7 +867,7 @@ export function createUxProfileInventory(options: UxProfileEngineOptions = {}): 
 
   return {
     schema: INVENTORY_SCHEMA,
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     homeRelPath: "~",
     globalConfigRelPath: displayRootPath(paths.globalConfigDir, paths.adapter.homeDir, paths.adapter.pathApi),
     bridgeConfigRelPath: displayRootPath(paths.bridgeConfigDir, paths.adapter.homeDir, paths.adapter.pathApi),
@@ -1038,7 +1038,7 @@ function repoRelative(paths: ResolvedPaths, target: string): string {
 function buildManifest(paths: ResolvedPaths, inventory: UxProfileInventory, selected: UxProfileAuthoringCandidate[], warnings: string[]): UxProfileSnapshotManifest {
   return {
     schema: MANIFEST_SCHEMA,
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     presetSchema: UX_PROFILE_SCHEMA,
     selected: selected.map((candidate) => ({
       id: candidate.id,

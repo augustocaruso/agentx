@@ -5,7 +5,7 @@ import { resolveProjectPaths } from "./paths.js";
 import { formatDashboard } from "./presentation/dashboard.js";
 import { readStateRecord, writeStateRecord, type StateStoreOptions } from "./state-store.js";
 import { telemetryStatus, type TelemetryStatus } from "./telemetry.js";
-import { OGB_VERSION, type StatusCounts } from "./types.js";
+import { AGENTX_VERSION, type StatusCounts } from "./types.js";
 
 export interface DashboardOptions {
   projectRoot?: string;
@@ -239,11 +239,11 @@ function updateTargetsCurrentVersion(updateStatus: Record<string, any> | undefin
     normalizeVersionTag(updateStatus?.latestTag),
   ].filter(Boolean);
   if (candidates.length === 0) return true;
-  return candidates.includes(OGB_VERSION);
+  return candidates.includes(AGENTX_VERSION);
 }
 
 function reportIsFreshForUpdate(report: Record<string, any> | undefined, updateMs: number | undefined): boolean {
-  if (!report || report.version !== OGB_VERSION) return false;
+  if (!report || report.version !== AGENTX_VERSION) return false;
   if (report.outcome !== "pass") return false;
   const generatedMs = reportGeneratedMs(report);
   if (!generatedMs) return false;
@@ -264,10 +264,10 @@ function consumeCompletedRestart(
   const consumed = {
     ...updateStatus,
     status: "current",
-    currentVersion: OGB_VERSION,
+    currentVersion: AGENTX_VERSION,
     restartRequired: false,
     restartAcknowledgedAt: new Date().toISOString(),
-    message: `OGB ${OGB_VERSION} esta carregado e o check pos-update foi regenerado.`,
+    message: `OGB ${AGENTX_VERSION} esta carregado e o check pos-update foi regenerado.`,
   };
   try {
     writeStateRecord("update", consumed, stateOptions);
@@ -288,7 +288,7 @@ function hasKnownWindowsQuotedCommandFailure(kind: "validation" | "security", re
 
 function staleReportMessage(kind: "validation" | "security", report: Record<string, any>, context: ReportSummaryContext): string | undefined {
   const version = typeof report.version === "string" ? report.version : undefined;
-  if (version && version !== OGB_VERSION) {
+  if (version && version !== AGENTX_VERSION) {
     return `${kind} foi gerado pelo ogb ${version}; rode \`ogb ${staleReportCommand(kind)}\` para atualizar.`;
   }
 
@@ -312,7 +312,7 @@ function staleReportMessage(kind: "validation" | "security", report: Record<stri
       && /generated config marker/i.test(check.message)
     );
     if (hasProjectConfigMarkerFailure) {
-      return "validation antigo ainda esta procurando config de projeto dentro da home; rode `ogb validate` para atualizar.";
+      return "validation antigo ainda esta procurando config de projeto dentro da home; rode `agentx validate` para atualizar.";
     }
   }
 
@@ -325,7 +325,7 @@ function staleReportMessage(kind: "validation" | "security", report: Record<stri
       && finding.message.includes(".opencode/agents/YOLO.md")
     );
     if (hasProjectYoloFailure) {
-      return "security antigo ainda esta procurando `.opencode/agents/YOLO.md` na home; rode `ogb security-check` para atualizar.";
+      return "security antigo ainda esta procurando `.opencode/agents/YOLO.md` na home; rode `agentx security-check` para atualizar.";
     }
   }
 
@@ -394,7 +394,7 @@ function staleUpdateErrorVersion(updateStatus: Record<string, any> | undefined):
     : typeof updateStatus.check?.currentVersion === "string"
       ? updateStatus.check.currentVersion
       : undefined;
-  if (!currentVersion || currentVersion === OGB_VERSION) return undefined;
+  if (!currentVersion || currentVersion === AGENTX_VERSION) return undefined;
   return currentVersion;
 }
 
@@ -431,19 +431,19 @@ function buildNextSteps(report: DashboardReport): string[] {
   }
 
   if (report.reports.doctor.status !== "pass" && !startupStale) {
-    steps.push("Rode `ogb doctor` e corrija os avisos antes de distribuir.");
+    steps.push("Rode `agentx doctor` e corrija os avisos antes de distribuir.");
   }
   if (report.reports.validation.status !== "pass" && !startupStale) {
-    steps.push("Rode `ogb validate` depois de mudar comandos, agentes, MCPs ou instaladores.");
+    steps.push("Rode `agentx validate` depois de mudar comandos, agentes, MCPs ou instaladores.");
   }
   if (report.reports.security.status !== "pass") {
-    steps.push("Rode `ogb security-check` antes de empacotar ou publicar.");
+    steps.push("Rode `agentx security-check` antes de empacotar ou publicar.");
   }
   if (report.extensionCompatibility.scripts > 0) {
     steps.push("Scripts soltos de Gemini Extensions continuam como superficie de revisao; hooks BeforeTool/AfterTool/BeforeAgent compativeis de settings/extensoes rodam pelo plugin OGB.");
   }
   if (report.runtimeFallback.configured && (!report.runtimeFallback.pluginActive || !report.runtimeFallback.configExists)) {
-    steps.push("Rode `ogb sync` para alinhar o plugin/config do runtime fallback externo.");
+    steps.push("Rode `agentx sync` para alinhar o plugin/config do runtime fallback externo.");
   }
   if (report.modelResolution.unresolved.length > 0) {
     steps.push("Revise os modelos em `.opencode/ogb.config.jsonc`; ha modelos que nao aparecem em `opencode models`.");
@@ -509,7 +509,7 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
   const rulesync = doctor?.rulesync ?? {};
 
   const reportWithoutSteps: Omit<DashboardReport, "nextSteps"> = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     generatedAt: new Date().toISOString(),
     outcome: "pass",
@@ -579,7 +579,7 @@ export function runDashboard(options: DashboardOptions = {}): DashboardReport {
       finishedAt: typeof updateStatus?.finishedAt === "string" ? updateStatus.finishedAt : undefined,
       restartRequired: !staleUpdateVersion && updateStatus?.restartRequired === true,
       message: staleUpdateVersion
-        ? `Ignorando erro antigo de update do ogb ${staleUpdateVersion}; versao atual e ${OGB_VERSION}.`
+        ? `Ignorando erro antigo de update do ogb ${staleUpdateVersion}; versao atual e ${AGENTX_VERSION}.`
         : typeof updateStatus?.message === "string" ? updateStatus.message : "Update status ainda nao foi gerado.",
     },
     limits: {

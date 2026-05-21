@@ -14,7 +14,7 @@ import { checkPluginSyntax, STARTUP_SYNC_PLUGIN_SOURCE, startupConfigSource } fr
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import type { ManagedFileKind, ManagedProjection } from "./sync-state.js";
 import { ensureGlobalTuiSidebar, TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 import { UX_PROFILE_PRESET } from "./ux-profile.generated.js";
 import { clearWindowsReadOnlyDirectoryAttribute } from "./windows-attributes.js";
 
@@ -102,7 +102,7 @@ export interface SetupUxReport {
   commandsDir: string;
   agentsDir: string;
   fallbackConfigPath: string;
-  ogbConfigPath?: string;
+  agentxConfigPath?: string;
   writes: SetupUxWrite[];
   commands: SetupUxCommand[];
   notices: string[];
@@ -331,7 +331,7 @@ function fallbackConfigFromProfile(config: OgbConfig): Record<string, unknown> {
     $schema: "https://raw.githubusercontent.com/HyeokjaeLee/opencode-auto-fallback/main/docs/fallback.schema.json",
     _generated: {
       tool: "ogb",
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       warning: "Generated from the OGB UX profile. Project sync may refine it from local Gemini extension agents.",
     },
     enabled: fallback.enabled === true,
@@ -707,7 +707,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const globalStartupPluginPath = adapter.join(root, "plugins", "ogb-startup-sync.js");
   const globalStartupConfigPath = adapter.join(adapter.generatedDir, "agentx-startup-sync.json");
   const globalGeneratedDir = adapter.pathApi.dirname(globalStartupConfigPath);
-  const ogbConfigPath = projectRoot
+  const agentxConfigPath = projectRoot
     ? projectIsHome
       ? adapter.join(adapter.bridgeConfigDir, "agentx.config.jsonc")
       : adapter.join(projectRoot, ".opencode", "agentx.config.jsonc")
@@ -884,9 +884,9 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     text: UX_PROFILE_PRESET.files.globalAgentsMd,
   }), "context", "ogb:global-agents-md"));
 
-  if (ogbConfigPath && options.writeProjectProfile !== false) {
+  if (agentxConfigPath && options.writeProjectProfile !== false) {
     writes.push(profileWriter.writeText({
-      filePath: ogbConfigPath,
+      filePath: agentxConfigPath,
       text: projectConfigText(),
       force: options.force,
     }));
@@ -951,7 +951,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   warnings.push(...runtimeWriter.retention.warnings);
 
   return {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     homeDir,
     projectRoot,
     configPath,
@@ -959,7 +959,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     commandsDir,
     agentsDir,
     fallbackConfigPath,
-    ogbConfigPath,
+    agentxConfigPath,
     writes,
     commands,
     notices: [...new Set(notices)],

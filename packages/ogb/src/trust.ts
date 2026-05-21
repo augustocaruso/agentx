@@ -3,7 +3,7 @@ import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { sha256File, sha256Text } from "./file-hash.js";
 import { resolveProjectPaths } from "./paths.js";
-import { OGB_VERSION, type HookInfo } from "./types.js";
+import { AGENTX_VERSION, type HookInfo } from "./types.js";
 
 export interface TrustOptions {
   projectRoot?: string;
@@ -74,9 +74,9 @@ function readJsonc(filePath: string): any {
 export function readTrustFile(projectRoot?: string, homeDir?: string): OgbTrustFile {
   const paths = resolveProjectPaths(projectRoot, homeDir);
   const parsed = readJsonc(paths.trustPath);
-  if (!parsed || typeof parsed !== "object") return { version: OGB_VERSION, extensions: {} };
+  if (!parsed || typeof parsed !== "object") return { version: AGENTX_VERSION, extensions: {} };
   return {
-    version: typeof parsed.version === "string" ? parsed.version : OGB_VERSION,
+    version: typeof parsed.version === "string" ? parsed.version : AGENTX_VERSION,
     hooks: parsed.hooks && typeof parsed.hooks === "object" && !Array.isArray(parsed.hooks) ? parsed.hooks : undefined,
     extensions: parsed.extensions && typeof parsed.extensions === "object" && !Array.isArray(parsed.extensions) ? parsed.extensions : {},
   };
@@ -187,7 +187,7 @@ export function buildTrustReviewReport(options: { projectRoot?: string; homeDir?
   const extensions = (Array.isArray(map?.extensions) ? map.extensions : [])
     .filter((extension: any) => !options.extension || extension?.name === options.extension);
 
-  if (!map) warnings.push(`Extension map not found: ${paths.extensionMapPath}. Run ogb sync first.`);
+  if (!map) warnings.push(`Extension map not found: ${paths.extensionMapPath}. Run agentx sync first.`);
   if (options.extension && extensions.length === 0) warnings.push(`Extension not found: ${options.extension}`);
 
   function add(extension: any, kind: "hooks" | "scripts", source: string, reason?: string): void {
@@ -214,7 +214,7 @@ export function buildTrustReviewReport(options: { projectRoot?: string; homeDir?
   }
 
   return {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     extension: options.extension,
     items: items.sort((a, b) => `${a.extension}/${a.kind}/${a.source}`.localeCompare(`${b.extension}/${b.kind}/${b.source}`)),
@@ -232,13 +232,13 @@ export function runTrustExtension(options: TrustOptions): TrustReport {
 
   if (!extension) {
     const report: TrustReport = {
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       projectRoot: paths.projectRoot,
       extension: options.extension,
       status: "error",
       trusted,
       revoked,
-      warnings: [`Extension not found in ${paths.extensionMapPath}. Run ogb sync first.`],
+      warnings: [`Extension not found in ${paths.extensionMapPath}. Run agentx sync first.`],
       file: paths.trustPath,
     };
     printTrustReport(report, options.json);
@@ -284,7 +284,7 @@ export function runTrustExtension(options: TrustOptions): TrustReport {
   else trust.extensions[options.extension] = bucket;
 
   const report: TrustReport = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     extension: options.extension,
     status: options.dryRun ? "preview" : "applied",

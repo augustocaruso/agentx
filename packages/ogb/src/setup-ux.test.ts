@@ -176,9 +176,9 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fs.existsSync(path.join(configDir, "commands", "research.md")), true);
   assert.equal(fs.existsSync(path.join(configDir, "commands", "dev-server.md")), false);
   assert.equal(fs.existsSync(path.join(configDir, "commands", "upgrade-ogb.md")), true);
-  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^ogb self-update --project "\$PWD"$/m);
-  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^ogb doctor --project "\$PWD"$/m);
-  assert.doesNotMatch(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^ogb update$/m);
+  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^agentx self-update --project "\$PWD"$/m);
+  assert.match(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^agentx doctor --project "\$PWD"$/m);
+  assert.doesNotMatch(fs.readFileSync(path.join(configDir, "commands", "upgrade-ogb.md"), "utf8"), /^agentx update$/m);
   assert.equal(fs.existsSync(path.join(configDir, "dcp.jsonc")), true);
   const packageJson = readJson(path.join(configDir, "package.json"));
   assert.equal(packageJson.type, "module");
@@ -540,7 +540,7 @@ test("setupUx treats the home directory as global-only and writes the global OGB
   const globalProfilePath = path.join(homeDir, ".config", "agentx", "agentx.config.jsonc");
   const globalProfile = parseJsonc(fs.readFileSync(globalProfilePath, "utf8"));
 
-  assert.equal(report.ogbConfigPath, globalProfilePath);
+  assert.equal(report.agentxConfigPath, globalProfilePath);
   assert.equal(globalProfile.openCode.defaultAgent, "YOLO");
   assert.equal(globalProfile.modelFallbacks.agents["med-chat-triager"].model.id, "google/gemini-3-flash-preview");
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agentx.config.jsonc")), false);
@@ -565,7 +565,7 @@ test("setupUx treats an accidentally quoted home path as global-only", () => {
   });
   const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
 
-  assert.equal(report.ogbConfigPath, path.join(homeDir, ".config", "agentx", "agentx.config.jsonc"));
+  assert.equal(report.agentxConfigPath, path.join(homeDir, ".config", "agentx", "agentx.config.jsonc"));
   assert.equal(report.projectRoot, path.resolve(homeDir));
   assert.deepEqual(startupConfig.baseArgs, ["--project", process.platform === "win32" ? "{OGB_HOME}" : path.resolve(homeDir)]);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agentx.config.jsonc")), false);

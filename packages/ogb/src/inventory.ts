@@ -6,7 +6,7 @@ import { flattenGeminiMd } from "./flatten.js";
 import { projectGeminiMcpEnvironment } from "./mcp-projection.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
 import {
-  OGB_VERSION,
+  AGENTX_VERSION,
   type AgentInfo,
   type CommandInfo,
   type ExtensionInfo,
@@ -380,7 +380,7 @@ export function buildInventory(options: InventoryOptions = {}): Inventory {
   }
 
   return {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     geminiFiles,
     imports: collectImports(geminiFiles, paths.homeDir),

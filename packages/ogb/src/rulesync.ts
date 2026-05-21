@@ -7,7 +7,7 @@ import { sha256File } from "./file-hash.js";
 import { resolveProjectPaths, toPosixRelative } from "./paths.js";
 import { spawnCommandSync } from "./process.js";
 import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState, type SyncState } from "./sync-state.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export type RulesyncMode = "auto" | "off" | "require";
 
@@ -377,7 +377,7 @@ export function projectRulesyncProjection(options: RulesyncProjectionOptions = {
   }
 
   const previousState = readSyncState(projectRoot);
-  const state = previousState ?? emptySyncState(OGB_VERSION);
+  const state = previousState ?? emptySyncState(AGENTX_VERSION);
   const generatedFiles = listFiles(stageRoot).filter((filePath) => isPromotableRulesyncOutput(toPosixRelative(stageRoot, filePath)));
   const promotion = promoteFromStage(projectRoot, stageRoot, generatedFiles, state, force, backupSession);
   fs.rmSync(stageRoot, { recursive: true, force: true });

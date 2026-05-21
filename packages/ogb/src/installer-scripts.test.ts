@@ -14,7 +14,7 @@ function assertScriptExists(name: string): void {
   assert.equal(fs.existsSync(path.join(repoRoot, "scripts", name)), true, `Expected scripts/${name} to exist.`);
 }
 
-test("posix installer contract delegates the ritual to ogb install", () => {
+test("posix installer contract delegates the ritual to agentx install", () => {
   assertScriptExists("install-posix.sh");
   const text = script("install-posix.sh");
 
@@ -116,7 +116,7 @@ test("installers fail early when Node is older than 22", () => {
   assert.match(windows, /Node\.js >=22 is required before installing ogb/);
 });
 
-test("windows installer contract delegates the ritual to ogb install", () => {
+test("windows installer contract delegates the ritual to agentx install", () => {
   const text = script("install-windows.ps1");
 
   assert.match(text, /\$script:NodeCommand = Require-Node22/);

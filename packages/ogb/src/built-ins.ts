@@ -87,13 +87,13 @@ Primeiro rode pwd para confirmar o diretorio atual.
 
 Depois execute exatamente:
 
-ogb check --project "$PWD"
+agentx check --project "$PWD"
 
 Use a saida desse comando como fonte principal. Se precisar ler o arquivo, leia apenas este caminho exato dentro do diretorio atual:
 
 .opencode/generated/ogb-dashboard.md
 
-Nao use glob, find ou busca recursiva na home do usuario. Se o painel mostrar que o projeto atual e a home e o usuario esperava outro projeto, explique que o OpenCode foi aberto na home e que ele deve abrir o OpenCode no diretorio do projeto ou rodar ogb check --project /caminho/do/projeto.
+Nao use glob, find ou busca recursiva na home do usuario. Se o painel mostrar que o projeto atual e a home e o usuario esperava outro projeto, explique que o OpenCode foi aberto na home e que ele deve abrir o OpenCode no diretorio do projeto ou rodar agentx check --project /caminho/do/projeto.
 
 Explique em linguagem simples:
 - se o bridge esta PASS, WARN ou FAIL;
@@ -112,7 +112,7 @@ description: Mostra diagnostico do OpenCode Gemini Bridge
 subtask: false
 ---
 
-Execute ou oriente a execucao de ogb doctor. Se o arquivo .opencode/generated/ogb-doctor.json existir, leia e resuma:
+Execute ou oriente a execucao de agentx doctor. Se o arquivo .opencode/generated/ogb-doctor.json existir, leia e resuma:
 
 - contexto Gemini carregado;
 - imports ausentes;
@@ -133,7 +133,7 @@ description: Sincroniza recursos Gemini para OpenCode
 subtask: false
 ---
 
-Execute ou oriente a execucao de ogb sync --dry-run primeiro. Depois peca confirmacao para rodar ogb sync real.
+Execute ou oriente a execucao de agentx sync --dry-run primeiro. Depois peca confirmacao para rodar agentx sync real.
 
 Explique quais arquivos serao gerados ou alterados.
 `,
@@ -165,9 +165,9 @@ description: Valida o bridge de ponta a ponta sem chamar modelo por padrao
 subtask: false
 ---
 
-Execute ou oriente a execucao de ogb validate.
+Execute ou oriente a execucao de agentx validate.
 
-Use ogb validate --windows se o usuario estiver revisando instalacao Windows.
+Use agentx validate --windows se o usuario estiver revisando instalacao Windows.
 Nao use --opencode-run sem pedido explicito, porque isso pode gastar tokens.
 
 Depois resuma:
@@ -184,7 +184,7 @@ description: Verifica riscos obvios de seguranca do bridge
 subtask: false
 ---
 
-Execute ou oriente a execucao de ogb security-check.
+Execute ou oriente a execucao de agentx security-check.
 
 Explique em linguagem simples:
 - se ha segredo/token materializado;
@@ -200,27 +200,27 @@ description: Mostra e envia telemetria local do OpenCode Gemini Bridge
 subtask: false
 ---
 
-Execute ogb telemetry status --project "$PWD" para ver se a telemetria local/remota esta ativa.
+Execute agentx telemetry status --project "$PWD" para ver se a telemetria local/remota esta ativa.
 
 Se o mantenedor pedir para configurar recebimento por email, use:
 
-ogb telemetry setup-email --project "$PWD"
+agentx telemetry setup-email --project "$PWD"
 
 Peça apenas o que faltar: email destino, remetente verificado no Resend e Resend API key. Nao imprima a API key. Se o Wrangler nao estiver logado, oriente npm exec --yes wrangler login e repita.
 
 Se o usuario quiser revisar antes de enviar, execute:
 
-ogb telemetry preview --since 7d --project "$PWD"
+agentx telemetry preview --since 7d --project "$PWD"
 
 Se o usuario pedir envio manual, execute:
 
-ogb telemetry send --since 7d --project "$PWD"
+agentx telemetry send --since 7d --project "$PWD"
 
 Esse envio normal manda remotamente apenas problemas acionaveis. Checks limpos continuam no preview/local. Use --include-pass somente se o mantenedor pedir explicitamente um teste/debug do canal remoto.
 
 Se o usuario quiser desligar, execute:
 
-ogb telemetry disable --project "$PWD"
+agentx telemetry disable --project "$PWD"
 
 Nunca mostre, peça para colar em chat, nem grave token de telemetria em arquivos do projeto. Para habilitar, use apenas endpoint/token fornecidos explicitamente pelo mantenedor ou por defaults privados empacotados.
 `,
@@ -249,7 +249,7 @@ subtask: false
 
 Mostre um status curto do OpenCode Gemini Bridge.
 
-Use ogb dashboard quando precisar atualizar o painel. Use ogb doctor se o dashboard apontar warning/fail. Depois responda:
+Use agentx dashboard quando precisar atualizar o painel. Use agentx doctor se o dashboard apontar warning/fail. Depois responda:
 - o que esta pronto;
 - o que precisa atencao;
 - qual e o proximo passo recomendado.
@@ -262,10 +262,10 @@ description: Atualiza Gemini Extensions e reprojeta OpenCode
 subtask: false
 ---
 
-Execute ou oriente a execucao de ogb update-extensions --dry-run primeiro.
+Execute ou oriente a execucao de agentx update-extensions --dry-run primeiro.
 
-Se o dry-run parecer seguro, rode ogb update-extensions --auto-consent.
-Depois rode ou resuma ogb doctor.
+Se o dry-run parecer seguro, rode agentx update-extensions --auto-consent.
+Depois rode ou resuma agentx doctor.
 `,
   },
   {
@@ -277,11 +277,11 @@ subtask: false
 
 Execute exatamente:
 
-ogb update --project "$PWD"
+agentx update --project "$PWD"
 
 Depois execute:
 
-ogb doctor --project "$PWD"
+agentx doctor --project "$PWD"
 
 Explique em linguagem simples:
 - versao anterior e nova, se aparecerem na saida;

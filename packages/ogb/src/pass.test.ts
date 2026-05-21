@@ -335,7 +335,7 @@ test("runPass carries the first validation failure into blocker copy and next ac
   assert.equal(report.outcome, "fail");
   assert.ok(validationBlocker);
   assert.match(validationBlocker.message, /Validation falhou: .+:/);
-  assert.match(validationBlocker.action, /ogb validate --plain/);
+  assert.match(validationBlocker.action, /agentx validate --plain/);
   assert.match(validationEvent?.message ?? "", /:/);
   process.exitCode = oldExitCode;
 });

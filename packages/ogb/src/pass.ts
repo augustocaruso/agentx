@@ -14,7 +14,7 @@ import { ensureGlobalStartupPlugin, setupUx, type SetupUxReport } from "./setup-
 import { syncToOpenCode, type SyncReport } from "./sync.js";
 import { hookTrustHash, hookTrustKeys, readTrustFile, writeTrustFile } from "./trust.js";
 import { ensureGlobalTuiSidebar } from "./tui-sidebar.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 import { runValidation, type ValidationReport } from "./validation.js";
 import type { RulesyncMode } from "./rulesync.js";
 import { CHECK_PROGRESS_STEPS, emitRitualProgress, progressStatusFromFindings, progressStatusFromOutcome, type RitualProgressSink } from "./ritual-progress.js";
@@ -121,14 +121,14 @@ export interface PassReport {
 
 function actionForWarning(warning: string): string {
   if (/^Hook needs review:/.test(warning)) return "Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` ja sincronizam automaticamente; para eventos sem equivalente OpenCode, revise o recurso e use hash legado so se quiser silenciar a auditoria.";
-  if (/Duplicate name/i.test(warning)) return "Rode `ogb check --json` ou abra `.opencode/generated/agentx-inventory.json` para ver os paths duplicados; mantenha uma copia.";
+  if (/Duplicate name/i.test(warning)) return "Rode `agentx check --json` ou abra `.opencode/generated/agentx-inventory.json` para ver os paths duplicados; mantenha uma copia.";
   if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Ative o fallback gerado ou desative `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc`.";
-  if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Instale `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, rode `ogb sync` e reinicie o OpenCode.";
+  if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Instale `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, rode `agentx sync` e reinicie o OpenCode.";
   if (/opencode-auto-fallback/i.test(warning)) return "Revise `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc` e o plugin global do OpenCode.";
-  if (/Run ogb sync/i.test(warning)) return "O `ogb check` ja tentou `ogb sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
+  if (/Run agentx sync/i.test(warning)) return "O `agentx check` ja tentou `agentx sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
   if (/Model resolution warning/i.test(warning)) return "Revise os modelos em `.opencode/agentx.config.jsonc` e compare com `opencode models`.";
   if (/MCP command warning/i.test(warning)) return "Instale o comando do MCP ou remova/desabilite esse MCP na configuracao de origem.";
-  return "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `ogb check --force` depois de revisar.";
+  return "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `agentx check --force` depois de revisar.";
 }
 
 function compactLine(value: string | undefined, maxChars = 180): string | undefined {
@@ -173,20 +173,20 @@ function extensionUpdateMessage(report: ExtensionCommandReport): string {
 }
 
 function extensionUpdateAction(): string {
-  return "Rode `ogb update-extensions --auto-consent` para ver o erro do Gemini CLI; depois rode `ogb check` novamente.";
+  return "Rode `agentx update-extensions --auto-consent` para ver o erro do Gemini CLI; depois rode `agentx check` novamente.";
 }
 
 function validationAction(options: PassOptions): string {
-  const command = options.windows ? "ogb validate --windows --plain" : "ogb validate --plain";
+  const command = options.windows ? "agentx validate --windows --plain" : "agentx validate --plain";
   return `Rode \`${command}\` para ver os checks detalhados e confirme se o problema e arquivo gerenciado, PATH/comando nativo ou config do OpenCode.`;
 }
 
 function securityAction(): string {
-  return "Rode `ogb security-check --plain`, revise o finding destacado e corrija antes de confiar no perfil gerado.";
+  return "Rode `agentx security-check --plain`, revise o finding destacado e corrija antes de confiar no perfil gerado.";
 }
 
 function dashboardAction(): string {
-  return "Rode `ogb dashboard --plain` e abra o arquivo Markdown do dashboard para ver o estado persistido completo.";
+  return "Rode `agentx dashboard --plain` e abra o arquivo Markdown do dashboard para ver o estado persistido completo.";
 }
 
 function needsGlobalTuiRepair(warnings: readonly string[]): boolean {
@@ -204,7 +204,7 @@ function checkSetupWarnings(report: SetupOpenCodeReport | SetupUxReport): string
 }
 
 function patchAction(result: { nextAction?: string; id: string }): string {
-  return result.nextAction ?? `Rode \`ogb check --plain\` para ver detalhes do patch ${result.id}; se o patch mexe em arquivo gerenciado, rode novamente com \`--force\` so depois de revisar.`;
+  return result.nextAction ?? `Rode \`agentx check --plain\` para ver detalhes do patch ${result.id}; se o patch mexe em arquivo gerenciado, rode novamente com \`--force\` so depois de revisar.`;
 }
 
 function blocker(source: PassBlocker["source"], severity: PassBlocker["severity"], message: string, action: string): PassBlocker {
@@ -376,7 +376,7 @@ export function runPass(options: PassOptions = {}): PassReport {
           : "Startup sync wiring is present.",
     );
     automated.push(paths.homeMode ? "setup-ux" : "setup-opencode");
-    for (const warning of setupWarnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
+    for (const warning of setupWarnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `agentx check --force` se quiser sobrescrever arquivos gerenciados."));
     recordTiming(paths.homeMode ? "setup-ux" : "setup-opencode", setupStartedAt);
   }
 
@@ -495,7 +495,7 @@ export function runPass(options: PassOptions = {}): PassReport {
     );
     if (globalSync) automated.push("global-sync");
     automated.push("sync");
-    for (const warning of syncWarnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `ogb check --force` se quiser sobrescrever arquivos gerenciados."));
+    for (const warning of syncWarnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `agentx check --force` se quiser sobrescrever arquivos gerenciados."));
     runPatchPhase("post-sync");
   }
 
@@ -653,7 +653,7 @@ export function runPass(options: PassOptions = {}): PassReport {
 
   runPatchPhase("post-check");
 
-  for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Corrija o erro indicado pelo doctor e rode `ogb check` novamente."));
+  for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Corrija o erro indicado pelo doctor e rode `agentx check` novamente."));
   for (const warning of doctor.warnings) blockers.push(blocker("doctor", "warn", warning, actionForWarning(warning)));
   if (globalStartupRepaired) blockers.push(blocker("setup", "warn", "Global OGB startup plugin was repaired automatically.", "Reinicie o OpenCode para carregar o refresh automatico do usage."));
   if (globalTuiRepaired) blockers.push(blocker("setup", "warn", "Global OGB TUI sidebar plugin was repaired automatically.", "Reinicie o OpenCode para carregar a TUI nova."));
@@ -740,7 +740,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   appendPatchStep("post-check");
 
   const report: PassReport = {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     outcome,
     plan,

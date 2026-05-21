@@ -50,7 +50,7 @@ test("runValidation can reuse a doctor report already produced by pass", () => {
         errors: [],
       },
     });
-    const doctorCheck = report.checks.find((check) => check.name === "ogb doctor");
+    const doctorCheck = report.checks.find((check) => check.name === "agentx doctor");
     const details = doctorCheck?.details as { warnings?: string[] } | undefined;
 
     assert.equal(doctorCheck?.status, "warn");

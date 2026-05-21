@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { runDashboard } from "./dashboard.js";
 import { resolveProjectPaths } from "./paths.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 function tempProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-dashboard-"));
@@ -21,7 +21,7 @@ test("runDashboard combines generated reports into JSON and Markdown", () => {
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -35,9 +35,9 @@ test("runDashboard combines generated reports into JSON and Markdown", () => {
       extensions: { ok: 0, warning: 0, error: 0, needs_review: 1 },
     },
     generated: {
-      expandedGeminiVersion: OGB_VERSION,
-      generatedConfigVersion: OGB_VERSION,
-      syncStateVersion: OGB_VERSION,
+      expandedGeminiVersion: AGENTX_VERSION,
+      generatedConfigVersion: AGENTX_VERSION,
+      syncStateVersion: AGENTX_VERSION,
     },
     rulesync: {
       available: true,
@@ -85,10 +85,10 @@ test("runDashboard combines generated reports into JSON and Markdown", () => {
       message: "All referenced routed/fallback models were found in opencode models.",
     },
   });
-  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
-  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+  writeJson(paths.validationPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
   writeJson(paths.limitsPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-04T12:00:00.000Z",
     status: "ok",
@@ -114,12 +114,12 @@ test("runDashboard combines generated reports into JSON and Markdown", () => {
   writeJson(paths.updateStatusPath, {
     version: 1,
     status: "current",
-    currentVersion: OGB_VERSION,
-    latestVersion: OGB_VERSION,
-    latestTag: `v${OGB_VERSION}`,
+    currentVersion: AGENTX_VERSION,
+    latestVersion: AGENTX_VERSION,
+    latestTag: `v${AGENTX_VERSION}`,
     checkedAt: "2026-05-04T12:00:00.000Z",
     restartRequired: false,
-    message: `OGB is current at ${OGB_VERSION}.`,
+    message: `OGB is current at ${AGENTX_VERSION}.`,
   });
 
   const report = runDashboard({ projectRoot, refresh: false, silent: true });
@@ -147,15 +147,15 @@ test("runDashboard can consume a doctor report already produced by check", () =>
   const projectRoot = tempProject();
   const paths = resolveProjectPaths(projectRoot);
 
-  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
-  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+  writeJson(paths.validationPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
 
   const report = runDashboard({
     projectRoot,
     refresh: true,
     silent: true,
     doctorReport: {
-      version: OGB_VERSION,
+      version: AGENTX_VERSION,
       projectRoot,
       warnings: ["precomputed doctor warning"],
       errors: [],
@@ -180,7 +180,7 @@ test("runDashboard keeps a clean bridge passing when only OpenCode restart is pe
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -191,8 +191,8 @@ test("runDashboard keeps a clean bridge passing when only OpenCode restart is pe
       lastState: "pass",
     },
   });
-  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
-  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+  writeJson(paths.validationPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
   writeJson(paths.updateStatusPath, {
     version: 1,
     status: "updated",
@@ -221,7 +221,7 @@ test("runDashboard consumes restart-required update after current-version pass r
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -232,14 +232,14 @@ test("runDashboard consumes restart-required update after current-version pass r
       lastState: "pass",
     },
   });
-  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
-  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+  writeJson(paths.validationPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
   writeJson(paths.updateStatusPath, {
     version: 1,
     status: "updated",
     currentVersion: "0.0.58",
-    latestVersion: OGB_VERSION,
-    latestTag: `v${OGB_VERSION}`,
+    latestVersion: AGENTX_VERSION,
+    latestTag: `v${AGENTX_VERSION}`,
     checkedAt: "2026-05-06T12:00:00.000Z",
     finishedAt: "2026-05-06T12:01:00.000Z",
     restartRequired: true,
@@ -265,7 +265,7 @@ test("runDashboard consumes latest self-update restart after current-version pas
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -276,8 +276,8 @@ test("runDashboard consumes latest self-update restart after current-version pas
       lastState: "pass",
     },
   });
-  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
-  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
+  writeJson(paths.validationPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: AGENTX_VERSION, projectRoot, generatedAt: "2026-05-06T12:02:00.000Z", outcome: "pass", findings: [] });
   writeJson(paths.updateStatusPath, {
     version: 1,
     status: "updated",
@@ -304,7 +304,7 @@ test("runDashboard treats validation/security reports without generatedAt as sta
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -316,7 +316,7 @@ test("runDashboard treats validation/security reports without generatedAt as sta
     },
   });
   writeJson(paths.validationPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     outcome: "fail",
     checks: [
@@ -324,7 +324,7 @@ test("runDashboard treats validation/security reports without generatedAt as sta
     ],
   });
   writeJson(paths.securityPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     outcome: "fail",
     findings: [
@@ -335,12 +335,12 @@ test("runDashboard treats validation/security reports without generatedAt as sta
     version: 1,
     status: "updated",
     currentVersion: "0.0.55",
-    latestVersion: OGB_VERSION,
-    latestTag: `v${OGB_VERSION}`,
+    latestVersion: AGENTX_VERSION,
+    latestTag: `v${AGENTX_VERSION}`,
     checkedAt: "2026-05-06T20:10:00.000Z",
     finishedAt: "2026-05-06T20:11:00.000Z",
     restartRequired: true,
-    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+    message: "OGB self-update completed. Restart OpenCode and run agentx validate.",
   });
 
   const report = runDashboard({ projectRoot, refresh: false, silent: true });
@@ -358,7 +358,7 @@ test("runDashboard treats validation/security reports generated before self-upda
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -370,7 +370,7 @@ test("runDashboard treats validation/security reports generated before self-upda
     },
   });
   writeJson(paths.validationPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-06T20:00:00.000Z",
     outcome: "fail",
@@ -379,7 +379,7 @@ test("runDashboard treats validation/security reports generated before self-upda
     ],
   });
   writeJson(paths.securityPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-06T20:00:00.000Z",
     outcome: "fail",
@@ -391,12 +391,12 @@ test("runDashboard treats validation/security reports generated before self-upda
     version: 1,
     status: "updated",
     currentVersion: "0.0.55",
-    latestVersion: OGB_VERSION,
-    latestTag: `v${OGB_VERSION}`,
+    latestVersion: AGENTX_VERSION,
+    latestTag: `v${AGENTX_VERSION}`,
     checkedAt: "2026-05-06T20:10:00.000Z",
     finishedAt: "2026-05-06T20:11:00.000Z",
     restartRequired: true,
-    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+    message: "OGB self-update completed. Restart OpenCode and run agentx validate.",
   });
 
   const report = runDashboard({ projectRoot, refresh: false, silent: true });
@@ -412,7 +412,7 @@ test("runDashboard keeps fresh validation failures as failures after self-update
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -424,7 +424,7 @@ test("runDashboard keeps fresh validation failures as failures after self-update
     },
   });
   writeJson(paths.validationPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-06T20:12:00.000Z",
     outcome: "fail",
@@ -433,7 +433,7 @@ test("runDashboard keeps fresh validation failures as failures after self-update
     ],
   });
   writeJson(paths.securityPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-06T20:12:00.000Z",
     outcome: "pass",
@@ -443,12 +443,12 @@ test("runDashboard keeps fresh validation failures as failures after self-update
     version: 1,
     status: "updated",
     currentVersion: "0.0.55",
-    latestVersion: OGB_VERSION,
-    latestTag: `v${OGB_VERSION}`,
+    latestVersion: AGENTX_VERSION,
+    latestTag: `v${AGENTX_VERSION}`,
     checkedAt: "2026-05-06T20:10:00.000Z",
     finishedAt: "2026-05-06T20:11:00.000Z",
     restartRequired: true,
-    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+    message: "OGB self-update completed. Restart OpenCode and run agentx validate.",
   });
 
   const report = runDashboard({ projectRoot, refresh: false, silent: true });
@@ -463,7 +463,7 @@ test("runDashboard softens known Windows quoted-command failures while OpenCode 
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -475,7 +475,7 @@ test("runDashboard softens known Windows quoted-command failures while OpenCode 
     },
   });
   writeJson(paths.validationPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-06T20:12:00.000Z",
     outcome: "fail",
@@ -484,7 +484,7 @@ test("runDashboard softens known Windows quoted-command failures while OpenCode 
     ],
   });
   writeJson(paths.securityPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     generatedAt: "2026-05-06T20:12:00.000Z",
     outcome: "pass",
@@ -494,12 +494,12 @@ test("runDashboard softens known Windows quoted-command failures while OpenCode 
     version: 1,
     status: "updated",
     currentVersion: "0.0.55",
-    latestVersion: OGB_VERSION,
-    latestTag: `v${OGB_VERSION}`,
+    latestVersion: AGENTX_VERSION,
+    latestTag: `v${AGENTX_VERSION}`,
     checkedAt: "2026-05-06T20:10:00.000Z",
     finishedAt: "2026-05-06T20:11:00.000Z",
     restartRequired: true,
-    message: "OGB self-update completed. Restart OpenCode and run ogb validate.",
+    message: "OGB self-update completed. Restart OpenCode and run agentx validate.",
   });
 
   const report = runDashboard({ projectRoot, refresh: false, silent: true });
@@ -514,7 +514,7 @@ test("runDashboard surfaces startup sync failure details", () => {
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -525,8 +525,8 @@ test("runDashboard surfaces startup sync failure details", () => {
       lastState: "fail",
     },
   });
-  writeJson(paths.validationPath, { version: OGB_VERSION, projectRoot, outcome: "pass", checks: [] });
-  writeJson(paths.securityPath, { version: OGB_VERSION, projectRoot, outcome: "pass", findings: [] });
+  writeJson(paths.validationPath, { version: AGENTX_VERSION, projectRoot, outcome: "pass", checks: [] });
+  writeJson(paths.securityPath, { version: AGENTX_VERSION, projectRoot, outcome: "pass", findings: [] });
   writeJson(paths.pluginStatusPath, {
     version: 1,
     state: "fail",
@@ -558,7 +558,7 @@ test("runDashboard surfaces first validation and security failure details", () =
   const paths = resolveProjectPaths(projectRoot);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     warnings: [],
     errors: [],
@@ -569,7 +569,7 @@ test("runDashboard surfaces first validation and security failure details", () =
     },
   });
   writeJson(paths.validationPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     outcome: "fail",
     checks: [
@@ -577,7 +577,7 @@ test("runDashboard surfaces first validation and security failure details", () =
     ],
   });
   writeJson(paths.securityPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot,
     outcome: "fail",
     findings: [
@@ -600,13 +600,13 @@ test("runDashboard does not fail home/global dashboard from stale project-mode r
   const paths = resolveProjectPaths(homeDir, homeDir);
 
   writeJson(paths.doctorPath, {
-    version: OGB_VERSION,
+    version: AGENTX_VERSION,
     projectRoot: homeDir,
     warnings: [],
     errors: [],
     counts: {},
     generated: {
-      expandedGeminiVersion: OGB_VERSION,
+      expandedGeminiVersion: AGENTX_VERSION,
       generatedConfigVersion: "global config",
     },
     startupSync: {

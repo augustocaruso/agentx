@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import { createPlatformAdapter } from "./platform-adapter.js";
-import { OGB_VERSION } from "./types.js";
+import { AGENTX_VERSION } from "./types.js";
 
 export const LOCAL_ROLE_SCHEMA = "agentx.local-role.v2";
 
@@ -80,7 +80,7 @@ export function enableMaintainerRole(options: LocalRoleOptions = {}): LocalRoleS
     schema: LOCAL_ROLE_SCHEMA,
     role: "maintainer",
     enabledAt: new Date().toISOString(),
-    createdByVersion: OGB_VERSION,
+    createdByVersion: AGENTX_VERSION,
   };
   fs.mkdirSync(adapterFor(options).pathApi.dirname(path), { recursive: true });
   fs.writeFileSync(path, `${JSON.stringify(flag, null, 2)}\n`, "utf8");
