@@ -2,17 +2,18 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, type Instance, useAnimation, useStdout } from "ink";
 import type { InstallReport } from "../../install.js";
 import type { PassReport } from "../../pass.js";
+import { ICONS, INK_COLORS } from "../../presentation/theme.js";
 import { spawnCommand } from "../../process.js";
 import type { ResetReport } from "../../reset.js";
 import { RITUAL_PROGRESS_SCHEMA_VERSION, type RitualProgressJsonEvent, type RitualProgressSink, type RitualProgressStatus } from "../../ritual-progress.js";
 import type { SelfUpdateReport } from "../../self-update.js";
 import {
   applyRitualProgressEvent,
-  colorFromTone,
   createLiveRitualModel,
   failLiveRitualModel,
   finishLiveRitualModel,
   finishLiveRitualModelFromProgressEvent,
+  RITUAL_UI_SPINNER_INTERVAL_MS,
   shouldAnimateRitualUi,
   toneFromProgress,
   visibleTodoSteps,
@@ -26,7 +27,6 @@ import {
   type RunWithRitualUiOptions,
 } from "../../ritual-view-model.js";
 
-const RITUAL_UI_SPINNER_INTERVAL_MS = 1000;
 const RITUAL_UI_MAX_FPS = 10;
 const DEFAULT_RITUAL_UI_ROWS = 40;
 const COMPACT_RITUAL_ROWS = 34;
@@ -51,28 +51,28 @@ export function cleanInkFrame(raw: string): string {
 
 function statusText(status: RitualProgressStatus, spinner: string): string {
   if (status === "running") return spinner;
-  if (status === "pass") return "OK";
-  if (status === "warn") return "WARN";
-  if (status === "fail") return "FAIL";
-  if (status === "skipped") return "SKIP";
-  return "....";
+  if (status === "pass") return ICONS.pass;
+  if (status === "warn") return ICONS.warn;
+  if (status === "fail") return ICONS.fail;
+  if (status === "skipped") return ICONS.neutral;
+  return "·";
 }
 
 function SectionTitle(props: { children?: React.ReactNode }) {
   return React.createElement(Text, { bold: true, color: "white" }, props.children);
 }
 
-function MetricRow(props: { metric: RitualMetric }) {
+const MetricRow = React.memo(function MetricRow(props: { metric: RitualMetric }) {
   const tone = props.metric.tone ?? "neutral";
   return React.createElement(
     Box,
     { flexDirection: "row", marginRight: 3 },
     React.createElement(Text, { color: "gray" }, `${props.metric.label} `),
-    React.createElement(Text, { bold: true, color: colorFromTone(tone) }, props.metric.value),
+    React.createElement(Text, { bold: true, color: INK_COLORS[tone] }, props.metric.value),
   );
-}
+});
 
-function TodoRow(props: { step: LiveRitualStep; spinner: string; compact?: boolean }) {
+const TodoRow = React.memo(function TodoRow(props: { step: LiveRitualStep; spinner: string; compact?: boolean }) {
   const tone = toneFromProgress(props.step.status);
   const active = props.step.status === "running";
   const muted = props.step.status === "queued" || props.step.status === "skipped";
@@ -82,7 +82,7 @@ function TodoRow(props: { step: LiveRitualStep; spinner: string; compact?: boole
     React.createElement(
       Box,
       { flexDirection: "row" },
-      React.createElement(Text, { color: colorFromTone(tone), bold: active || props.step.status === "fail" || props.step.status === "warn" }, `${statusText(props.step.status, props.spinner).padEnd(5)} `),
+      React.createElement(Text, { color: INK_COLORS[tone], bold: active || props.step.status === "fail" || props.step.status === "warn" }, `${statusText(props.step.status, props.spinner).padEnd(5)} `),
       React.createElement(Text, { bold: active, color: muted ? "gray" : undefined }, props.step.label),
     ),
     !props.compact && props.step.detail
@@ -96,9 +96,9 @@ function TodoRow(props: { step: LiveRitualStep; spinner: string; compact?: boole
       )
       : null,
   );
-}
+});
 
-function BulletList(props: { title: string; items: string[]; tone?: RitualTone; limit?: number }) {
+const BulletList = React.memo(function BulletList(props: { title: string; items: string[]; tone?: RitualTone; limit?: number }) {
   if (props.items.length === 0) return null;
   const limit = Math.max(0, props.limit ?? 5);
   return React.createElement(
@@ -106,10 +106,10 @@ function BulletList(props: { title: string; items: string[]; tone?: RitualTone; 
     { flexDirection: "column", marginTop: 1 },
     React.createElement(SectionTitle, null, props.title),
     ...props.items.slice(0, limit).map((item, index) => React.createElement(Box, { key: `${props.title}-${index}`, marginTop: index === 0 ? 0 : 1 },
-      React.createElement(Text, { color: props.tone ? colorFromTone(props.tone) : "gray" }, `- ${item}`),
+      React.createElement(Text, { color: props.tone ? INK_COLORS[props.tone] : "gray" }, `- ${item}`),
     )),
   );
-}
+});
 
 function useTerminalSize(): { width: number; rows: number } {
   const { stdout } = useStdout();
@@ -169,7 +169,7 @@ export function RitualPanel(props: { model: LiveRitualModel; animate: boolean })
   const activeNow = props.animate && !model.final ? model.startedAt + animation.time : Date.now();
   const elapsed = formatElapsed((model.finishedAt ?? activeNow) - model.startedAt);
   const headerStatus = model.final ? elapsed : "running";
-  const borderColor = model.final ? colorFromTone(model.tone) : "gray";
+  const borderColor = model.final ? INK_COLORS[model.tone] : "gray";
   const headline = model.final ? model.statusLabel : "RUN";
   const compact = rows <= COMPACT_RITUAL_ROWS || visibleSteps.length > COMPACT_RITUAL_STEPS || (model.final && model.callouts.length > 2);
   const maxSteps = rows <= 28 ? TIGHT_RITUAL_STEPS : COMPACT_RITUAL_STEPS;
@@ -188,7 +188,7 @@ export function RitualPanel(props: { model: LiveRitualModel; animate: boolean })
       Box,
       { flexDirection: "row", justifyContent: "space-between" },
       React.createElement(Box, { flexDirection: "row" },
-        React.createElement(Text, { color: model.final ? colorFromTone(model.tone) : "cyan", bold: true }, `${headline} `),
+        React.createElement(Text, { color: model.final ? INK_COLORS[model.tone] : "cyan", bold: true }, `${headline} `),
         React.createElement(Text, { bold: true }, model.title),
       ),
       React.createElement(Text, { color: "gray" }, headerStatus),

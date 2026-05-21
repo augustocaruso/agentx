@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, useApp, useInput, type Instance } from "ink";
 import { filterHelpCommands, formatHelpRunLine, helpActionsForCommand, type HelpAction, type HelpCommand } from "../../help-catalog.js";
+import { HELP_CATEGORY_COLORS } from "../../presentation/theme.js";
 
 export interface InteractiveHelpSelection {
   command: HelpCommand;
@@ -30,14 +31,7 @@ function useTerminalWidth(): number {
 }
 
 function categoryColor(category: HelpCommand["category"]): string {
-  if (category === "Core") return "green";
-  if (category === "Inspect") return "cyan";
-  if (category === "Sync") return "blue";
-  if (category === "Setup") return "magenta";
-  if (category === "Extensions") return "yellow";
-  if (category === "Telemetry") return "gray";
-  if (category === "Legacy") return "gray";
-  return "white";
+  return HELP_CATEGORY_COLORS[category] ?? "white";
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -54,7 +48,7 @@ function visibleWindow<T>(items: readonly T[], selected: number, size: number): 
   return { items: items.slice(offset, offset + size), offset };
 }
 
-function HelpDetails(props: { command: HelpCommand | undefined; detailMode?: boolean; title?: string }) {
+const HelpDetails = React.memo(function HelpDetails(props: { command: HelpCommand | undefined; detailMode?: boolean; title?: string }) {
   const command = props.command;
   if (!command) {
     return React.createElement(Box, { flexDirection: "column", marginTop: 1 },
@@ -82,13 +76,13 @@ function HelpDetails(props: { command: HelpCommand | undefined; detailMode?: boo
       ...command.examples.map((example) => React.createElement(Text, { key: example, color: "gray" }, `- ${example}`)),
     ),
   );
-}
+});
 
 function actionRunnable(action: HelpAction | undefined): action is HelpAction & { args: string[] } {
   return Boolean(action?.args && action.runnable !== false);
 }
 
-function HelpActionList(props: {
+const HelpActionList = React.memo(function HelpActionList(props: {
   actions: HelpAction[];
   selected: number;
   width: number;
@@ -141,7 +135,7 @@ function HelpActionList(props: {
       React.createElement(Text, { color: "yellow" }, props.message),
     ) : null,
   );
-}
+});
 
 function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: InteractiveHelpSelection) => void }) {
   const { exit } = useApp();

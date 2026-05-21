@@ -1,5 +1,6 @@
 import type { InstallReport } from "./install.js";
 import type { PassReport } from "./pass.js";
+import { INK_COLORS, LABELS } from "./presentation/theme.js";
 import type { ResetReport } from "./reset.js";
 import type { RitualFinishedJsonEvent, RitualProgressDefinition, RitualProgressEvent, RitualProgressSink, RitualProgressStatus } from "./ritual-progress.js";
 import type { SelfUpdateReport } from "./self-update.js";
@@ -104,19 +105,11 @@ function toneFromOutcome(outcome: string | undefined): RitualTone {
 }
 
 function labelFromTone(tone: RitualTone): string {
-  if (tone === "pass") return "PASS";
-  if (tone === "warn") return "WARN";
-  if (tone === "fail") return "FAIL";
-  if (tone === "preview") return "PREVIEW";
-  return "RUN";
+  return LABELS[tone];
 }
 
 export function colorFromTone(tone: RitualTone): string {
-  if (tone === "pass") return "green";
-  if (tone === "warn") return "yellow";
-  if (tone === "fail") return "red";
-  if (tone === "preview") return "cyan";
-  return "blue";
+  return INK_COLORS[tone];
 }
 
 export function toneFromProgress(status: RitualProgressStatus): RitualTone {
@@ -141,7 +134,7 @@ function formatDurationMs(durationMs: number): string {
 const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 const MAX_DISPLAY_LINE_LENGTH = 280;
 const MIN_RITUAL_UI_COLUMNS = 80;
-const RITUAL_UI_SPINNER_INTERVAL_MS = 1000;
+export const RITUAL_UI_SPINNER_INTERVAL_MS = 1000;
 const RITUAL_UI_MAX_FPS = 10;
 const DEFAULT_RITUAL_UI_ROWS = 40;
 const COMPACT_RITUAL_ROWS = 34;
