@@ -9,6 +9,12 @@ on:
 permissions:
   contents: write
 
+env:
+  PACKAGE_NAME: agentx
+  PACKAGE_DIR: packages/ogb
+  RELEASE_ASSET: agentx-pack.zip
+  TELEMETRY_DEFAULTS_SCHEMA: agentx.telemetry-defaults.v2
+
 jobs:
   package:
     runs-on: ubuntu-latest
@@ -18,9 +24,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: packages/ogb/package-lock.json
+          cache-dependency-path: ${{ env.PACKAGE_DIR }}/package-lock.json
       - name: Install
-        working-directory: packages/ogb
+        working-directory: ${{ env.PACKAGE_DIR }}
         run: npm ci
       - name: Restore private telemetry defaults
         env:
@@ -31,31 +37,32 @@ jobs:
             exit 0
           fi
           umask 077
-          printf '%s\n' "$OGB_TELEMETRY_DEFAULTS_JSON" > packages/ogb/telemetry.defaults.json
-          node -e "const fs=require('node:fs'); const p='packages/ogb/telemetry.defaults.json'; const j=JSON.parse(fs.readFileSync(p,'utf8')); if (j.schema !== 'opencode-gemini-bridge.telemetry-defaults.v1' || j.enabled !== true || !j.endpoint_url || !j.auth_token) throw new Error('invalid OGB telemetry defaults secret');"
+          TELEMETRY_DEFAULTS_FILE="$PACKAGE_DIR/telemetry.defaults.json"
+          printf '%s\n' "$OGB_TELEMETRY_DEFAULTS_JSON" > "$TELEMETRY_DEFAULTS_FILE"
+          TELEMETRY_DEFAULTS_FILE="$TELEMETRY_DEFAULTS_FILE" node -e "const fs=require('node:fs'); const p=process.env.TELEMETRY_DEFAULTS_FILE; const j=JSON.parse(fs.readFileSync(p,'utf8')); if (j.schema !== process.env.TELEMETRY_DEFAULTS_SCHEMA || j.enabled !== true || !j.endpoint_url || !j.auth_token) throw new Error('invalid telemetry defaults secret');"
       - name: Build
-        working-directory: packages/ogb
+        working-directory: ${{ env.PACKAGE_DIR }}
         run: npm run build
       - name: Test
-        working-directory: packages/ogb
+        working-directory: ${{ env.PACKAGE_DIR }}
         run: npm test
       - name: Restore tracked release sources
         run: git checkout -- .
       - name: Create npm tarball
-        working-directory: packages/ogb
+        working-directory: ${{ env.PACKAGE_DIR }}
         run: npm pack
       - name: Create source zip
-        run: zip -r opencode-gemini-bridge-pack.zip . -x '*.git*' '*/node_modules/*' '*.tgz'
+        run: zip -r "$RELEASE_ASSET" . -x '*.git*' '*/node_modules/*' '*.tgz'
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: opencode-gemini-bridge-pack
+          name: ${{ env.PACKAGE_NAME }}-pack
           path: |
-            opencode-gemini-bridge-pack.zip
-            packages/ogb/opencode-gemini-bridge-*.tgz
+            ${{ env.RELEASE_ASSET }}
+            ${{ env.PACKAGE_DIR }}/${{ env.PACKAGE_NAME }}-*.tgz
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3.0.0
         with:
           files: |
-            opencode-gemini-bridge-pack.zip
-            packages/ogb/opencode-gemini-bridge-*.tgz
+            ${{ env.RELEASE_ASSET }}
+            ${{ env.PACKAGE_DIR }}/${{ env.PACKAGE_NAME }}-*.tgz

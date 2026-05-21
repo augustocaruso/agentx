@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { BINARY, DISPLAY } from "./brand.js";
 import { RITUAL_PROGRESS_SCHEMA_VERSION } from "./ritual-progress.js";
 import { LEGACY_PASS_WARNING, LEGACY_SELF_UPDATE_WARNING, LEGACY_UPGRADE_WARNING, program } from "./cli.js";
 
@@ -14,6 +15,8 @@ function command(name: string) {
 }
 
 test("CLI exposes the first cargo-like installer API verbs", () => {
+  assert.equal(program.name(), BINARY);
+  assert.equal(program.description(), DISPLAY);
   assert.match(command("help").description(), /interactive command guide/);
   assert.match(command("install").description(), /Install or reinstall/);
   assert.match(command("check").description(), /full bridge check/);

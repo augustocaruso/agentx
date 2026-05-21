@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { BINARY } from "./brand.js";
 import { runInstall } from "./install.js";
 import { enableMaintainerRole } from "./local-role.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
@@ -196,7 +197,7 @@ test("runInstall applies the current install flow and finishes with check", () =
   });
 
   assert.notEqual(report.outcome, "fail");
-  assert.equal(report.plan.delegation.command, "ogb");
+  assert.equal(report.plan.delegation.command, BINARY);
   assert.ok(report.check);
   assert.ok(report.check.automated.includes("setup-opencode"));
   assert.ok(report.check.automated.includes("sync"));

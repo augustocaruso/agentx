@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession } from "./backup-policy.js";
-import { GITHUB_REPO, RELEASE_ASSET } from "./brand.js";
+import { BINARY, GITHUB_REPO, PACKAGE, RELEASE_ASSET } from "./brand.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
@@ -518,16 +518,19 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
   };
   const required = [
     ["bootstrap-mac.sh default repo", scripts.macBootstrap, GITHUB_REPO],
-    ["bootstrap-mac.sh release asset", scripts.macBootstrap, `releases/latest/download/${RELEASE_ASSET}`],
+    ["bootstrap-mac.sh release asset default", scripts.macBootstrap, `RELEASE_ASSET="\${AGENTX_RELEASE_ASSET:-${RELEASE_ASSET}}"`],
+    ["bootstrap-mac.sh release asset variable", scripts.macBootstrap, "releases/latest/download/$RELEASE_ASSET"],
     ["bootstrap-mac.sh installer", scripts.macBootstrap, "install-mac.sh"],
     ["bootstrap-linux.sh default repo", scripts.linuxBootstrap, GITHUB_REPO],
-    ["bootstrap-linux.sh release asset", scripts.linuxBootstrap, `releases/latest/download/${RELEASE_ASSET}`],
+    ["bootstrap-linux.sh release asset default", scripts.linuxBootstrap, `RELEASE_ASSET="\${AGENTX_RELEASE_ASSET:-${RELEASE_ASSET}}"`],
+    ["bootstrap-linux.sh release asset variable", scripts.linuxBootstrap, "releases/latest/download/$RELEASE_ASSET"],
     ["bootstrap-linux.sh installer", scripts.linuxBootstrap, "install-linux.sh"],
     ["bootstrap-linux.sh posix fallback", scripts.linuxBootstrap, "install-posix.sh"],
     ["bootstrap-linux.sh legacy fallback", scripts.linuxBootstrap, "install-mac.sh"],
     ["bootstrap-linux.sh fallback message", scripts.linuxBootstrap, "legacy POSIX installer"],
     ["bootstrap-windows.ps1 default repo", scripts.windowsBootstrap, GITHUB_REPO],
-    ["bootstrap-windows.ps1 release asset", scripts.windowsBootstrap, `releases/latest/download/${RELEASE_ASSET}`],
+    ["bootstrap-windows.ps1 release asset default", scripts.windowsBootstrap, `$ReleaseAsset = if ($env:AGENTX_RELEASE_ASSET) { $env:AGENTX_RELEASE_ASSET } else { "${RELEASE_ASSET}" }`],
+    ["bootstrap-windows.ps1 release asset variable", scripts.windowsBootstrap, "releases/latest/download/$ReleaseAsset"],
     ["bootstrap-windows.ps1 installer", scripts.windowsBootstrap, "install-windows.ps1"],
     ["bootstrap-windows.ps1 path arg normalization", scripts.windowsBootstrap, "Normalize-PathArgument"],
     ["bootstrap-windows.ps1 repairs blocked OpenCode config dir", scripts.windowsBootstrap, "Repair-DirectoryBlocker (Join-Path $HOME \".config\\opencode\") \"bootstrap\""],
@@ -537,7 +540,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["bootstrap-windows.ps1 invokes installer with named params", scripts.windowsBootstrap, "& $Installer.FullName @InstallerParams"],
     ["install-posix.sh repairs blocked OpenCode config dir", scripts.posixInstaller, "repair_directory_blocker \"$HOME/.config/opencode\" \"posix-installer\""],
     ["install-posix.sh delegates install", scripts.posixInstaller, "install --rulesync"],
-    ["install-posix.sh ritual message", scripts.posixInstaller, "Running OGB install ritual"],
+    ["install-posix.sh ritual message", scripts.posixInstaller, "Running $PRODUCT_NAME install ritual"],
     ["install-posix.sh no ux flag", scripts.posixInstaller, "--no-ux"],
     ["install-posix.sh no opencode flag", scripts.posixInstaller, "--no-install-opencode"],
     ["install-posix.sh no check flag", scripts.posixInstaller, "--no-check"],
@@ -550,11 +553,11 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["install-posix.sh Linux bash rc", scripts.posixInstaller, ".bashrc"],
     ["install-posix.sh Linux fish config", scripts.posixInstaller, ".config/fish/config.fish"],
     ["install-posix.sh fish env syntax", scripts.posixInstaller, "set -gx OPENCODE_ENABLE_EXA 1"],
-    ["install-posix.sh repairs ogb shim", scripts.posixInstaller, "repair_ogb_shim"],
+    ["install-posix.sh repairs primary shim", scripts.posixInstaller, "repair_primary_shim"],
     ["install-posix.sh retries npm install on stale shim", scripts.posixInstaller, "npm install did not complete"],
-    ["install-posix.sh removes broken shim before wrapper", scripts.posixInstaller, "rm -f \"$OGB_BIN\""],
+    ["install-posix.sh removes broken shim before wrapper", scripts.posixInstaller, "rm -f \"$PRIMARY_BIN\""],
     ["install-posix.sh node shim fallback", scripts.posixInstaller, "exec node"],
-    ["install-posix.sh version verification", scripts.posixInstaller, "Installed ogb verification returned no version output"],
+    ["install-posix.sh version verification", scripts.posixInstaller, "Installed $BINARY_NAME verification returned no version output"],
     ["install-mac.sh shared POSIX installer", scripts.macInstaller, "install-posix.sh"],
     ["install-mac.sh darwin platform", scripts.macInstaller, "--platform darwin"],
     ["install-linux.sh shared POSIX installer", scripts.linuxInstaller, "install-posix.sh"],
@@ -566,7 +569,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["install-windows.ps1 repairs blocked OpenCode config dir", scripts.windowsInstaller, "Repair-DirectoryBlocker (Join-Path $HOME \".config\\opencode\") \"windows-installer\""],
     ["install-windows.ps1 clears read-only OpenCode config dir", scripts.windowsInstaller, "Repair-ReadOnlyDirectory (Join-Path $HOME \".config\\opencode\") \"windows-installer\""],
     ["install-windows.ps1 delegates install", scripts.windowsInstaller, "\"install\", \"--rulesync\""],
-    ["install-windows.ps1 ritual message", scripts.windowsInstaller, "Running OGB install ritual"],
+    ["install-windows.ps1 ritual message", scripts.windowsInstaller, "Running $ProductName install ritual"],
     ["install-windows.ps1 no ux flag", scripts.windowsInstaller, "--no-ux"],
     ["install-windows.ps1 no opencode flag", scripts.windowsInstaller, "--no-install-opencode"],
     ["install-windows.ps1 no check flag", scripts.windowsInstaller, "--no-check"],
@@ -582,7 +585,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     status: missing.length ? "fail" : "pass",
     message: missing.length
       ? `Missing expected release/bootstrap token(s): ${missing.join(", ")}.`
-      : "Bootstrap scripts for macOS, Linux, fish, and Windows download the release pack, set Exa websearch env, and thin installers delegate the ritual to agentx install with the expected platform flags.",
+      : `Bootstrap scripts for macOS, Linux, fish, and Windows download the release pack, set Exa websearch env, and thin installers delegate the ritual to ${BINARY} install with the expected platform flags.`,
     details: { repoRoot },
   });
 }
@@ -614,18 +617,19 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "Resolve-DefaultPrefix",
     "npm prefix -g",
     "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $CliDir, \"install\")",
-    "opencode-gemini-bridge-cli",
+    `$StableCliDirName = if ($env:AGENTX_STABLE_CLI_DIR) { $env:AGENTX_STABLE_CLI_DIR } else { "${PACKAGE}-cli" }`,
     "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $InstallDir, \"install\", \"--omit=dev\")",
     "Install-StableCli $CliDir $CliInstallDir",
     "$CliTarget = Join-Path $CliInstallDir \"dist\\cli.js\"",
     "Test-CleanCliPath $CliTarget \"CLI target\"",
-    "Test-CleanOgbShim $OgbBin $CliTarget",
-    "Repair-HomeOgbShim $CliTarget",
-    "Repaired old home ogb shim",
-    "Installed ogb verification returned no version output.",
-    "Runtime-OgbCliTarget",
-    "%USERPROFILE%\\.ai\\opencode-pack\\opencode-gemini-bridge-cli\\dist\\cli.js",
-    "ogb.cmd",
+    "Test-CleanCommandShim $PrimaryBin $CliTarget",
+    "Repair-HomeCommandShim $CliTarget",
+    "Repaired old home $Name shim",
+    "Installed $BinaryName verification returned no version output.",
+    "Runtime-CliTarget",
+    "%USERPROFILE%\\.ai\\opencode-pack\\$StableCliDirName\\dist\\cli.js",
+    `$PrimaryBin = Join-Path $Prefix "$BinaryName.cmd"`,
+    `$LegacyBin = Join-Path $Prefix "$LegacyBinaryName.cmd"`,
     "\"install\", \"--rulesync\"",
     "& $script:NodeCommand $CliTarget @InstallArgs",
     "--no-ux",
@@ -635,9 +639,9 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "SetEnvironmentVariable(\"Path\"",
     "SetEnvironmentVariable(\"OPENCODE_ENABLE_EXA\"",
     "Ensure-OpenCodeExaEnvironment",
-    "Running OGB install ritual",
-    "Verified ogb",
-    "ogb command:",
+    "Running $ProductName install ritual",
+    "Verified $BinaryName",
+    "$BinaryName command:",
   ];
   const missing = required.filter((needle) => !text.includes(needle));
   const forbidden = [
@@ -655,7 +659,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
       ? `Missing expected installer token(s): ${missing.join(", ")}.`
       : forbidden.length
         ? `Forbidden unsafe installer token(s): ${forbidden.join(", ")}.`
-        : "PowerShell installer has safe native command capture, build, install, Exa websearch env, and delegates the install ritual to the ogb CLI.",
+        : `PowerShell installer has safe native command capture, build, install, Exa websearch env, and delegates the install ritual to the ${BINARY} CLI.`,
   });
 }
 

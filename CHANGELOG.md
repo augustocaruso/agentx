@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 - Rebrand para agentX
+
+- Renomeia o pacote/binário principal para `agentx`/agentX, mantendo compatibilidade explícita com o legado `ogb` onde ainda é necessário.
+- Centraliza nomes públicos de pacote, repo, release asset, comandos de instalador e artefatos de release em referências de marca.
+- Adiciona regressões para impedir novos literais `agentx`/`agentX`/`ogb` fora das declarações de referência nas superfícies públicas de release e instalação.
+
 ## 0.1.62 - Cleanup real de symlinks antigos na home
 
 - Corrige o cleanup de home-mode para usar `lstat` e remover symlinks antigos em `~/.opencode/agents` e `~/.opencode/skills` mesmo quando o `stat` do Windows falha com `UNKNOWN`.

@@ -2,22 +2,30 @@
 set -euo pipefail
 
 INSTALL_PLATFORM="darwin"
+PRODUCT_NAME="${AGENTX_PRODUCT_NAME:-agentX}"
+BINARY_NAME="${AGENTX_BINARY:-agentx}"
+LEGACY_BINARY_NAME="${AGENTX_LEGACY_BINARY:-ogb}"
+PACKAGE_NAME="${AGENTX_PACKAGE:-agentx}"
+LEGACY_PACKAGE_NAME="${AGENTX_LEGACY_PACKAGE:-opencode-gemini-bridge}"
+STATE_DIR_NAME="${AGENTX_STATE_DIR:-agentx}"
+SOURCE_PACKAGE_DIR="${AGENTX_SOURCE_PACKAGE_DIR:-ogb}"
+PACK_TEMP_PREFIX="${AGENTX_PACK_TEMP_PREFIX:-agentx-npm-pack}"
 
 usage() {
-  cat <<'EOF'
+  cat <<EOF
 Usage: install-posix.sh [--platform darwin|linux] [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [--no-opencode] [--force] [--rulesync MODE]
 
-Installs the ogb CLI, then delegates the install ritual to:
-ogb install
+Installs the $PRODUCT_NAME CLI, then delegates the install ritual to:
+$BINARY_NAME install
 
 Defaults:
   --project  current working directory
-  --prefix   $OGB_PREFIX, else the npm global prefix when writable and on PATH,
-             else $HOME/.local
+  --prefix   \$OGB_PREFIX, else the npm global prefix when writable and on PATH,
+             else \$HOME/.local
 
 Examples:
-  scripts/install-mac.sh --project "$PWD"
-  scripts/install-linux.sh --project "$PWD"
+  scripts/install-mac.sh --project "\$PWD"
+  scripts/install-linux.sh --project "\$PWD"
   scripts/install-linux.sh --project ~/Code/my-project --prefix ~/.local
 EOF
 }
@@ -51,7 +59,7 @@ bash_quote() {
 
 require_node_22() {
   if ! command -v node >/dev/null 2>&1; then
-    echo "Node.js >=22 is required before installing ogb." >&2
+    echo "Node.js >=22 is required before installing $PRODUCT_NAME." >&2
     exit 1
   fi
 
@@ -60,7 +68,7 @@ require_node_22() {
   node_version="$(node -p 'process.versions.node' 2>/dev/null || true)"
   node_major="${node_version%%.*}"
   if [[ ! "$node_major" =~ ^[0-9]+$ || "$node_major" -lt 22 ]]; then
-    echo "Node.js >=22 is required before installing ogb. Found Node.js ${node_version:-unknown} at $(command -v node)." >&2
+    echo "Node.js >=22 is required before installing $PRODUCT_NAME. Found Node.js ${node_version:-unknown} at $(command -v node)." >&2
     exit 1
   fi
 }
@@ -78,7 +86,7 @@ repair_directory_blocker() {
   local backup_path
   local home_prefix
   stamp="$(date -u +"%Y-%m-%dT%H-%M-%SZ")-$$"
-  backup_root="$HOME/.config/opencode-gemini-bridge/backups/$operation/$stamp/home"
+  backup_root="$HOME/.config/$STATE_DIR_NAME/backups/$operation/$stamp/home"
   relative="$dir"
   home_prefix="$HOME/"
   case "$relative" in
@@ -165,10 +173,10 @@ EOF
     if [[ -f "$target" ]] && grep -Fq "$PREFIX/bin" "$target"; then
       echo "Note: $PREFIX/bin is already mentioned in $target, but not active in this shell."
     elif is_fish_config_target "$target"; then
-      printf '\n# Added by OpenCode Gemini Bridge installer\n%s\n' "$fish_path_block" >> "$target"
+      printf '\n# Added by %s installer\n%s\n' "$PRODUCT_NAME" "$fish_path_block" >> "$target"
       echo "Added $PREFIX/bin to $target."
     else
-      printf '\n# Added by OpenCode Gemini Bridge installer\n%s\n' "$path_line" >> "$target"
+      printf '\n# Added by %s installer\n%s\n' "$PRODUCT_NAME" "$path_line" >> "$target"
       echo "Added $PREFIX/bin to $target."
     fi
   done < <(path_profile_targets)
@@ -206,51 +214,51 @@ ensure_opencode_exa_env() {
   export OPENCODE_ENABLE_EXA=1
 }
 
-repair_ogb_shim() {
+repair_primary_shim() {
   local global_root
   local cli_target
   local version_output
 
   global_root="$(npm --prefix "$PREFIX" root -g 2>/dev/null || true)"
-  cli_target="$global_root/opencode-gemini-bridge/dist/cli.js"
+  cli_target="$global_root/$PACKAGE_NAME/dist/cli.js"
   if [[ ! -f "$cli_target" ]]; then
-    echo "Installed ogb CLI target was not found at $cli_target." >&2
+    echo "Installed $PRODUCT_NAME CLI target was not found at $cli_target." >&2
     return 1
   fi
 
   chmod +x "$cli_target" 2>/dev/null || true
-  version_output="$("$OGB_BIN" --version 2>/dev/null || true)"
+  version_output="$("$PRIMARY_BIN" --version 2>/dev/null || true)"
   if [[ -z "$version_output" ]]; then
-    rm -f "$OGB_BIN"
+    rm -f "$PRIMARY_BIN"
     {
       printf '#!/usr/bin/env bash\n'
       printf 'exec node %s "$@"\n' "$(bash_quote "$cli_target")"
-    } > "$OGB_BIN"
-    chmod +x "$OGB_BIN"
+    } > "$PRIMARY_BIN"
+    chmod +x "$PRIMARY_BIN"
   fi
 
-  version_output="$("$OGB_BIN" --version 2>/dev/null || true)"
+  version_output="$("$PRIMARY_BIN" --version 2>/dev/null || true)"
   if [[ -z "$version_output" ]]; then
-    echo "Installed ogb verification returned no version output." >&2
+    echo "Installed $BINARY_NAME verification returned no version output." >&2
     return 1
   fi
 }
 
-install_ogb_package() {
+install_cli_package() {
   local force_flag="${1:-0}"
   local pack_dir
   local package_tgz
   local install_status=0
 
-  pack_dir="$(mktemp -d "${TMPDIR:-/tmp}/ogb-npm-pack.XXXXXX")"
+  pack_dir="$(mktemp -d "${TMPDIR:-/tmp}/$PACK_TEMP_PREFIX.XXXXXX")"
   if ! (cd "$CLI_DIR" && npm pack --pack-destination "$pack_dir"); then
     rm -rf "$pack_dir"
     return 1
   fi
 
-  package_tgz="$(find "$pack_dir" -maxdepth 1 -type f -name 'opencode-gemini-bridge-*.tgz' -print -quit)"
+  package_tgz="$(find "$pack_dir" -maxdepth 1 -type f -name "$PACKAGE_NAME-*.tgz" -print -quit)"
   if [[ -z "$package_tgz" || ! -f "$package_tgz" ]]; then
-    echo "npm pack did not produce an opencode-gemini-bridge tarball." >&2
+    echo "npm pack did not produce a $PACKAGE_NAME tarball." >&2
     rm -rf "$pack_dir"
     return 1
   fi
@@ -264,9 +272,21 @@ install_ogb_package() {
   return "$install_status"
 }
 
+write_legacy_binary_alias() {
+  if [[ "$LEGACY_BINARY_NAME" == "$BINARY_NAME" ]]; then
+    return
+  fi
+
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'exec %s "$@"\n' "$(bash_quote "$PRIMARY_BIN")"
+  } > "$LEGACY_BIN"
+  chmod +x "$LEGACY_BIN"
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CLI_DIR="$REPO_ROOT/packages/ogb"
+CLI_DIR="$REPO_ROOT/packages/$SOURCE_PACKAGE_DIR"
 PROJECT_DIR="$(pwd)"
 PREFIX=""
 RUN_SETUP=1
@@ -335,7 +355,7 @@ esac
 require_node_22
 
 if ! command -v npm >/dev/null 2>&1; then
-  echo "npm is required before installing ogb." >&2
+  echo "npm is required before installing $PRODUCT_NAME." >&2
   exit 1
 fi
 
@@ -345,7 +365,7 @@ fi
 
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 if [[ "$PROJECT_DIR" == "$HOME" && "$RUN_SETUP" -eq 1 ]]; then
-  echo "Home directory detected; installing global OGB/OpenCode profile and skipping project setup files."
+  echo "Home directory detected; installing global $PRODUCT_NAME/OpenCode profile and skipping project setup files."
   RUN_HOME_SYNC=1
   RUN_SETUP=0
 fi
@@ -357,32 +377,35 @@ mkdir -p "$HOME/.agents/skills"
 mkdir -p "$HOME/.ai/opencode-pack"
 mkdir -p "$PREFIX/bin"
 
-echo "Building ogb CLI..."
+echo "Building $PRODUCT_NAME CLI..."
 npm --prefix "$CLI_DIR" install
 npm --prefix "$CLI_DIR" run build
 
-OGB_BIN="$PREFIX/bin/ogb"
-echo "Installing ogb into $PREFIX..."
-if ! install_ogb_package 0; then
-  echo "npm install did not complete; removing stale ogb shim and retrying with --force..."
-  rm -f "$OGB_BIN"
-  install_ogb_package 1
+PRIMARY_BIN="$PREFIX/bin/$BINARY_NAME"
+LEGACY_BIN="$PREFIX/bin/$LEGACY_BINARY_NAME"
+echo "Installing $BINARY_NAME into $PREFIX..."
+if ! install_cli_package 0; then
+  echo "npm install did not complete; removing stale $BINARY_NAME shim and retrying with --force..."
+  rm -f "$PRIMARY_BIN"
+  install_cli_package 1
 fi
 
-if ! repair_ogb_shim; then
-  echo "ogb command shim was not created or did not run; retrying npm install with --force..."
-  rm -f "$OGB_BIN"
-  install_ogb_package 1
-  repair_ogb_shim
+if ! repair_primary_shim; then
+  echo "$BINARY_NAME command shim was not created or did not run; retrying npm install with --force..."
+  rm -f "$PRIMARY_BIN"
+  install_cli_package 1
+  repair_primary_shim
 fi
 
-if [[ ! -x "$OGB_BIN" ]]; then
-  echo "Expected ogb at $OGB_BIN, but it was not executable." >&2
+write_legacy_binary_alias
+
+if [[ ! -x "$PRIMARY_BIN" ]]; then
+  echo "Expected $BINARY_NAME at $PRIMARY_BIN, but it was not executable." >&2
   exit 1
 fi
 
-if ! "$OGB_BIN" --version >/dev/null; then
-  echo "Installed ogb at $OGB_BIN, but it did not run." >&2
+if ! "$PRIMARY_BIN" --version >/dev/null; then
+  echo "Installed $BINARY_NAME at $PRIMARY_BIN, but it did not run." >&2
   exit 1
 fi
 
@@ -406,20 +429,20 @@ if [[ "$RUN_SETUP" -eq 0 && "$RUN_HOME_SYNC" -eq 0 ]]; then
   INSTALL_ARGS+=(--no-check)
 fi
 
-echo "Running OGB install ritual for $PROJECT_DIR..."
+echo "Running $PRODUCT_NAME install ritual for $PROJECT_DIR..."
 set +e
-"$OGB_BIN" "${INSTALL_ARGS[@]}"
+"$PRIMARY_BIN" "${INSTALL_ARGS[@]}"
 INSTALL_STATUS=$?
 set -e
 if [[ "$INSTALL_STATUS" -eq 1 ]]; then
-  echo "OGB install completed with warnings; continuing bootstrap."
+  echo "$PRODUCT_NAME install completed with warnings; continuing bootstrap."
 elif [[ "$INSTALL_STATUS" -ne 0 ]]; then
   exit "$INSTALL_STATUS"
 fi
 
 echo "Done."
-if command -v ogb >/dev/null 2>&1; then
-  echo "Try: ogb --project \"$PROJECT_DIR\" check"
+if command -v "$BINARY_NAME" >/dev/null 2>&1; then
+  echo "Try: $BINARY_NAME --project \"$PROJECT_DIR\" check"
 else
-  echo "Try: $OGB_BIN --project \"$PROJECT_DIR\" check"
+  echo "Try: $PRIMARY_BIN --project \"$PROJECT_DIR\" check"
 fi

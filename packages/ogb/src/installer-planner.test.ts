@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
+import { BINARY } from "./brand.js";
 import { buildInstallerPlan } from "./installer-planner.js";
 
 test("planner contract builds a Mac install plan without executing", () => {
@@ -20,7 +21,7 @@ test("planner contract builds a Mac install plan without executing", () => {
   assert.equal(plan.homeMode, false);
   assert.equal(plan.dryRun, true);
   assert.deepEqual(plan.delegation, {
-    command: "ogb",
+    command: BINARY,
     args: ["--project", projectRoot, "install", "--dry-run", "--rulesync", "off"],
   });
   assert.deepEqual(plan.steps.map((step) => [step.id, step.kind, step.writes]), [

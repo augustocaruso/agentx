@@ -12,11 +12,20 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 $script:NodeCommand = $null
 $script:NpmCommand = $null
+$ProductName = if ($env:AGENTX_PRODUCT_NAME) { $env:AGENTX_PRODUCT_NAME } else { "agentX" }
+$BinaryName = if ($env:AGENTX_BINARY) { $env:AGENTX_BINARY } else { "agentx" }
+$LegacyBinaryName = if ($env:AGENTX_LEGACY_BINARY) { $env:AGENTX_LEGACY_BINARY } else { "ogb" }
+$PackageName = if ($env:AGENTX_PACKAGE) { $env:AGENTX_PACKAGE } else { "agentx" }
+$LegacyPackageName = if ($env:AGENTX_LEGACY_PACKAGE) { $env:AGENTX_LEGACY_PACKAGE } else { "opencode-gemini-bridge" }
+$StableCliDirName = if ($env:AGENTX_STABLE_CLI_DIR) { $env:AGENTX_STABLE_CLI_DIR } else { "$PackageName-cli" }
+$LegacyStableCliDirName = if ($env:AGENTX_LEGACY_STABLE_CLI_DIR) { $env:AGENTX_LEGACY_STABLE_CLI_DIR } else { "opencode-gemini-bridge-cli" }
+$StateDirName = if ($env:AGENTX_STATE_DIR) { $env:AGENTX_STATE_DIR } else { "agentx" }
+$SourcePackageDirName = if ($env:AGENTX_SOURCE_PACKAGE_DIR) { $env:AGENTX_SOURCE_PACKAGE_DIR } else { "ogb" }
 
 function Require-Command($Name) {
   $Command = Get-Command $Name -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $Command) {
-    throw "$Name is required before installing ogb."
+    throw "$Name is required before installing $ProductName."
   }
   return $Command.Source
 }
@@ -25,13 +34,13 @@ function Require-Node22 {
   $NodePath = Require-Command "node"
   $NodeVersionOutput = @(& $NodePath -p "process.versions.node" 2>$null)
   if ($LASTEXITCODE -ne 0 -or -not $NodeVersionOutput) {
-    throw "Node.js >=22 is required before installing ogb. Could not read the installed Node.js version."
+    throw "Node.js >=22 is required before installing $ProductName. Could not read the installed Node.js version."
   }
   $NodeVersion = ([string]($NodeVersionOutput | Select-Object -First 1)).Trim()
   $MajorText = ($NodeVersion -split "\.")[0]
   $Major = 0
   if ((-not [int]::TryParse($MajorText, [ref]$Major)) -or $Major -lt 22) {
-    throw "Node.js >=22 is required before installing ogb. Found Node.js $NodeVersion at $NodePath."
+    throw "Node.js >=22 is required before installing $ProductName. Found Node.js $NodeVersion at $NodePath."
   }
   return $NodePath
 }
@@ -43,7 +52,7 @@ function Resolve-NpmCommand {
       return $Command.Source
     }
   }
-  throw "npm is required before installing ogb."
+  throw "npm is required before installing $ProductName."
 }
 
 function Invoke-NativeCommand($Command, [string[]]$Arguments) {
@@ -85,7 +94,7 @@ function Test-WritableDir($Dir) {
   }
   try {
     New-Item -ItemType Directory -Force $Dir | Out-Null
-    $Probe = Join-Path $Dir (".ogb-write-test-" + [System.Guid]::NewGuid().ToString("N"))
+    $Probe = Join-Path $Dir (".$BinaryName-write-test-" + [System.Guid]::NewGuid().ToString("N"))
     "ok" | Set-Content -Path $Probe -Encoding ASCII
     Remove-Item -Force $Probe -ErrorAction SilentlyContinue
     return $true
@@ -161,7 +170,7 @@ function Add-UserPath($Dir) {
   if (($UserParts | ForEach-Object { Normalize-PathForCompare $_ }) -notcontains $FullDir) {
     $NextUserPath = if ($UserPath) { "$FullDir;$UserPath" } else { $FullDir }
     [Environment]::SetEnvironmentVariable("Path", $NextUserPath, "User")
-    Write-Host "Added $FullDir to your user PATH. Open a new terminal to use ogb directly."
+    Write-Host "Added $FullDir to your user PATH. Open a new terminal to use $BinaryName directly."
   }
 }
 
@@ -186,7 +195,7 @@ function Repair-DirectoryBlocker($Dir, $Operation) {
   }
 
   $Stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH-mm-ss.fffZ") + "-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
-  $BackupRoot = Join-Path $HOME ".config\opencode-gemini-bridge\backups\$Operation\$Stamp\home"
+  $BackupRoot = Join-Path $HOME ".config\$StateDirName\backups\$Operation\$Stamp\home"
   $Relative = $Dir
   if ($Relative.StartsWith($HOME, [System.StringComparison]::OrdinalIgnoreCase)) {
     $Relative = $Relative.Substring($HOME.Length).TrimStart([char[]]@("\", "/"))
@@ -230,19 +239,19 @@ function Remove-UserPath($Dir) {
 
 function Repair-BrokenForceInstall {
   $BrokenPrefix = Join-Path $HOME "-Force"
-  $BrokenShim = Join-Path $BrokenPrefix "ogb.cmd"
-  $BrokenPackage = Join-Path $BrokenPrefix "node_modules\opencode-gemini-bridge"
+  $BrokenShim = Join-Path $BrokenPrefix "$LegacyBinaryName.cmd"
+  $BrokenPackage = Join-Path $BrokenPrefix "node_modules\$LegacyPackageName"
   if ((Test-Path $BrokenShim) -or (Test-Path $BrokenPackage)) {
     Remove-UserPath $BrokenPrefix
     Remove-Item -Recurse -Force $BrokenPrefix -ErrorAction SilentlyContinue
   }
 }
 
-function Remove-BrokenOgbShim($Dir) {
+function Remove-BrokenCommandShim($Dir) {
   if (-not $Dir) {
     return
   }
-  foreach ($Name in @("ogb", "ogb.cmd", "ogb.ps1")) {
+  foreach ($Name in @($BinaryName, "$BinaryName.cmd", "$BinaryName.ps1", $LegacyBinaryName, "$LegacyBinaryName.cmd", "$LegacyBinaryName.ps1") | Select-Object -Unique) {
     $Shim = Join-Path $Dir $Name
     if (-not (Test-Path $Shim)) {
       continue
@@ -253,18 +262,18 @@ function Remove-BrokenOgbShim($Dir) {
     } catch {
       $Content = ""
     }
-    if ($Content -match "opencode-gemini-bridge-cli" -or $Content -match "\.ai\\opencode-pack" -or $Content -match "added \d+ packages") {
-      if ($Name -eq "ogb.cmd") {
-        Write-Host "Found old ogb shim; it will be repaired after the new CLI is built: $Shim"
+    if ($Content -match [regex]::Escape($LegacyStableCliDirName) -or $Content -match "\.ai\\opencode-pack" -or $Content -match "added \d+ packages") {
+      if ($Name -eq "$BinaryName.cmd" -or $Name -eq "$LegacyBinaryName.cmd") {
+        Write-Host "Found old $Name shim; it will be repaired after the new CLI is built: $Shim"
         continue
       }
       Remove-Item -Force $Shim -ErrorAction SilentlyContinue
-      Write-Host "Removed broken ogb shim: $Shim"
+      Write-Host "Removed broken $Name shim: $Shim"
     }
   }
 }
 
-function Repair-BrokenOgbShims($Prefix) {
+function Repair-BrokenCommandShims($Prefix) {
   $Dirs = @()
   $HomePath = Normalize-PathForCompare $HOME
   if ($Prefix -and ((Normalize-PathForCompare $Prefix) -ne $HomePath)) {
@@ -280,21 +289,21 @@ function Repair-BrokenOgbShims($Prefix) {
     # ignore npm prefix lookup failures; the installer will use its resolved prefix.
   }
   foreach ($Dir in ($Dirs | Where-Object { $_ } | Select-Object -Unique)) {
-    Remove-BrokenOgbShim $Dir
+    Remove-BrokenCommandShim $Dir
   }
 }
 
-function Runtime-OgbCliTarget {
-  return "%USERPROFILE%\.ai\opencode-pack\opencode-gemini-bridge-cli\dist\cli.js"
+function Runtime-CliTarget {
+  return "%USERPROFILE%\.ai\opencode-pack\$StableCliDirName\dist\cli.js"
 }
 
-function Write-OgbCmdShim($ShimPath, $CliTarget) {
-  $RuntimeCliTarget = Runtime-OgbCliTarget
+function Write-CmdShim($ShimPath, $CliTarget) {
+  $RuntimeCliTarget = Runtime-CliTarget
   "@ECHO off`r`nnode `"$RuntimeCliTarget`" %*`r`n" | Set-Content -Path $ShimPath -Encoding ASCII
 }
 
-function Repair-HomeOgbShim($CliTarget) {
-  foreach ($Name in @("ogb", "ogb.cmd", "ogb.ps1")) {
+function Repair-HomeCommandShim($CliTarget) {
+  foreach ($Name in @($BinaryName, "$BinaryName.cmd", "$BinaryName.ps1", $LegacyBinaryName, "$LegacyBinaryName.cmd", "$LegacyBinaryName.ps1") | Select-Object -Unique) {
     $Shim = Join-Path $HOME $Name
     if (-not (Test-Path $Shim)) {
       continue
@@ -305,13 +314,13 @@ function Repair-HomeOgbShim($CliTarget) {
     } catch {
       $Content = ""
     }
-    if ($Content -match "opencode-gemini-bridge-cli" -or $Content -match "\.ai\\opencode-pack" -or $Content -match "added \d+ packages") {
-      if ($Name -eq "ogb.cmd") {
-        Write-OgbCmdShim $Shim $CliTarget
-        Write-Host "Repaired old home ogb shim: $Shim"
+    if ($Content -match [regex]::Escape($LegacyStableCliDirName) -or $Content -match "\.ai\\opencode-pack" -or $Content -match "added \d+ packages") {
+      if ($Name -eq "$BinaryName.cmd" -or $Name -eq "$LegacyBinaryName.cmd") {
+        Write-CmdShim $Shim $CliTarget
+        Write-Host "Repaired old home $Name shim: $Shim"
       } else {
         Remove-Item -Force $Shim -ErrorAction SilentlyContinue
-        Write-Host "Removed broken home ogb shim: $Shim"
+        Write-Host "Removed broken home $Name shim: $Shim"
       }
     }
   }
@@ -356,27 +365,27 @@ function Test-CleanCliPath($PathValue, $Label) {
   }
 }
 
-function Test-CleanOgbShim($ShimPath, $CliTarget) {
+function Test-CleanCommandShim($ShimPath, $CliTarget) {
   if (-not (Test-Path $ShimPath)) {
-    throw "Expected ogb.cmd under $ShimPath, but it was not found."
+    throw "Expected command shim under $ShimPath, but it was not found."
   }
   $Content = Get-Content -Raw -Path $ShimPath
   if ($Content -match "added \d+ packages|audited \d+ packages|npm fund|npm audit") {
-    throw "Generated ogb shim contains npm output: $ShimPath"
+    throw "Generated command shim contains npm output: $ShimPath"
   }
-  $RuntimeCliTarget = Runtime-OgbCliTarget
+  $RuntimeCliTarget = Runtime-CliTarget
   if ($Content -notmatch [regex]::Escape($RuntimeCliTarget)) {
-    throw "Generated ogb shim does not point at runtime CLI target: $RuntimeCliTarget"
+    throw "Generated command shim does not point at runtime CLI target: $RuntimeCliTarget"
   }
   $NonEmptyLines = @($Content -split "\r?\n" | Where-Object { $_.Trim() })
   if ($NonEmptyLines.Count -ne 2) {
-    throw "Generated ogb shim should contain exactly 2 non-empty lines, found $($NonEmptyLines.Count): $ShimPath"
+    throw "Generated command shim should contain exactly 2 non-empty lines, found $($NonEmptyLines.Count): $ShimPath"
   }
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
-$CliDir = Join-Path (Join-Path $RepoRoot "packages") "ogb"
+$CliDir = Join-Path (Join-Path $RepoRoot "packages") $SourcePackageDirName
 
 $script:NodeCommand = Require-Node22
 Require-Command "npm" | Out-Null
@@ -389,7 +398,7 @@ $HomePath = [System.IO.Path]::GetFullPath($HOME)
 $RunHomeSync = $false
 $TrimChars = [char[]]@("\", "/")
 if ($Project.TrimEnd($TrimChars) -eq $HomePath.TrimEnd($TrimChars) -and (-not $NoSetup)) {
-  Write-Host "Home directory detected; installing global OGB/OpenCode profile and skipping project setup files."
+  Write-Host "Home directory detected; installing global $ProductName/OpenCode profile and skipping project setup files."
   $RunHomeSync = $true
   $NoSetup = $true
 }
@@ -401,7 +410,7 @@ if ((-not $Prefix) -or $Prefix.Trim().StartsWith("-")) {
 }
 
 Repair-BrokenForceInstall
-Repair-BrokenOgbShims $Prefix
+Repair-BrokenCommandShims $Prefix
 Repair-DirectoryBlocker (Join-Path $HOME ".config\opencode") "windows-installer"
 Repair-ReadOnlyDirectory (Join-Path $HOME ".config\opencode") "windows-installer"
 
@@ -410,12 +419,12 @@ New-Item -ItemType Directory -Force (Join-Path $HOME ".agents\skills") | Out-Nul
 New-Item -ItemType Directory -Force (Join-Path $HOME ".ai\opencode-pack") | Out-Null
 New-Item -ItemType Directory -Force $Prefix | Out-Null
 
-Write-Host "Building ogb CLI..."
+Write-Host "Building $ProductName CLI..."
 Invoke-NativeCommand $script:NpmCommand @("--prefix", $CliDir, "install")
 Invoke-NativeCommand $script:NpmCommand @("--prefix", $CliDir, "run", "build")
 
-Write-Host "Installing ogb into a stable local folder..."
-$CliInstallDir = Join-Path (Join-Path $HOME ".ai\opencode-pack") "opencode-gemini-bridge-cli"
+Write-Host "Installing $BinaryName into a stable local folder..."
+$CliInstallDir = Join-Path (Join-Path $HOME ".ai\opencode-pack") $StableCliDirName
 Install-StableCli $CliDir $CliInstallDir
 $CliTarget = Join-Path $CliInstallDir "dist\cli.js"
 Test-CleanCliPath $CliTarget "CLI target"
@@ -423,32 +432,44 @@ Write-Host "Prefix: $Prefix"
 Write-Host "CliInstallDir: $CliInstallDir"
 Write-Host "CliTarget: $CliTarget"
 
-Write-Host "Registering ogb command in $Prefix..."
-Remove-Item -Force (Join-Path $Prefix "ogb") -ErrorAction SilentlyContinue
-Remove-Item -Force (Join-Path $Prefix "ogb.ps1") -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force (Join-Path $Prefix "node_modules\opencode-gemini-bridge") -ErrorAction SilentlyContinue
+Write-Host "Registering $BinaryName command in $Prefix..."
+foreach ($Name in @($BinaryName, "$BinaryName.ps1", $LegacyBinaryName, "$LegacyBinaryName.ps1") | Select-Object -Unique) {
+  Remove-Item -Force (Join-Path $Prefix $Name) -ErrorAction SilentlyContinue
+}
+Remove-Item -Recurse -Force (Join-Path $Prefix "node_modules\$PackageName") -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force (Join-Path $Prefix "node_modules\$LegacyPackageName") -ErrorAction SilentlyContinue
 
-$OgbBin = Join-Path $Prefix "ogb.cmd"
-Write-OgbCmdShim $OgbBin $CliTarget
+$PrimaryBin = Join-Path $Prefix "$BinaryName.cmd"
+$LegacyBin = Join-Path $Prefix "$LegacyBinaryName.cmd"
+Write-CmdShim $PrimaryBin $CliTarget
+if ($LegacyBinaryName -ne $BinaryName) {
+  Write-CmdShim $LegacyBin $CliTarget
+}
 
-Test-CleanOgbShim $OgbBin $CliTarget
-Repair-HomeOgbShim $CliTarget
-Write-Host "OgbBin: $OgbBin"
+Test-CleanCommandShim $PrimaryBin $CliTarget
+if ($LegacyBinaryName -ne $BinaryName) {
+  Test-CleanCommandShim $LegacyBin $CliTarget
+}
+Repair-HomeCommandShim $CliTarget
+Write-Host "Primary command: $PrimaryBin"
+if ($LegacyBinaryName -ne $BinaryName) {
+  Write-Host "Legacy alias: $LegacyBin"
+}
 
-$InstalledVersionOutput = & $OgbBin --version 2>&1
+$InstalledVersionOutput = & $PrimaryBin --version 2>&1
 $InstalledVersionExit = $LASTEXITCODE
 if ($InstalledVersionExit -ne 0) {
   $Message = if ($InstalledVersionOutput) { ($InstalledVersionOutput | Out-String).Trim() } else { "no output" }
-  throw "Installed ogb verification failed with exit code ${InstalledVersionExit}: $Message"
+  throw "Installed $BinaryName verification failed with exit code ${InstalledVersionExit}: $Message"
 }
 $InstalledVersion = if ($InstalledVersionOutput) { ($InstalledVersionOutput | Out-String).Trim() } else { "" }
 if (-not $InstalledVersion) {
-  throw "Installed ogb verification returned no version output."
+  throw "Installed $BinaryName verification returned no version output."
 }
-Write-Host "Verified ogb $InstalledVersion at $OgbBin"
+Write-Host "Verified $BinaryName $InstalledVersion at $PrimaryBin"
 
-$OgbBinDir = Split-Path -Parent $OgbBin
-Add-UserPath $OgbBinDir
+$PrimaryBinDir = Split-Path -Parent $PrimaryBin
+Add-UserPath $PrimaryBinDir
 Ensure-OpenCodeExaEnvironment
 
 $InstallArgs = @("--project", $Project, "install", "--rulesync", $Rulesync, "--windows")
@@ -468,15 +489,15 @@ if ($NoSetup -and (-not $RunHomeSync)) {
   $InstallArgs += "--no-check"
 }
 
-Write-Host "Running OGB install ritual for $Project..."
+Write-Host "Running $ProductName install ritual for $Project..."
 & $script:NodeCommand $CliTarget @InstallArgs
 $InstallStatus = $LASTEXITCODE
 if ($InstallStatus -eq 1) {
-  Write-Host "OGB install completed with warnings; continuing bootstrap."
+  Write-Host "$ProductName install completed with warnings; continuing bootstrap."
 } elseif ($InstallStatus -ne 0) {
   exit $InstallStatus
 }
 
 Write-Host "Done."
-Write-Host "ogb command: $OgbBin"
-Write-Host "Try: & `"$OgbBin`" --project `"$Project`" check --windows"
+Write-Host "$BinaryName command: $PrimaryBin"
+Write-Host "Try: & `"$PrimaryBin`" --project `"$Project`" check --windows"

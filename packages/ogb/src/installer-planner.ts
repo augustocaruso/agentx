@@ -1,4 +1,5 @@
 import os from "node:os";
+import { BINARY } from "./brand.js";
 import { createPlatformAdapter, type PlatformAdapter } from "./platform-adapter.js";
 import type { RulesyncMode } from "./rulesync.js";
 
@@ -23,7 +24,7 @@ export interface InstallerPlanStep {
   kind: "cleanup" | "setup" | "sync" | "check" | "update" | "reset" | "guard";
   writes: boolean;
   command?: {
-    tool: "ogb";
+    tool: typeof BINARY;
     args: string[];
   };
 }
@@ -50,7 +51,7 @@ export interface InstallerPlan {
     | "powershellCommands"
   >;
   delegation: {
-    command: "ogb";
+    command: typeof BINARY;
     args: string[];
   };
   steps: InstallerPlanStep[];
@@ -92,7 +93,7 @@ export function buildInstallerPlan(input: InstallerPlanInput): InstallerPlan {
   });
   const dryRun = input.dryRun === true;
   const delegationArgs = baseDelegationArgs({ projectRoot }, input.intent, input);
-  const command = { tool: "ogb" as const, args: delegationArgs };
+  const command: InstallerPlanStep["command"] = { tool: BINARY, args: delegationArgs };
   const writes = !dryRun;
   const steps: InstallerPlanStep[] = [];
 
@@ -102,14 +103,14 @@ export function buildInstallerPlan(input: InstallerPlanInput): InstallerPlan {
     steps.push(step("run-check", "check", writes, command));
   } else if (input.intent === "update") {
     steps.push(step("download-release-pack", "update", writes));
-    steps.push(step("run-post-update-check", "check", writes, { tool: "ogb", args: ["--project", projectRoot, "check", "--force", "--no-extension-update", ...(input.windows ? ["--windows"] : [])] }));
+    steps.push(step("run-post-update-check", "check", writes, { tool: BINARY, args: ["--project", projectRoot, "check", "--force", "--no-extension-update", ...(input.windows ? ["--windows"] : [])] }));
   } else if (input.intent === "check") {
     steps.push(step("run-check", "check", writes, command));
   } else {
     steps.push(step("guard-home-reset", "guard", false));
     steps.push(step("cleanup-home-artifacts", "cleanup", writes));
     steps.push(step("reset-global-profile", "reset", writes));
-    steps.push(step("run-check", "check", writes, { tool: "ogb", args: ["--project", projectRoot, "check", "--force", ...(input.windows ? ["--windows"] : [])] }));
+    steps.push(step("run-check", "check", writes, { tool: BINARY, args: ["--project", projectRoot, "check", "--force", ...(input.windows ? ["--windows"] : [])] }));
   }
 
   return {
@@ -133,7 +134,7 @@ export function buildInstallerPlan(input: InstallerPlanInput): InstallerPlan {
       powershellCommands: adapter.powershellCommands,
     },
     delegation: {
-      command: "ogb",
+      command: BINARY,
       args: delegationArgs,
     },
     steps,

@@ -5,7 +5,7 @@ import { runNativeCommand, type NativeCommandResult, type NativeCommandSpec } fr
 import { createPlatformAdapter } from "./platform-adapter.js";
 import { normalizePathInput, resolveProjectPaths } from "./paths.js";
 import { emitRitualProgress, progressStatusFromOutcome, RITUAL_PROGRESS_SCHEMA_VERSION, type RitualProgressJsonEvent, type RitualProgressSink, type RitualProgressStatus, type RitualProgressSummary } from "./ritual-progress.js";
-import { GITHUB_REPO } from "./brand.js";
+import { BINARY, BOOTSTRAP_TEMP_PREFIX, GITHUB_REPO, LEGACY_BINARY } from "./brand.js";
 import { writeStateRecord } from "./state-store.js";
 import { AGENTX_VERSION } from "./types.js";
 import type { RulesyncMode } from "./rulesync.js";
@@ -335,10 +335,12 @@ function printPostUpdateDetails(report: PostUpdateRitualReport): void {
 export function buildPostUpdateRitualCommand(options: SelfUpdateOptions = {}, platform: NodeJS.Platform = process.platform): string[] {
   const adapter = createPlatformAdapter({ platform, homeDir: options.projectRoot ?? process.cwd() });
   const projectRoot = adapter.resolvePath(options.projectRoot ?? process.cwd());
-  const ogb = resolveCommand("ogb", { homeDir: projectRoot, platform: adapter.platform, env: adapter.env }) ?? "ogb";
+  const command = resolveCommand(BINARY, { homeDir: projectRoot, platform: adapter.platform, env: adapter.env })
+    ?? resolveCommand(LEGACY_BINARY, { homeDir: projectRoot, platform: adapter.platform, env: adapter.env })
+    ?? BINARY;
   const args = ["--project", projectRoot, "check", "--force", "--no-extension-update"];
   if (platform === "win32") args.push("--windows");
-  return [ogb, ...args];
+  return [command, ...args];
 }
 
 function replayPostUpdateProgress(stdout: string, sink: RitualProgressSink | undefined): void {
@@ -523,7 +525,7 @@ export function buildSelfUpdateCommand(options: SelfUpdateOptions = {}, platform
     const script = [
       "$ErrorActionPreference = 'Stop'",
       "$PSNativeCommandUseErrorActionPreference = $false",
-      "$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('ogb-bootstrap-' + [System.Guid]::NewGuid().ToString('N') + '.ps1')",
+      `$tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('${BOOTSTRAP_TEMP_PREFIX}-' + [System.Guid]::NewGuid().ToString('N') + '.ps1')`,
       `Invoke-WebRequest -Uri ${psQuote(bootstrapUrl)} -OutFile $tmp`,
       `try { & $tmp ${args} } finally { Remove-Item -Force $tmp -ErrorAction SilentlyContinue }`,
     ].join("; ");

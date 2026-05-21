@@ -12,7 +12,7 @@ import { externalOpenCodePlugins } from "./external-integrations.js";
 import { formatCommand, installGeminiExtension, updateGeminiExtensions } from "./extensions.js";
 import { flattenGeminiMd } from "./flatten.js";
 import { findHelpCommand, formatHelpCatalog, formatHelpCommand, formatHelpRunLine, HELP_COMMANDS, type HelpAction, type HelpCommand } from "./help-catalog.js";
-import { DISPLAY, GITHUB_REPO } from "./brand.js";
+import { BINARY, DISPLAY, GITHUB_REPO } from "./brand.js";
 import { migrateFromOgb, type MigrationReport } from "./migrate-from-ogb.js";
 import { printError, printNotice } from "./presentation/format.js";
 import { cleanupHomeProjectArtifacts, printHomeCleanupReport } from "./home-cleanup.js";
@@ -398,7 +398,7 @@ async function withWorkflowTelemetry<T>(workflow: string, action: () => T | Prom
       outcome: payloadOutcome(payload, exitCode, thrown),
       exitCode,
       durationMs: Date.now() - startedAt,
-      command: `ogb ${workflow}`,
+      command: `${BINARY} ${workflow}`,
       source: "cli",
       projectRoot: paths.projectRoot,
       homeDir: paths.homeDir,
@@ -585,8 +585,8 @@ async function readTelemetryPayload(raw: string | undefined): Promise<unknown> {
 }
 
 program
-  .name("ogb")
-  .description("OpenCode Gemini Bridge")
+  .name(BINARY)
+  .description(DISPLAY)
   .version(AGENTX_VERSION)
   .option("--project <path>", "Project root", process.cwd());
 program.addHelpCommand(false);
@@ -1326,7 +1326,7 @@ addUpdateOptions(program.command("upgrade-ogb"))
 
 program.command("check-update")
   .description("Check GitHub Releases for a newer OGB version")
-  .option("--repo <owner/repo>", "GitHub repo that publishes OGB releases", "augustocaruso/opencode-gemini-bridge")
+  .option("--repo <owner/repo>", "GitHub repo that publishes agentX releases", GITHUB_REPO)
   .option("--no-write", "Do not write .opencode/generated/agentx-update-status.json")
   .option("--json", "Print JSON report")
   .action(async (opts) => {
@@ -1342,7 +1342,7 @@ program.command("check-update")
 
 program.command("auto-update")
   .description("Update OGB automatically when a newer GitHub release exists")
-  .option("--repo <owner/repo>", "GitHub repo that publishes OGB releases", "augustocaruso/opencode-gemini-bridge")
+  .option("--repo <owner/repo>", "GitHub repo that publishes agentX releases", GITHUB_REPO)
   .option("--prefix <path>", "Install prefix passed to the installer")
   .option("--rulesync <mode>", "Rulesync mode passed to first-run setup", "auto")
   .option("--no-setup", "Update ogb/profile only; skip import/setup/doctor validation")

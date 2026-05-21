@@ -1,6 +1,6 @@
 param(
-  [string]$Repo = $(if ($env:OGB_GITHUB_REPO) { $env:OGB_GITHUB_REPO } else { "augustocaruso/agentx" }),
-  [string]$Version = $(if ($env:OGB_RELEASE_VERSION) { $env:OGB_RELEASE_VERSION } else { "latest" }),
+  [string]$Repo,
+  [string]$Version,
   [string]$Project,
   [string]$Prefix,
   [string]$Rulesync,
@@ -14,6 +14,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
+
+$ProductName = if ($env:AGENTX_PRODUCT_NAME) { $env:AGENTX_PRODUCT_NAME } else { "agentX" }
+$DefaultRepo = if ($env:AGENTX_GITHUB_REPO) { $env:AGENTX_GITHUB_REPO } else { "augustocaruso/agentx" }
+$ReleaseAsset = if ($env:AGENTX_RELEASE_ASSET) { $env:AGENTX_RELEASE_ASSET } else { "agentx-pack.zip" }
+$StateDirName = if ($env:AGENTX_STATE_DIR) { $env:AGENTX_STATE_DIR } else { "agentx" }
+$TempPrefix = if ($env:AGENTX_TEMP_PREFIX) { $env:AGENTX_TEMP_PREFIX } else { "agentx-bootstrap" }
+$ZipName = if ($env:AGENTX_RELEASE_ZIP_NAME) { $env:AGENTX_RELEASE_ZIP_NAME } else { "agentx.zip" }
+$Repo = if ($Repo) { $Repo } elseif ($env:OGB_GITHUB_REPO) { $env:OGB_GITHUB_REPO } else { $DefaultRepo }
+$Version = if ($Version) { $Version } elseif ($env:OGB_RELEASE_VERSION) { $env:OGB_RELEASE_VERSION } else { "latest" }
 
 function Normalize-PathArgument($Value) {
   if ($null -eq $Value) {
@@ -43,7 +52,7 @@ function Repair-DirectoryBlocker($Dir, $Operation) {
   }
 
   $Stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH-mm-ss.fffZ") + "-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 8)
-  $BackupRoot = Join-Path $HOME ".config\opencode-gemini-bridge\backups\$Operation\$Stamp\home"
+  $BackupRoot = Join-Path $HOME ".config\$StateDirName\backups\$Operation\$Stamp\home"
   $Relative = $Dir
   if ($Relative.StartsWith($HOME, [System.StringComparison]::OrdinalIgnoreCase)) {
     $Relative = $Relative.Substring($HOME.Length).TrimStart([char[]]@("\", "/"))
@@ -71,20 +80,20 @@ $Prefix = Normalize-PathArgument $Prefix
 Repair-DirectoryBlocker (Join-Path $HOME ".config\opencode") "bootstrap"
 Repair-ReadOnlyDirectory (Join-Path $HOME ".config\opencode") "bootstrap"
 
-$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ogb-bootstrap-" + [System.Guid]::NewGuid().ToString("N"))
+$TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ($TempPrefix + "-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $TempDir | Out-Null
 
 try {
   if ($Version -eq "latest") {
-    $ReleaseUrl = "https://github.com/$Repo/releases/latest/download/agentx-pack.zip"
+    $ReleaseUrl = "https://github.com/$Repo/releases/latest/download/$ReleaseAsset"
   } else {
-    $ReleaseUrl = "https://github.com/$Repo/releases/download/$Version/agentx-pack.zip"
+    $ReleaseUrl = "https://github.com/$Repo/releases/download/$Version/$ReleaseAsset"
   }
 
-  $ZipPath = Join-Path $TempDir "ogb.zip"
+  $ZipPath = Join-Path $TempDir $ZipName
   $UnpackDir = Join-Path $TempDir "unpacked"
 
-  Write-Host "Downloading OGB from $ReleaseUrl..."
+  Write-Host "Downloading $ProductName from $ReleaseUrl..."
   Invoke-WebRequest -Uri $ReleaseUrl -OutFile $ZipPath
   Expand-Archive -Path $ZipPath -DestinationPath $UnpackDir -Force
 
