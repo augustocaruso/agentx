@@ -46,6 +46,48 @@ test("short-circuits to already-done when marker is present", (t) => {
   assert.equal(fs.existsSync(path.join(legacyHome, "stays.txt")), true);
 });
 
+test("marker does not block project legacy sync-state adoption", (t) => {
+  const { homeDir, projectRoot } = setup(t);
+  const newHome = path.join(homeDir, ".config", "agentx");
+  const generatedDir = path.join(projectRoot, ".opencode", "generated");
+  fs.mkdirSync(newHome, { recursive: true });
+  fs.mkdirSync(generatedDir, { recursive: true });
+  fs.writeFileSync(path.join(newHome, ".migrated-from-ogb"), "migrated\n", "utf8");
+  fs.writeFileSync(path.join(generatedDir, "ogb-sync-state.json"), JSON.stringify({
+    version: "0.1.62",
+    managedFiles: [
+      {
+        path: "opencode.jsonc",
+        sha256: "legacy-config",
+        source: "ogb",
+      },
+      {
+        path: ".opencode/plugins/ogb-startup-sync.js",
+        sha256: "legacy-plugin",
+        source: "ogb",
+      },
+    ],
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(generatedDir, "agentx-sync-state.json"), JSON.stringify({
+    version: "0.2.5",
+    managedFiles: [
+      {
+        path: ".opencode/generated/agentx-dashboard.json",
+        sha256: "current-dashboard",
+        source: "ogb",
+      },
+    ],
+  }, null, 2), "utf8");
+
+  const report = migrateFromOgb({ homeDir, projectRoot });
+  const state = JSON.parse(fs.readFileSync(path.join(generatedDir, "agentx-sync-state.json"), "utf8"));
+
+  assert.equal(report.status, "migrated");
+  assert.ok(state.managedFiles.some((file: any) => file.path === "opencode.jsonc" && file.sha256 === "legacy-config"));
+  assert.ok(state.managedFiles.some((file: any) => file.path === ".opencode/plugins/ogb-startup-sync.js" && file.sha256 === "legacy-plugin"));
+  assert.ok(state.managedFiles.some((file: any) => file.path === ".opencode/generated/agentx-dashboard.json" && file.sha256 === "current-dashboard"));
+});
+
 test("migrates legacy home dir and renames the generated/ prefix", (t) => {
   const { homeDir, projectRoot } = setup(t);
   const legacyHome = path.join(homeDir, ".config", "opencode-gemini-bridge");
@@ -70,12 +112,16 @@ test("migrates legacy home dir and renames the generated/ prefix", (t) => {
   assert.equal(fs.existsSync(path.join(newHome, ".migrated-from-ogb")), true);
 });
 
-test("migrates legacy project files and renames .opencode/generated prefix", (t) => {
+test("migrates legacy project files, keeps runtime plugin paths, and renames .opencode/generated prefix", (t) => {
   const { homeDir, projectRoot } = setup(t);
   const opencodeDir = path.join(projectRoot, ".opencode");
   fs.mkdirSync(path.join(opencodeDir, "generated"), { recursive: true });
+  fs.mkdirSync(path.join(opencodeDir, "plugins"), { recursive: true });
+  fs.mkdirSync(path.join(opencodeDir, "tui-plugins"), { recursive: true });
   fs.writeFileSync(path.join(opencodeDir, "ogb.config.jsonc"), "{}", "utf8");
   fs.writeFileSync(path.join(opencodeDir, "ogb-trust.jsonc"), "{}", "utf8");
+  fs.writeFileSync(path.join(opencodeDir, "plugins", "ogb-startup-sync.js"), "plugin", "utf8");
+  fs.writeFileSync(path.join(opencodeDir, "tui-plugins", "ogb-sidebar.js"), "sidebar", "utf8");
   fs.writeFileSync(path.join(opencodeDir, "generated", "ogb-inventory.json"), "{}", "utf8");
   fs.writeFileSync(path.join(opencodeDir, "generated", "opencode.generated.json"), "{}", "utf8");
 
@@ -86,6 +132,10 @@ test("migrates legacy project files and renames .opencode/generated prefix", (t)
   assert.equal(fs.existsSync(path.join(opencodeDir, "agentx.config.jsonc")), true);
   assert.equal(fs.existsSync(path.join(opencodeDir, "ogb-trust.jsonc")), false);
   assert.equal(fs.existsSync(path.join(opencodeDir, "agentx-trust.jsonc")), true);
+  assert.equal(fs.existsSync(path.join(opencodeDir, "plugins", "ogb-startup-sync.js")), true);
+  assert.equal(fs.existsSync(path.join(opencodeDir, "plugins", "agentx-startup-sync.js")), false);
+  assert.equal(fs.existsSync(path.join(opencodeDir, "tui-plugins", "ogb-sidebar.js")), true);
+  assert.equal(fs.existsSync(path.join(opencodeDir, "tui-plugins", "agentx-sidebar.js")), false);
   assert.equal(fs.existsSync(path.join(opencodeDir, "generated", "agentx-inventory.json")), true);
   assert.equal(fs.existsSync(path.join(opencodeDir, "generated", "ogb-inventory.json")), false);
   assert.equal(fs.existsSync(path.join(opencodeDir, "generated", "opencode.generated.json")), true);

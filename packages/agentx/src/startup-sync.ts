@@ -1,3 +1,4 @@
+import { DISPLAY } from "./brand.js";
 import { resolveProjectPaths } from "./paths.js";
 import { syncToOpenCode, type SyncReport } from "./sync.js";
 import { AGENTX_VERSION } from "./types.js";
@@ -62,7 +63,7 @@ export function printStartupSyncReport(report: StartupSyncReport, json?: boolean
     return;
   }
 
-  console.log(`OpenCode Gemini Bridge startup sync: ${report.outcome.toUpperCase()}`);
+  console.log(`${DISPLAY} startup sync: ${report.outcome.toUpperCase()}`);
   console.log(`Project: ${report.projectRoot}`);
   if (report.homeMode) console.log("Mode: global home profile");
   if (report.sync) {

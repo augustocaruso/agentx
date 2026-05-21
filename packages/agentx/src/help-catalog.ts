@@ -1,4 +1,4 @@
-import { DISPLAY } from "./brand.js";
+import { BINARY, DISPLAY } from "./brand.js";
 
 export interface HelpAction {
   label: string;
@@ -87,7 +87,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     summary: "Show the current bridge status summary.",
     description: "Combines doctor, validation, security, startup sync, update, telemetry, limits, model routing, and extension state.",
     usage: "agentx dashboard [--json] [--no-refresh] [--write-only] [--strict]",
-    examples: ["agentx dashboard", "ogb bridge", "agentx dashboard --json", "agentx dashboard --no-refresh", "agentx dashboard --write-only", "agentx dashboard --strict"],
+    examples: [`${BINARY} dashboard`, `${BINARY} bridge`, `${BINARY} dashboard --json`, `${BINARY} dashboard --no-refresh`, `${BINARY} dashboard --write-only`, `${BINARY} dashboard --strict`],
     actions: [
       {
         label: "Show dashboard",
@@ -124,7 +124,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
   {
     name: "help",
     category: "Inspect",
-    summary: "Browse OGB commands and actions.",
+    summary: `Browse ${DISPLAY} commands and actions.`,
     description: "Opens the interactive command guide, prints classic help, or explains one command in detail.",
     usage: "agentx help [command] [--plain] [--json]",
     examples: ["agentx help", "agentx help check", "agentx help dashboard --plain", "agentx help --json"],
@@ -159,10 +159,10 @@ export const HELP_COMMANDS: HelpCommand[] = [
   {
     name: "patches",
     category: "Inspect",
-    summary: "Inspect OGB repair patch lifecycle and applied state.",
+    summary: `Inspect ${DISPLAY} repair patch lifecycle and applied state.`,
     description: "Shows registered versioned patches, why each exists, when cleanup/migration patches should retire, and what has already been applied on this machine.",
-    usage: "ogb patches [status|list] [--json]",
-    examples: ["ogb patches", "ogb patches status", "ogb patches list --json"],
+    usage: `${BINARY} patches [status|list] [--json]`,
+    examples: [`${BINARY} patches`, `${BINARY} patches status`, `${BINARY} patches list --json`],
     actions: [
       {
         label: "Show patch lifecycle status",
@@ -209,7 +209,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     name: "limits",
     aliases: ["quota"],
     category: "Inspect",
-    summary: "Refresh provider usage limits for the OGB UI.",
+    summary: `Refresh provider usage limits for the ${DISPLAY} UI.`,
     description: "Reads OpenUsage when available and falls back to native provider auth where supported.",
     usage: "agentx limits [--json] [--cached]",
     examples: ["agentx limits", "agentx quota --cached"],
@@ -243,24 +243,24 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Setup",
     summary: "Install the OpenCode startup sync plugin and config.",
     description: "Debug command for wiring the startup plugin, generated startup config, and project/global OpenCode references.",
-    usage: "ogb setup-opencode [--force] [--dry-run]",
-    examples: ["ogb setup-opencode", "ogb setup-opencode --force"],
+    usage: `${BINARY} setup-opencode [--force] [--dry-run]`,
+    examples: [`${BINARY} setup-opencode`, `${BINARY} setup-opencode --force`],
   },
   {
     name: "setup-ux",
     category: "Setup",
     summary: "Install the global OpenCode UX profile.",
     description: "Debug command for global commands, agents, YOLO permissions, plugins, TUI sidebar, DCP, fallback, and project profile wiring.",
-    usage: "ogb setup-ux [--reset-global] [--dry-run]",
-    examples: ["ogb setup-ux --dry-run", "ogb setup-ux --reset-global"],
+    usage: `${BINARY} setup-ux [--reset-global] [--dry-run]`,
+    examples: [`${BINARY} setup-ux --dry-run`, `${BINARY} setup-ux --reset-global`],
   },
   {
     name: "maintainer",
     category: "Setup",
     summary: "Protect this local maintainer machine from preset overwrites.",
     description: "Parent command for enabling, disabling, and inspecting the local maintainer protection flag.",
-    usage: "ogb maintainer <enable|disable|status> [--json]",
-    examples: ["ogb maintainer status", "ogb maintainer enable", "ogb maintainer disable"],
+    usage: `${BINARY} maintainer <enable|disable|status> [--json]`,
+    examples: [`${BINARY} maintainer status`, `${BINARY} maintainer enable`, `${BINARY} maintainer disable`],
     runArgs: ["maintainer", "status"],
     actions: [
       {
@@ -291,8 +291,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
   {
     name: "init",
     category: "Setup",
-    summary: "Create a conservative project config for OGB.",
-    description: "Initializes a project-level OGB config when the target is not the home/global scope.",
+    summary: `Create a conservative project config for ${DISPLAY}.`,
+    description: `Initializes a project-level ${DISPLAY} config when the target is not the home/global scope.`,
     usage: "agentx init [--dry-run] [--force]",
     examples: ["agentx init", "agentx init --dry-run"],
   },
@@ -318,7 +318,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     name: "trust-report",
     category: "Extensions",
     summary: "Audit mapped Gemini extension hooks/scripts.",
-    description: "Shows hook/script surface and legacy trust hash status. Compatible extension hooks sync automatically through the OGB plugin.",
+    description: `Shows hook/script surface and legacy trust hash status. Compatible extension hooks sync automatically through the ${DISPLAY} plugin.`,
     usage: "agentx trust-report [extension] [--json]",
     examples: ["agentx trust-report", "agentx trust-report browsermcp-extension"],
   },
@@ -377,8 +377,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Debug",
     summary: "Inspect agent-rules-sync adoption without installing a daemon.",
     description: "Previews a safe adoption plan for agent rules sync.",
-    usage: "ogb adopt-agent-sync [--json]",
-    examples: ["ogb adopt-agent-sync", "ogb adopt-agent-sync --json"],
+    usage: `${BINARY} adopt-agent-sync [--json]`,
+    examples: [`${BINARY} adopt-agent-sync`, `${BINARY} adopt-agent-sync --json`],
   },
   {
     name: "import",
@@ -540,7 +540,7 @@ export function runArgsForHelpCommand(command: HelpCommand): string[] | undefine
 }
 
 export function formatHelpRunLine(args: readonly string[]): string {
-  return `agentx ${args.join(" ")}`;
+  return `${BINARY} ${args.join(" ")}`;
 }
 
 export function findHelpCommand(name: string | undefined, commands: readonly HelpCommand[] = HELP_COMMANDS): HelpCommand | undefined {
@@ -583,7 +583,7 @@ export function filterHelpCommands(query: string, commands: readonly HelpCommand
 
 export function formatHelpCommand(command: HelpCommand): string {
   const lines = [
-    `ogb ${command.name}`,
+    `${BINARY} ${command.name}`,
     command.summary,
     "",
     command.description,
@@ -612,7 +612,7 @@ export function formatHelpCommand(command: HelpCommand): string {
 export function formatHelpCatalog(commands: readonly HelpCommand[] = HELP_COMMANDS): string {
   const categories = [...new Set(commands.map((command) => command.category))];
   const lines = [
-    "OGB help",
+    `${DISPLAY} help`,
     "",
     "Recommended",
     ...commands.filter((command) => command.recommended).map((command) => `  ${command.name.padEnd(14)} ${command.summary}`),

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DISPLAY } from "./brand.js";
 import { resolveProjectPaths } from "./paths.js";
 import { spawnCommandSync } from "./process.js";
 import { AGENTX_VERSION } from "./types.js";
@@ -70,7 +71,7 @@ export function buildAgentSyncAdoptionReport(options: AgentSyncAdoptionOptions =
   const candidates: AgentSyncCandidate[] = [
     candidate("gemini", "project", "rules", path.join(paths.projectRoot, "GEMINI.md"), "sync", "Project-authored Gemini rules are user-owned and can be synchronized."),
     candidate("gemini", "global", "rules", path.join(paths.homeDir, ".gemini", "GEMINI.md"), "sync", "Global Gemini rules are user-owned and can seed other tools."),
-    candidate("opencode", "project", "rules", path.join(paths.projectRoot, "AGENTS.md"), "observe", "OpenCode may read AGENTS.md, but ogb currently writes the expanded context instead."),
+    candidate("opencode", "project", "rules", path.join(paths.projectRoot, "AGENTS.md"), "observe", "OpenCode may read AGENTS.md, but agentX currently writes the expanded context instead."),
     candidate("opencode", "global", "rules", path.join(paths.homeDir, ".config", "opencode", "AGENTS.md"), "observe", "Global OpenCode rules should be adopted only after a dry-run diff."),
     candidate("codex", "global", "rules", path.join(paths.homeDir, ".codex", "AGENTS.md"), "observe", "Codex global rules are personal assistant instructions; sync only with explicit approval."),
     candidate("gemini", "global", "skills", path.join(paths.homeDir, ".gemini", "skills"), "sync", "User-owned Gemini skills can be synchronized."),
@@ -107,7 +108,7 @@ export function runAgentSyncAdoption(options: AgentSyncAdoptionOptions = {}): Ag
   if (options.json) {
     console.log(JSON.stringify(report, null, 2));
   } else {
-    console.log("OpenCode Gemini Bridge Agent Rules Sync Adoption");
+    console.log(`${DISPLAY} Agent Rules Sync Adoption`);
     console.log(`Project: ${report.projectRoot}`);
     console.log(`agent-rules-sync: ${report.executable.available ? `${report.executable.command}${report.executable.version ? ` (${report.executable.version})` : ""}` : "not found"}`);
     console.log("Candidates:");

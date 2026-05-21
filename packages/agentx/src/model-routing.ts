@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DISPLAY } from "./brand.js";
 import type { LimitsReport, ProviderUsage, UsageLine } from "./limits.js";
 import type { ModelFallbackEntry, ModelRuntimeOptions, ResolvedAgentFallback } from "./ogb-config.js";
 import { AGENTX_VERSION } from "./types.js";
@@ -185,7 +186,7 @@ export function routeAgentFallback(options: {
       chain,
       skipped,
       selected: candidate,
-      reason: candidate.chainIndex === 0 ? "primary selected" : "fallback selected by OGB routing",
+      reason: candidate.chainIndex === 0 ? "primary selected" : `fallback selected by ${DISPLAY} routing`,
     };
   }
 

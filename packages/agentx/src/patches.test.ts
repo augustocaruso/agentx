@@ -336,7 +336,7 @@ test("inspectPatches reports lifecycle metadata, state and retirement warnings",
   assert.equal(report.retirementDue, 1);
   assert.equal(report.patches.find((item) => item.id === "old-cleanup")?.lastAppliedAt !== undefined, true);
   assert.match(report.warnings.join("\n"), /old-cleanup: Patch is due for retirement since 0\.0\.2/);
-  assert.match(formatted, /OGB patches/);
+  assert.match(formatted, /agentX patches/);
   assert.match(formatted, /\[RETIRE\] old-cleanup/);
   assert.match(formatted, /Rule: patches repair legacy state/);
 });

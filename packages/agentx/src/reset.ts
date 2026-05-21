@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
+import { BINARY, DISPLAY } from "./brand.js";
 import { cleanupHomeProjectArtifacts, type HomeCleanupReport } from "./home-cleanup.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
@@ -59,7 +60,7 @@ export interface ResetReport {
 
 export class ResetNotHomeError extends Error {
   constructor(projectRoot: string, homeDir: string) {
-    super(`agentx reset so pode ser rodado no home. Project: ${projectRoot}. Home: ${homeDir}. Rode: cd "${homeDir}" && agentx reset`);
+    super(`${BINARY} reset can only run from home. Project: ${projectRoot}. Home: ${homeDir}. Run: cd "${homeDir}" && ${BINARY} reset`);
   }
 }
 
@@ -160,23 +161,23 @@ function clearStartupSyncStatus(homeDir: string): void {
 
 async function promptResetConfirmation(plan: ResetPlan): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new ResetConfirmationError("agentx reset precisa de confirmacao interativa. Rode em um terminal ou use --yes se voce ja revisou o plano.");
+    throw new ResetConfirmationError(`${BINARY} reset needs interactive confirmation. Run it in a terminal or use --yes if you already reviewed the plan.`);
   }
 
-  console.log("OGB reset");
+  console.log(`${DISPLAY} reset`);
   console.log(`Home: ${plan.homeDir}`);
   console.log(`Global OpenCode config: ${plan.globalConfigPath}`);
   console.log("");
-  console.log("Isto vai:");
-  console.log("- limpar artefatos antigos de projeto criados por engano no home, com backup;");
-  console.log("- sobrescrever o perfil global do OpenCode com o perfil OGB;");
-  console.log("- reaplicar comandos, agente YOLO, DCP, fallback e websearch Exa;");
-  console.log("- rodar sync global do Gemini para o OpenCode.");
+  console.log("This will:");
+  console.log("- clean old project artifacts accidentally created in home, with backups;");
+  console.log(`- rewrite the global OpenCode profile with the ${DISPLAY} profile;`);
+  console.log("- reapply commands, the YOLO agent, DCP, fallback, and Exa websearch;");
+  console.log("- run global Gemini to OpenCode sync.");
   if (plan.cleanupPreview.actions.length > 0) {
     console.log("");
-    console.log("Artefatos de home que seriam limpos:");
+    console.log("Home artifacts that would be cleaned:");
     for (const action of plan.cleanupPreview.actions.slice(0, 20)) console.log(`- ${action.relPath}`);
-    if (plan.cleanupPreview.actions.length > 20) console.log(`- ...mais ${plan.cleanupPreview.actions.length - 20}`);
+    if (plan.cleanupPreview.actions.length > 20) console.log(`- ...and ${plan.cleanupPreview.actions.length - 20} more`);
   }
   console.log("");
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -513,10 +514,10 @@ export function printResetReport(report: ResetReport, json = false): void {
   }
 
   const title = report.outcome === "preview"
-    ? "OpenCode Gemini Bridge reset preview"
+    ? `${DISPLAY} reset preview`
     : report.outcome === "cancelled"
-      ? "OpenCode Gemini Bridge reset cancelled"
-      : "OpenCode Gemini Bridge reset complete";
+      ? `${DISPLAY} reset cancelled`
+      : `${DISPLAY} reset complete`;
   console.log(title);
   console.log(`Home: ${report.homeDir}`);
   console.log(`Global config: ${report.globalConfigPath}`);

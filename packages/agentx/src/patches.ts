@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
+import { BINARY, DISPLAY } from "./brand.js";
 import { mcpEnvStorePath } from "./mcp-env-store.js";
 import { runNativeCommand, type NativeCommandResult, type NativeCommandSpec } from "./native-runner.js";
 import { resolveProjectPaths, type ProjectPaths } from "./paths.js";
@@ -435,7 +436,7 @@ function resultFromPatchError(patch: OgbPatch, error: unknown, context?: PatchCo
     extension: context?.extension,
     status: "failed",
     message,
-    nextAction: `Revise o patch ${patch.id}; rode agentx check --plain para ver o diagnostico completo.`,
+    nextAction: `Review patch ${patch.id}; run ${BINARY} check --plain to see the full diagnosis.`,
   };
 }
 
@@ -613,7 +614,7 @@ function lifecycleBadge(status: PatchLifecycleStatus): string {
 
 export function formatPatchLifecycleReport(report: PatchLifecycleReport): string {
   const lines = [
-    "OGB patches",
+    `${DISPLAY} patches`,
     `Project: ${report.projectRoot}`,
     `Outcome: ${report.outcome.toUpperCase()}`,
     "",
@@ -1938,7 +1939,7 @@ function runMedicalNotesCaptureScript(context: PatchContext, scriptPath: string,
   if (errors.length > 0) {
     return {
       status: "warning",
-      message: `capture_extension_diff.py could not run; falling back to native OGB snapshot. ${errors.slice(0, 2).join(" ")}`,
+      message: `capture_extension_diff.py could not run; falling back to native ${DISPLAY} snapshot. ${errors.slice(0, 2).join(" ")}`,
     };
   }
   return undefined;
@@ -1957,7 +1958,7 @@ function createMedicalNotesPreUpdateSnapshot(context: PatchContext): PatchResult
       return {
         status: "failed",
         message: `Could not inspect local drift: ${status.stderr || status.error || "git status failed"}`,
-        nextAction: "Revise a extensao manualmente; o update foi bloqueado para nao sobrescrever alteracoes locais sem snapshot.",
+        nextAction: "Review the extension manually; the update was blocked to avoid overwriting local changes without a snapshot.",
       };
     }
     drift = parseGitStatus(status.stdout);
@@ -2131,7 +2132,7 @@ export const OGB_PATCHES: readonly OgbPatch[] = [
     title: "Resend Medical Notes Workbench pre-update snapshots",
     description: "Retries telemetry delivery for Medical Notes Workbench snapshots after Gemini extension updates install fresh telemetry defaults.",
     category: "guardrail",
-    reason: "Let a single OGB update capture drift before replacement and email the saved snapshot after the updated extension is installed.",
+    reason: `Let a single ${DISPLAY} update capture drift before replacement and email the saved snapshot after the updated extension is installed.`,
     introducedIn: AGENTX_VERSION,
     removalCondition: "Remove only when pre-update telemetry credentials are guaranteed before every Gemini extension update.",
     phase: "post-extension-update",
@@ -2180,11 +2181,11 @@ export const OGB_PATCHES: readonly OgbPatch[] = [
   {
     id: "ensure-mcp-env-store-private",
     title: "Harden MCP env store permissions",
-    description: "Keeps the OGB MCP environment store private after sync writes sensitive local values.",
+    description: `Keeps the ${DISPLAY} MCP environment store private after sync writes sensitive local values.`,
     category: "security",
     reason: "Ensure locally materialized MCP environment values stay private on POSIX systems after sync.",
     introducedIn: "0.1.8",
-    removalCondition: "Keep while OGB can persist sensitive MCP env values locally.",
+    removalCondition: `Keep while ${DISPLAY} can persist sensitive MCP env values locally.`,
     phase: "post-sync",
     platforms: ["darwin", "linux"],
     runOnce: false,

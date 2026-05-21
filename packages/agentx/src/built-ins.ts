@@ -1,3 +1,5 @@
+import { BINARY, DISPLAY } from "./brand.js";
+
 export interface BuiltInTextFile {
   name: string;
   legacyNames?: string[];
@@ -9,7 +11,7 @@ export const BUILT_IN_AGENTS: BuiltInTextFile[] = [
     name: "YOLO",
     legacyNames: ["yolo"],
     content: `---
-description: Execucao direta com minima friccao em workspace confiavel.
+description: Direct execution with minimal friction in a trusted workspace.
 mode: primary
 color: "#ffb4b4"
 permission:
@@ -21,23 +23,23 @@ permission:
   external_directory: allow
 ---
 
-Voce e o modo YOLO do OpenCode Gemini Bridge.
+You are the YOLO mode of ${DISPLAY}.
 
-Use quando o usuario escolher este agente ou quando o perfil do projeto definir YOLO como default.
+Use this when the user selects this agent or when the project profile sets YOLO as the default.
 
-Comportamento:
-- Execute direto quando o pedido estiver claro.
-- Nao peca permissao para comandos normais de leitura, build, teste, git local ou edicao quando a intencao estiver clara.
-- Explique antes de acoes destrutivas, irreversiveis, publicacao externa ou operacoes fora do workspace.
-- Prefira comandos nao interativos.
-- Quando delegar trabalho generico de engenharia, use o subagente YOLO-worker. Use subagentes especializados apenas quando o pedido exigir o contrato especifico deles.
-- Ao final, resuma todas as mudancas.
+Behavior:
+- Execute directly when the request is clear.
+- Do not ask permission for normal read, build, test, local git, or edit commands when intent is clear.
+- Explain before destructive or irreversible actions, external publishing, or operations outside the workspace.
+- Prefer non-interactive commands.
+- When delegating generic engineering work, use the YOLO-worker subagent. Use specialized subagents only when the request needs their specific contract.
+- At the end, summarize all changes.
 `,
   },
   {
     name: "YOLO-worker",
     content: `---
-description: Execucao delegada com minima friccao para tarefas genericas do YOLO.
+description: Delegated low-friction execution for generic YOLO tasks.
 mode: subagent
 color: "#ffd0a6"
 permission:
@@ -58,16 +60,16 @@ permission:
   doom_loop: ask
 ---
 
-Voce e o worker delegado do modo YOLO do OpenCode Gemini Bridge.
+You are the delegated worker for YOLO mode in ${DISPLAY}.
 
-Use este subagente para tarefas genericas de engenharia quando o agente YOLO principal quiser paralelizar ou isolar execucao sem perder a filosofia YOLO.
+Use this subagent for generic engineering tasks when the primary YOLO agent wants to parallelize or isolate execution without losing YOLO behavior.
 
-Comportamento:
-- Execute direto quando o escopo delegado estiver claro.
-- Nao peca permissao para comandos normais de leitura, build, teste, git local ou edicao dentro do workspace.
-- Explique antes de acoes destrutivas, irreversiveis, publicacao externa ou operacoes fora do workspace.
-- Prefira comandos nao interativos.
-- Ao final, devolva um resumo objetivo do que mudou, dos arquivos tocados e da verificacao feita.
+Behavior:
+- Execute directly when the delegated scope is clear.
+- Do not ask permission for normal read, build, test, local git, or edit commands inside the workspace.
+- Explain before destructive or irreversible actions, external publishing, or operations outside the workspace.
+- Prefer non-interactive commands.
+- At the end, return a concise summary of changes, touched files, and verification.
 `,
   },
 ];
@@ -79,215 +81,215 @@ export const BUILT_IN_COMMANDS: BuiltInTextFile[] = [
   {
     name: "bridge",
     content: `---
-description: Painel principal do OpenCode Gemini Bridge
+description: Main ${DISPLAY} status panel
 subtask: false
 ---
 
-Primeiro rode pwd para confirmar o diretorio atual.
+First run pwd to confirm the current directory.
 
-Depois execute exatamente:
+Then run exactly:
 
-agentx check --project "$PWD"
+${BINARY} check --project "$PWD"
 
-Use a saida desse comando como fonte principal. Se precisar ler o arquivo, leia apenas este caminho exato dentro do diretorio atual:
+Use that command output as the main source. If you need to read the generated file, read only this exact path inside the current directory:
 
-.opencode/generated/ogb-dashboard.md
+.opencode/generated/agentx-dashboard.md
 
-Nao use glob, find ou busca recursiva na home do usuario. Se o painel mostrar que o projeto atual e a home e o usuario esperava outro projeto, explique que o OpenCode foi aberto na home e que ele deve abrir o OpenCode no diretorio do projeto ou rodar agentx check --project /caminho/do/projeto.
+Do not use glob, find, or recursive home-directory search. If the panel shows the current project is home but the user expected another project, explain that OpenCode was opened from home and they should open OpenCode in the project directory or run ${BINARY} check --project /path/to/project.
 
-Explique em linguagem simples:
-- se o bridge esta PASS, WARN ou FAIL;
-- ultimo startup sync;
-- MCPs, skills, agente YOLO e comandos carregados;
-- extensoes Gemini projetadas;
-- proximo passo concreto.
+Explain in plain language:
+- whether the bridge is PASS, WARN, or FAIL;
+- the last startup sync;
+- loaded MCPs, skills, YOLO agent, and commands;
+- projected Gemini extensions;
+- the concrete next step.
 
-Nao edite arquivos.
+Do not edit files.
 `,
   },
   {
     name: "doctor",
     content: `---
-description: Mostra diagnostico do OpenCode Gemini Bridge
+description: Show ${DISPLAY} diagnostics
 subtask: false
 ---
 
-Execute ou oriente a execucao de agentx doctor. Se o arquivo .opencode/generated/ogb-doctor.json existir, leia e resuma:
+Run or guide the user to run ${BINARY} doctor. If .opencode/generated/agentx-doctor.json exists, read and summarize:
 
-- contexto Gemini carregado;
-- imports ausentes;
+- loaded Gemini context;
+- missing imports;
 - skills;
 - MCPs;
 - agents/subagents;
 - commands;
 - warnings;
-- proximos passos.
+- next steps.
 
-Nao edite arquivos.
+Do not edit files.
 `,
   },
   {
     name: "sync",
     content: `---
-description: Sincroniza recursos Gemini para OpenCode
+description: Sync Gemini resources into OpenCode
 subtask: false
 ---
 
-Execute ou oriente a execucao de agentx sync --dry-run primeiro. Depois peca confirmacao para rodar agentx sync real.
+Run or guide the user to run ${BINARY} sync --dry-run first. Then ask for confirmation before running the real ${BINARY} sync.
 
-Explique quais arquivos serao gerados ou alterados.
+Explain which files will be generated or changed.
 `,
   },
   {
     name: "resources",
     content: `---
-description: Lista recursos projetados pelo bridge
+description: List resources projected by the bridge
 subtask: false
 ---
 
-Leia .opencode/generated/ogb-dashboard.md, .opencode/generated/ogb-doctor.json e .opencode/generated/ogb-inventory.json quando existirem.
+Leia .opencode/generated/agentx-dashboard.md, .opencode/generated/agentx-doctor.json e .opencode/generated/agentx-inventory.json quando existirem.
 
-Resuma, em linguagem simples:
-- MCPs ativos;
-- skills disponiveis;
-- agentes disponiveis;
-- comandos disponiveis;
-- extensoes Gemini detectadas;
-- avisos que precisam de acao.
+Summarize in plain language:
+- active MCPs;
+- available skills;
+- available agents;
+- available commands;
+- detected Gemini extensions;
+- warnings that need action.
 
-Nao edite arquivos.
+Do not edit files.
 `,
   },
   {
     name: "validate",
     content: `---
-description: Valida o bridge de ponta a ponta sem chamar modelo por padrao
+description: Validate the bridge end-to-end without calling a model by default
 subtask: false
 ---
 
-Execute ou oriente a execucao de agentx validate.
+Run or guide the user to run ${BINARY} validate.
 
-Use agentx validate --windows se o usuario estiver revisando instalacao Windows.
-Nao use --opencode-run sem pedido explicito, porque isso pode gastar tokens.
+Use ${BINARY} validate --windows if the user is checking a Windows install.
+Do not use --opencode-run unless explicitly requested, because it can spend tokens.
 
-Depois resuma:
-- o que passou;
-- avisos;
-- falhas;
-- proximo passo concreto.
+Then summarize:
+- what passed;
+- warnings;
+- failures;
+- the concrete next step.
 `,
   },
   {
     name: "security-check",
     content: `---
-description: Verifica riscos obvios de seguranca do bridge
+description: Check obvious bridge safety risks
 subtask: false
 ---
 
-Execute ou oriente a execucao de agentx security-check.
+Run or guide the user to run ${BINARY} security-check.
 
-Explique em linguagem simples:
-- se ha segredo/token materializado;
-- se o YOLO manteve guardrails;
-- se hooks de settings/extensoes foram sincronizados e scripts soltos ficaram apenas em revisao;
-- o que precisa ser corrigido antes de distribuir.
+Explain in plain language:
+- whether any secret/token was materialized;
+- whether YOLO kept guardrails;
+- whether settings/extension hooks were synced and loose scripts stayed review-only;
+- what must be fixed before distribution.
 `,
   },
   {
     name: "telemetry",
     content: `---
-description: Mostra e envia telemetria local do OpenCode Gemini Bridge
+description: Show and send local ${DISPLAY} telemetry
 subtask: false
 ---
 
-Execute agentx telemetry status --project "$PWD" para ver se a telemetria local/remota esta ativa.
+Run ${BINARY} telemetry status --project "$PWD" to see whether local/remote telemetry is active.
 
 Se o mantenedor pedir para configurar recebimento por email, use:
 
-agentx telemetry setup-email --project "$PWD"
+${BINARY} telemetry setup-email --project "$PWD"
 
-Peça apenas o que faltar: email destino, remetente verificado no Resend e Resend API key. Nao imprima a API key. Se o Wrangler nao estiver logado, oriente npm exec --yes wrangler login e repita.
+Ask only for what is missing: destination email, verified Resend sender, and Resend API key. Do not print the API key. If Wrangler is not logged in, guide the user to run npm exec --yes wrangler login and retry.
 
 Se o usuario quiser revisar antes de enviar, execute:
 
-agentx telemetry preview --since 7d --project "$PWD"
+${BINARY} telemetry preview --since 7d --project "$PWD"
 
 Se o usuario pedir envio manual, execute:
 
-agentx telemetry send --since 7d --project "$PWD"
+${BINARY} telemetry send --since 7d --project "$PWD"
 
-Esse envio normal manda remotamente apenas problemas acionaveis. Checks limpos continuam no preview/local. Use --include-pass somente se o mantenedor pedir explicitamente um teste/debug do canal remoto.
+Normal sending only sends actionable problems remotely. Clean checks stay in preview/local. Use --include-pass only if the maintainer explicitly asks to test/debug the remote channel.
 
 Se o usuario quiser desligar, execute:
 
-agentx telemetry disable --project "$PWD"
+${BINARY} telemetry disable --project "$PWD"
 
-Nunca mostre, peça para colar em chat, nem grave token de telemetria em arquivos do projeto. Para habilitar, use apenas endpoint/token fornecidos explicitamente pelo mantenedor ou por defaults privados empacotados.
+Never show, ask the user to paste, or save telemetry tokens in project files. To enable telemetry, use only endpoint/token values explicitly provided by the maintainer or packaged private defaults.
 `,
   },
   {
     name: "agent-sync",
     content: `---
-description: Planeja adocao segura do agent-rules-sync
+description: Plan safe agent-rules-sync adoption
 subtask: false
 ---
 
-Execute ou oriente a execucao de ogb adopt-agent-sync.
+Run or guide the user to run ${BINARY} adopt-agent-sync.
 
-Nao instale daemon nem habilite sync em background automaticamente.
-Explique quais arquivos parecem bons candidatos a sync bidirecional e quais
-devem ficar apenas observados porque sao gerados pelo ogb ou pertencem a
-extensoes.
+Do not install a daemon or enable background sync automatically.
+Explain which files look like good bidirectional sync candidates and which
+should remain observe-only because they are generated by ${DISPLAY} or belong to
+extensions.
 `,
   },
   {
     name: "status",
     content: `---
-description: Resume o estado atual do bridge
+description: Summarize the current bridge state
 subtask: false
 ---
 
-Mostre um status curto do OpenCode Gemini Bridge.
+Show a short ${DISPLAY} status.
 
-Use agentx dashboard quando precisar atualizar o painel. Use agentx doctor se o dashboard apontar warning/fail. Depois responda:
-- o que esta pronto;
-- o que precisa atencao;
-- qual e o proximo passo recomendado.
+Use ${BINARY} dashboard when you need to refresh the panel. Use ${BINARY} doctor if the dashboard points to warn/fail. Then answer:
+- what is ready;
+- what needs attention;
+- the recommended next step.
 `,
   },
   {
     name: "update-extensions",
     content: `---
-description: Atualiza Gemini Extensions e reprojeta OpenCode
+description: Update Gemini Extensions and reproject OpenCode
 subtask: false
 ---
 
-Execute ou oriente a execucao de agentx update-extensions --dry-run primeiro.
+Run or guide the user to run ${BINARY} update-extensions --dry-run first.
 
-Se o dry-run parecer seguro, rode agentx update-extensions --auto-consent.
-Depois rode ou resuma agentx doctor.
+If the dry-run looks safe, run ${BINARY} update-extensions --auto-consent.
+Then run or summarize ${BINARY} doctor.
 `,
   },
   {
     name: "upgrade-ogb",
     content: `---
-description: Atualiza o OpenCode Gemini Bridge pela release oficial
+description: Update ${DISPLAY} from the official release
 subtask: false
 ---
 
-Execute exatamente:
+Run exactly:
 
-agentx update --project "$PWD"
+${BINARY} update --project "$PWD"
 
-Depois execute:
+Then run:
 
-agentx doctor --project "$PWD"
+${BINARY} doctor --project "$PWD"
 
-Explique em linguagem simples:
-- versao anterior e nova, se aparecerem na saida;
-- se o update reaplicou setup-ux/setup-opencode;
-- se o doctor ficou limpo;
-- se o OpenCode precisa ser reiniciado para carregar plugins, comandos ou agente default novos.
+Explain in plain language:
+- the previous and new version, if the output shows them;
+- whether the update reapplied setup-ux/setup-opencode;
+- whether doctor is clean;
+- whether OpenCode needs a restart to load new plugins, commands, or default agent settings.
 `,
   },
 ];

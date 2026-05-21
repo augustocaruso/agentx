@@ -247,20 +247,20 @@ test("setupUx replaces the legacy relative OGB startup plugin spec", () => {
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.equal(globalConfig.plugin.includes("file:plugins/ogb-startup-sync.js"), false);
   assert.equal(globalConfig.plugin.includes(globalStartupPluginSpec(path.join(configDir, "plugins", "ogb-startup-sync.js"))), true);
-  assert.equal(report.warnings.some((warning) => warning.includes("file:plugins/ogb-startup-sync.js")), true);
+  assert.equal(report.warnings.some((warning) => warning.includes("old startup plugin")), true);
 });
 
-test("setupUx writes runtime-expanded Windows ogb shim path for startup sync", () => {
+test("setupUx writes runtime-expanded Windows agentx shim path for startup sync", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const appData = path.join(homeDir, "AppData", "Roaming");
   const configDir = path.join(homeDir, ".config", "opencode");
   const projectRoot = path.join(root, "project");
   const npmDir = path.join(appData, "npm");
-  const ogbShim = path.join(npmDir, "ogb.cmd");
+  const agentxShim = path.join(npmDir, "agentx.cmd");
   fs.mkdirSync(projectRoot, { recursive: true });
   fs.mkdirSync(npmDir, { recursive: true });
-  fs.writeFileSync(ogbShim, "@echo off\n", "utf8");
+  fs.writeFileSync(agentxShim, "@echo off\n", "utf8");
 
   setupUx({
     homeDir,
@@ -273,22 +273,22 @@ test("setupUx writes runtime-expanded Windows ogb shim path for startup sync", (
   });
 
   const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
-  assert.equal(startupConfig.command.replace(/\\/g, "/"), "{OGB_APPDATA}/npm/ogb.cmd");
+  assert.equal(startupConfig.command.replace(/\\/g, "/"), "{OGB_APPDATA}/npm/agentx.cmd");
   assert.deepEqual(startupConfig.baseArgs, ["--project", "{OGB_HOME}"]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
 });
 
-test("setupUx prefers the installed ogb command for POSIX startup sync", { skip: process.platform === "win32" ? "POSIX command lookup is covered on POSIX runners" : false }, () => {
+test("setupUx prefers the installed agentx command for POSIX startup sync", { skip: process.platform === "win32" ? "POSIX command lookup is covered on POSIX runners" : false }, () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const configDir = path.join(root, "config", "opencode");
   const projectRoot = path.join(root, "project");
   const binDir = path.join(root, "bin");
-  const ogbBin = path.join(binDir, "ogb");
+  const agentxBin = path.join(binDir, "agentx");
   fs.mkdirSync(projectRoot, { recursive: true });
   fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(ogbBin, "#!/bin/sh\nexit 0\n", "utf8");
-  fs.chmodSync(ogbBin, 0o755);
+  fs.writeFileSync(agentxBin, "#!/bin/sh\nexit 0\n", "utf8");
+  fs.chmodSync(agentxBin, 0o755);
 
   setupUx({
     homeDir,
@@ -300,7 +300,7 @@ test("setupUx prefers the installed ogb command for POSIX startup sync", { skip:
   });
 
   const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
-  assert.equal(startupConfig.command, ogbBin);
+  assert.equal(startupConfig.command, agentxBin);
   assert.deepEqual(startupConfig.baseArgs, ["--project", homeDir]);
 });
 
@@ -904,7 +904,7 @@ test("setupUx keeps websearch-cited disabled even after OpenAI and Google auth e
   const globalConfig = readJson(path.join(configDir, "opencode.json"));
   assert.deepEqual(globalConfig.plugin, expectedGlobalPlugins(configDir));
   assert.equal(globalConfig.provider, undefined);
-  assert.equal(report.warnings.some((warning) => warning.includes("opencode-websearch-cited foi desativado")), true);
+  assert.equal(report.warnings.some((warning) => warning.includes("opencode-websearch-cited was disabled")), true);
 });
 
 test("setupUx dry-run previews OpenCode install or update by default", () => {

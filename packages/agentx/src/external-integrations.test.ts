@@ -21,7 +21,7 @@ function tempDir(prefix: string): string {
 function projectionMap(overrides: Partial<GeminiExtensionProjectionMap> = {}): GeminiExtensionProjectionMap {
   return {
     _generated: {
-      tool: "ogb",
+      tool: "agentx",
       version: "test",
       warning: "test",
     },

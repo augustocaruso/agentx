@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
+import { DISPLAY } from "./brand.js";
 import { sha256File } from "./file-hash.js";
 import { globalOpenCodeConfigDir, globalOpenCodeConfigFiles } from "./opencode-paths.js";
 import { resolveProjectPaths } from "./paths.js";
@@ -267,7 +268,7 @@ function checkExtensionProjection(mapPath: string): SecurityFinding {
     status: projectedRisk.length ? "fail" : "pass",
     message: projectedRisk.length
       ? `Hooks/scripts should not be auto-projected: ${projectedRisk.join(", ")}.`
-      : `${activeHooks} hook(s) are synced through the OGB OpenCode plugin; ${reviewOnlyHooks} hook(s) and ${scripts} script-like file(s) are review-only.`,
+      : `${activeHooks} hook(s) are synced through the ${DISPLAY} OpenCode plugin; ${reviewOnlyHooks} hook(s) and ${scripts} script-like file(s) are review-only.`,
   };
 }
 

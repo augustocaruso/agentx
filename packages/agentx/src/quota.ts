@@ -2,13 +2,14 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { bridgeConfigDirForHome, createBackupSession, type BackupRecord } from "./backup-policy.js";
+import { DISPLAY } from "./brand.js";
 import { resolveProjectPaths } from "./paths.js";
 import { AGENTX_VERSION } from "./types.js";
 
 // Gemini Code Assist quota compatibility layer.
 // The flow mirrors the MIT-licensed opencode-gemini-auth plugin's /gquota path:
 // https://github.com/jenslys/opencode-gemini-auth
-// OGB keeps this isolated from the TUI so the sidebar only renders a safe cache file.
+// Keep this isolated from the TUI so the sidebar only renders a safe cache file.
 const GEMINI_CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const GEMINI_CLI_VERSION = "0.42.0-nightly.20260428.g59b2dea0e";
 const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60_000;
@@ -347,7 +348,7 @@ async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promi
 
   const clients = geminiOAuthClients(homeDir);
   if (clients.length === 0) {
-    return { message: "Cliente OAuth Google indisponivel nos plugins do OpenCode. Reinstale ou reautentique o provider Google." };
+    return { message: "Google OAuth client unavailable in OpenCode plugins. Reinstall or reauthenticate the Google provider." };
   }
 
   const errors: string[] = [];
@@ -379,7 +380,7 @@ async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promi
   }
 
   return {
-    message: `Google OAuth refresh falhou: ${errors.join("; ")}. Refaca opencode auth login para gerar um refresh token novo.`,
+    message: `Google OAuth refresh failed: ${errors.join("; ")}. Redo opencode auth login to generate a new refresh token.`,
   };
 }
 
@@ -454,7 +455,7 @@ async function resolveAuth(options: { homeDir: string; repairAuth?: boolean }): 
   const authFile = readJson(authPath(options.homeDir)) as OpenCodeAuthFile | undefined;
   const auth = authFile?.google;
   if (!auth || auth.type !== "oauth") {
-    return { message: "Google OAuth do OpenCode nao encontrado. Use /gquota depois de autenticar." };
+    return { message: "OpenCode Google OAuth not found. Use /gquota after authenticating." };
   }
 
   const initialParts = parseRefreshParts(auth.refresh);
@@ -477,7 +478,7 @@ async function resolveAuth(options: { homeDir: string; repairAuth?: boolean }): 
         reason: "Removed invalid Gemini project id segment from OpenCode auth.",
       });
     }
-    return { projectId, authRepair, message: refreshed.message ?? "Token Google indisponivel. Rode /gquota ou refaca opencode auth login." };
+    return { projectId, authRepair, message: refreshed.message ?? "Google token unavailable. Run /gquota or redo opencode auth login." };
   }
 
   if (!storedProjectId && !envProjectId) {
@@ -620,12 +621,12 @@ export async function refreshQuota(options: QuotaOptions = {}): Promise<QuotaRep
       if (auth.projectId) report.projectId = auth.projectId;
       if (auth.authRepair) report.authRepair = auth.authRepair;
     } else if (!auth.projectId) {
-      report = baseReport(paths.projectRoot, "unavailable", "Projeto Gemini Code Assist nao encontrado no auth do OpenCode.");
+      report = baseReport(paths.projectRoot, "unavailable", "Gemini Code Assist project not found in OpenCode auth.");
       if (auth.authRepair) report.authRepair = auth.authRepair;
     } else {
       const quota = await retrieveUserQuota(auth.accessToken, auth.projectId);
       if (!quota?.buckets?.length) {
-        report = baseReport(paths.projectRoot, "unavailable", `Nenhum bucket de quota retornado para ${auth.projectId}.`);
+        report = baseReport(paths.projectRoot, "unavailable", `No quota bucket returned for ${auth.projectId}.`);
         report.projectId = auth.projectId;
         if (auth.authRepair) report.authRepair = auth.authRepair;
       } else {
@@ -649,7 +650,7 @@ export async function refreshQuota(options: QuotaOptions = {}): Promise<QuotaRep
 
 export function formatQuota(report: QuotaReport): string {
   const lines = [
-    "OpenCode Gemini Bridge Quota",
+    `${DISPLAY} Quota`,
     `Status: ${report.status.toUpperCase()}`,
     `Source: ${report.source.manualCommand} / ${report.source.name}`,
   ];

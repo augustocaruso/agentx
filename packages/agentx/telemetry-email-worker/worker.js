@@ -1,5 +1,7 @@
 const TELEMETRY_ENVELOPE_SCHEMA = "agentx.workflow-telemetry-envelope.v2";
 const DEFAULT_TELEMETRY_LEGACY_SCHEMAS = ["opencode-gemini-bridge.workflow-telemetry-envelope.v1"];
+const BINARY = "agentx";
+const DISPLAY = "agentX";
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
 const DEFAULT_MAX_EMAIL_JSON_CHARS = 180 * 1024;
@@ -130,48 +132,48 @@ const NON_ACTIONABLE_ROOT_CAUSES = new Set(["no_issue_detected", "dashboard_echo
 const GENERIC_ROOT_CAUSES = new Set(["", "no_issue_detected", "workflow_warn", "workflow_failed"]);
 const CAUSE_DETAILS = {
   dashboard_echo: {
-    label: "Dashboard repetiu aviso de outro workflow",
-    recovery: "Abra o workflow de origem no preview local para ver o aviso real.",
+    label: "Dashboard repeated a warning from another workflow",
+    recovery: "Open the source workflow preview to see the real warning.",
   },
   global_binary_mismatch: {
-    label: "Binario global do OGB esta desatualizado",
-    recovery: "Atualize o OGB global ou rode o comando pelo pacote local esperado.",
+    label: `Global ${DISPLAY} binary is stale`,
+    recovery: `Update the global ${DISPLAY} install or run the command through the expected local package.`,
   },
   managed_file_conflict: {
-    label: "Arquivo gerenciado foi editado manualmente",
-    recovery: "Revise o arquivo apontado; use --force apenas se quiser sobrescrever a edicao local.",
+    label: "Managed file was edited manually",
+    recovery: "Review the pointed file; use --force only if you want to overwrite the local edit.",
   },
   missing_builtin_commands: {
-    label: "Comandos built-in do OpenCode estao faltando",
-    recovery: "Rode ogb sync para regenerar os comandos do OpenCode.",
+    label: "Built-in OpenCode commands are missing",
+    recovery: `Run ${BINARY} sync to regenerate OpenCode commands.`,
   },
   no_issue_detected: {
-    label: "Nenhum problema detectado",
+    label: "No issue detected",
     recovery: "",
   },
   plugin_inactive: {
-    label: "Plugin OpenCode configurado mas inativo",
-    recovery: "Rode ogb sync e reinicie o OpenCode se o aviso continuar.",
+    label: "Configured OpenCode plugin is inactive",
+    recovery: `Run ${BINARY} sync and restart OpenCode if the warning persists.`,
   },
   restart_required: {
-    label: "OpenCode precisa reiniciar para carregar mudancas",
-    recovery: "Reinicie o OpenCode e rode /bridge novamente.",
+    label: "OpenCode needs a restart to load changes",
+    recovery: "Restart OpenCode and run /bridge again.",
   },
   rulesync_disabled: {
-    label: "Rulesync esta desativado",
-    recovery: "Nenhuma acao se rulesync foi desativado de proposito; rode ogb sync --rulesync auto para reativar.",
+    label: "Rulesync is disabled",
+    recovery: `No action is needed if rulesync was disabled intentionally; run ${BINARY} sync --rulesync auto to re-enable it.`,
   },
   stale_generated_files: {
-    label: "Arquivos gerados estao desatualizados",
-    recovery: "Rode ogb sync para regenerar arquivos com a versao atual.",
+    label: "Generated files are stale",
+    recovery: `Run ${BINARY} sync to regenerate files with the current version.`,
   },
   trust_review_required: {
-    label: "Hooks/scripts precisam de revisao",
-    recovery: "Revise o recurso e rode ogb trust-extension ou ogb pass --accept-hooks quando for seguro.",
+    label: "Hooks/scripts need review",
+    recovery: `Review the resource and run ${BINARY} trust-extension or ${BINARY} pass --accept-hooks when safe.`,
   },
   validation_warn: {
-    label: "Validacao OGB terminou com avisos",
-    recovery: "Rode ogb validate --json para ver quais checks avisaram.",
+    label: `${DISPLAY} validation finished with warnings`,
+    recovery: `Run ${BINARY} validate --json to see which checks warned.`,
   },
 };
 
@@ -190,27 +192,27 @@ function workflowDisplayName(workflow) {
     reset: "Reset",
     "security-check": "Security-check",
     "setup-opencode": "Setup OpenCode",
-    startup: "Plugin de startup",
-    "startup-plugin": "Plugin de startup",
+    startup: "Startup plugin",
+    "startup-plugin": "Startup plugin",
     sync: "Sync",
-    validate: "Validacao OGB",
-  }[workflow] || workflow || "Workflow OGB";
+    validate: `${DISPLAY} validation`,
+  }[workflow] || workflow || `${DISPLAY} workflow`;
 }
 
 function workflowRecoveryCommand(workflow) {
   return {
-    "auto-update": "ogb auto-update",
-    check: "ogb check",
-    dashboard: "ogb dashboard",
-    doctor: "ogb doctor",
-    install: "ogb install",
-    pass: "ogb pass",
-    reset: "ogb reset",
-    "security-check": "ogb security-check",
-    "setup-opencode": "ogb setup-opencode",
-    sync: "ogb sync",
-    validate: "ogb validate",
-  }[workflow] || "ogb bridge";
+    "auto-update": `${BINARY} auto-update`,
+    check: `${BINARY} check`,
+    dashboard: `${BINARY} dashboard`,
+    doctor: `${BINARY} doctor`,
+    install: `${BINARY} install`,
+    pass: `${BINARY} pass`,
+    reset: `${BINARY} reset`,
+    "security-check": `${BINARY} security-check`,
+    "setup-opencode": `${BINARY} setup-opencode`,
+    sync: `${BINARY} sync`,
+    validate: `${BINARY} validate`,
+  }[workflow] || `${BINARY} bridge`;
 }
 
 function causeResult(code, diagnostic, fallback = {}, options = {}) {
@@ -239,39 +241,40 @@ function classifyTelemetryCause(record) {
   const isWarn = status === "completed_with_warnings" || outcome === "warn";
   const isFail = status === "failed" || outcome === "fail";
 
+  if (rawCode && !GENERIC_ROOT_CAUSES.has(rawCode) && CAUSE_DETAILS[rawCode]) return causeResult(rawCode, {});
   if (rawCode && !GENERIC_ROOT_CAUSES.has(rawCode)) return causeResult(rawCode, diagnostic);
   if (includesAny(messagesText, ["opencode-auto-fallback is enabled", "plugin is not active", "plugin inactive"])) return causeResult("plugin_inactive", diagnostic);
   if (includesAny(messagesText, ["agent conflict", "exists or was edited manually", "managed file conflict"])) return causeResult("managed_file_conflict", diagnostic);
   if (includesAny(messagesText, ["hook needs review", "needs_review", "trusted hook/script changed", "trusted hook", "hooks/scripts"])) return causeResult("trust_review_required", diagnostic);
-  if (includesAny(messagesText, ["opencode precisa reiniciar para carregar mudancas", "ogb foi atualizado automaticamente"])) return causeResult("restart_required", diagnostic);
-  if (record.workflow === "dashboard" && includesAny(messagesText, ["validation passou com avisos", "doctor passou com avisos", "security passou com avisos"])) return causeResult("dashboard_echo", diagnostic);
+  if (includesAny(messagesText, ["opencode needs a restart to load changes", "opencode precisa reiniciar para carregar mudancas", "agentx was updated automatically", "ogb foi atualizado automaticamente"])) return causeResult("restart_required", diagnostic);
+  if (record.workflow === "dashboard" && includesAny(messagesText, ["validation finished with warnings", "doctor finished with warnings", "security finished with warnings", "validation passou com avisos", "doctor passou com avisos", "security passou com avisos"])) return causeResult("dashboard_echo", diagnostic);
   if (includesAny(messagesText, ["rulesync disabled"])) return causeResult("rulesync_disabled", diagnostic);
-  if (messagesText.includes("generated by ogb") && messagesText.includes("current ogb")) return causeResult("stale_generated_files", diagnostic);
+  if ((messagesText.includes("generated by ogb") && messagesText.includes("current ogb")) || (messagesText.includes("generated by agentx") && messagesText.includes("current agentx"))) return causeResult("stale_generated_files", diagnostic);
   if (includesAny(messagesText, ["missing built-in opencode commands"])) return causeResult("missing_builtin_commands", diagnostic);
-  if (includesAny(messagesText, ["ogb global binary", "ogb resolves to"]) && messagesText.includes("expected")) return causeResult("global_binary_mismatch", diagnostic);
+  if (includesAny(messagesText, ["ogb global binary", "ogb resolves to", `${BINARY} global binary`, `${BINARY} resolves to`]) && messagesText.includes("expected")) return causeResult("global_binary_mismatch", diagnostic);
   if (record.workflow === "validate" && (status === "completed_with_warnings" || outcome === "warn")) return causeResult("validation_warn", diagnostic);
   if (rawCode === "workflow_warn" && (isWarn || warnings.length > 0)) {
     return causeResult("workflow_warn", diagnostic, {
-      label: `${workflowDisplayName(record.workflow)} terminou com avisos`,
-      recovery: `Rode ${workflowRecoveryCommand(record.workflow)} --json para ver os proximos passos.`,
-    }, { allowGenericDiagnostic: true });
+      label: `${workflowDisplayName(record.workflow)} finished with warnings`,
+      recovery: `Run ${workflowRecoveryCommand(record.workflow)} --json to see the next steps.`,
+    });
   }
   if (rawCode === "workflow_failed" && (isFail || errors.length > 0)) {
     return causeResult("workflow_failed", diagnostic, {
-      label: `${workflowDisplayName(record.workflow)} falhou`,
-      recovery: `Rode ${workflowRecoveryCommand(record.workflow)} --json para ver o diagnostico.`,
-    }, { allowGenericDiagnostic: true });
+      label: `${workflowDisplayName(record.workflow)} failed`,
+      recovery: `Run ${workflowRecoveryCommand(record.workflow)} --json to see the diagnosis.`,
+    });
   }
   if (isFail || errors.length > 0 || (exitCode !== 0 && !isWarn)) {
     return causeResult("workflow_failed", diagnostic, {
-      label: `${workflowDisplayName(record.workflow)} falhou`,
-      recovery: `Rode ${workflowRecoveryCommand(record.workflow)} --json para ver o diagnostico.`,
+      label: `${workflowDisplayName(record.workflow)} failed`,
+      recovery: `Run ${workflowRecoveryCommand(record.workflow)} --json to see the diagnosis.`,
     });
   }
   if (isWarn || warnings.length > 0) {
     return causeResult("workflow_warn", diagnostic, {
-      label: `${workflowDisplayName(record.workflow)} terminou com avisos`,
-      recovery: `Rode ${workflowRecoveryCommand(record.workflow)} --json para ver os proximos passos.`,
+      label: `${workflowDisplayName(record.workflow)} finished with warnings`,
+      recovery: `Run ${workflowRecoveryCommand(record.workflow)} --json to see the next steps.`,
     });
   }
   return causeResult("no_issue_detected", diagnostic);
@@ -639,7 +642,7 @@ function digestText(envelope, records, allRecords, envelopeJson) {
   const groups = groupProblems(records);
   const severityCounts = Object.fromEntries(countBy(groups, (group) => group.severity));
   const lines = [
-    envelope.digest ? "OGB actionable telemetry digest" : "OGB actionable telemetry",
+    envelope.digest ? `${DISPLAY} actionable telemetry digest` : `${DISPLAY} actionable telemetry`,
     "",
     ...envelopeMetaLines(envelope, allRecords, records),
     `Severity: high=${severityCounts.high || 0}, medium=${severityCounts.medium || 0}, low=${severityCounts.low || 0}`,
@@ -670,7 +673,7 @@ function digestText(envelope, records, allRecords, envelopeJson) {
   lines.push("", "Sanitized Envelope JSON", "");
   lines.push(envelopeJson);
   lines.push("", "Debug");
-  lines.push("Run `ogb telemetry preview --since 24h` on the affected machine for full local context.");
+  lines.push(`Run \`${BINARY} telemetry preview --since 24h\` on the affected machine for full local context.`);
   return lines.join("\n");
 }
 
@@ -709,7 +712,7 @@ function digestHtml(envelope, records, allRecords, envelopeJson) {
   return `<!doctype html>
 <html>
   <body style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; color: #1f2937;">
-    <h2>OGB actionable telemetry${envelope.digest ? " digest" : ""}</h2>
+    <h2>${escapeHtml(DISPLAY)} actionable telemetry${envelope.digest ? " digest" : ""}</h2>
     <ul>${meta}</ul>
     <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse;">
       <thead><tr><th>Count</th><th>Severity</th><th>Problem</th><th>Workflows</th><th>Next action</th></tr></thead>
@@ -722,7 +725,7 @@ function digestHtml(envelope, records, allRecords, envelopeJson) {
     </table>
     <h3>Sanitized Envelope JSON</h3>
     <pre style="white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;">${escapeHtml(envelopeJson)}</pre>
-    <p style="color: #6b7280;">For full local context, run <code>ogb telemetry preview --since 24h</code> on the affected machine.</p>
+    <p style="color: #6b7280;">For full local context, run <code>${escapeHtml(BINARY)} telemetry preview --since 24h</code> on the affected machine.</p>
   </body>
 </html>`;
 }
@@ -738,7 +741,7 @@ function renderEmail(envelope) {
   const focus = groups.slice(0, 3).map((group) => group.label).join(", ") || "no actionable issues";
   const envelopeJson = stringifyRichJson(safeEnvelope);
   return {
-    subject: `[OGB]${digestLabel}[${severity}] ${groups.length} issue(s): ${focus}`.slice(0, 180),
+    subject: `[${DISPLAY}]${digestLabel}[${severity}] ${groups.length} issue(s): ${focus}`.slice(0, 180),
     text: digestText(safeEnvelope, records, allRecords, envelopeJson),
     html: digestHtml(safeEnvelope, records, allRecords, envelopeJson),
     actionableCount: records.length,
@@ -951,7 +954,7 @@ export default {
 
   async scheduled(_event, env, ctx) {
     const task = flushDigest(env, "scheduled").catch((error) => {
-      console.error("ogb telemetry digest failed", error);
+      console.error(`${BINARY} telemetry digest failed`, error);
     });
     if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(task);
     else await task;

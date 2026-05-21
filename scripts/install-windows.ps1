@@ -5,7 +5,8 @@ param(
   [switch]$NoSetup,
   [switch]$NoUx,
   [switch]$NoOpenCode,
-  [switch]$Force
+  [switch]$Force,
+  [switch]$KeepLegacy
 )
 
 $ErrorActionPreference = "Stop"
@@ -263,7 +264,7 @@ function Remove-BrokenCommandShim($Dir) {
       $Content = ""
     }
     if ($Content -match [regex]::Escape($LegacyStableCliDirName) -or $Content -match "\.ai\\opencode-pack" -or $Content -match "added \d+ packages") {
-      if ($Name -eq "$BinaryName.cmd" -or $Name -eq "$LegacyBinaryName.cmd") {
+      if ($Name -eq "$BinaryName.cmd") {
         Write-Host "Found old $Name shim; it will be repaired after the new CLI is built: $Shim"
         continue
       }
@@ -302,7 +303,7 @@ function Write-CmdShim($ShimPath, $CliTarget) {
   "@ECHO off`r`nnode `"$RuntimeCliTarget`" %*`r`n" | Set-Content -Path $ShimPath -Encoding ASCII
 }
 
-function Repair-HomeCommandShim($CliTarget) {
+function Repair-HomeCommandShim($CliTarget, [bool]$KeepLegacyAlias) {
   foreach ($Name in @($BinaryName, "$BinaryName.cmd", "$BinaryName.ps1", $LegacyBinaryName, "$LegacyBinaryName.cmd", "$LegacyBinaryName.ps1") | Select-Object -Unique) {
     $Shim = Join-Path $HOME $Name
     if (-not (Test-Path $Shim)) {
@@ -315,7 +316,11 @@ function Repair-HomeCommandShim($CliTarget) {
       $Content = ""
     }
     if ($Content -match [regex]::Escape($LegacyStableCliDirName) -or $Content -match "\.ai\\opencode-pack" -or $Content -match "added \d+ packages") {
-      if ($Name -eq "$BinaryName.cmd" -or $Name -eq "$LegacyBinaryName.cmd") {
+      $IsLegacyName = $Name -eq $LegacyBinaryName -or $Name -eq "$LegacyBinaryName.cmd" -or $Name -eq "$LegacyBinaryName.ps1"
+      if ($IsLegacyName -and (-not $KeepLegacyAlias)) {
+        Remove-Item -Force $Shim -ErrorAction SilentlyContinue
+        Write-Host "Removed old home $Name shim: $Shim"
+      } elseif ($Name -eq "$BinaryName.cmd" -or ($KeepLegacyAlias -and $Name -eq "$LegacyBinaryName.cmd")) {
         Write-CmdShim $Shim $CliTarget
         Write-Host "Repaired old home $Name shim: $Shim"
       } else {
@@ -436,7 +441,7 @@ Write-Host "CliInstallDir: $CliInstallDir"
 Write-Host "CliTarget: $CliTarget"
 
 Write-Host "Registering $BinaryName command in $Prefix..."
-foreach ($Name in @($BinaryName, "$BinaryName.ps1", $LegacyBinaryName, "$LegacyBinaryName.ps1") | Select-Object -Unique) {
+foreach ($Name in @($BinaryName, "$BinaryName.ps1", $LegacyBinaryName, "$LegacyBinaryName.cmd", "$LegacyBinaryName.ps1") | Select-Object -Unique) {
   Remove-Item -Force (Join-Path $Prefix $Name) -ErrorAction SilentlyContinue
 }
 Remove-Item -Recurse -Force (Join-Path $Prefix "node_modules\$PackageName") -ErrorAction SilentlyContinue
@@ -445,17 +450,17 @@ Remove-Item -Recurse -Force (Join-Path $Prefix "node_modules\$LegacyPackageName"
 $PrimaryBin = Join-Path $Prefix "$BinaryName.cmd"
 $LegacyBin = Join-Path $Prefix "$LegacyBinaryName.cmd"
 Write-CmdShim $PrimaryBin $CliTarget
-if ($LegacyBinaryName -ne $BinaryName) {
+if ($KeepLegacy -and $LegacyBinaryName -ne $BinaryName) {
   Write-CmdShim $LegacyBin $CliTarget
 }
 
 Test-CleanCommandShim $PrimaryBin $CliTarget
-if ($LegacyBinaryName -ne $BinaryName) {
+if ($KeepLegacy -and $LegacyBinaryName -ne $BinaryName) {
   Test-CleanCommandShim $LegacyBin $CliTarget
 }
-Repair-HomeCommandShim $CliTarget
+Repair-HomeCommandShim $CliTarget $KeepLegacy
 Write-Host "Primary command: $PrimaryBin"
-if ($LegacyBinaryName -ne $BinaryName) {
+if ($KeepLegacy -and $LegacyBinaryName -ne $BinaryName) {
   Write-Host "Legacy alias: $LegacyBin"
 }
 

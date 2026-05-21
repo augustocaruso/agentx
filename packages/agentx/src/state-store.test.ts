@@ -28,7 +28,7 @@ test("state store contract writes and reads stamped reports by kind", () => {
   assert.equal(read.legacy, false);
   assert.equal(read.data?.outcome, "pass");
   assert.equal(typeof read.data?.generatedAt, "string");
-  assert.equal(read.data?.ogbVersion, AGENTX_VERSION);
+  assert.equal(read.data?.agentxVersion, AGENTX_VERSION);
 });
 
 test("state store writes patch state in the generated bridge directory", () => {
@@ -37,7 +37,7 @@ test("state store writes patch state in the generated bridge directory", () => {
   const written = writeStateRecord("patches", { schema: "agentx.patches.v2", applied: {} }, { projectRoot });
   const read = readStateRecord("patches", { projectRoot });
 
-  assert.equal(written.path, path.join(paths.generatedDir, "ogb-patches.json"));
+  assert.equal(written.path, path.join(paths.generatedDir, "agentx-patches.json"));
   assert.equal(read.exists, true);
   assert.equal(read.legacy, false);
   assert.equal(read.data?.schema, "agentx.patches.v2");

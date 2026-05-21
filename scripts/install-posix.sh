@@ -11,10 +11,11 @@ STABLE_CLI_DIR_NAME="${AGENTX_STABLE_CLI_DIR:-$PACKAGE_NAME-cli}"
 LEGACY_STABLE_CLI_DIR_NAME="${AGENTX_LEGACY_STABLE_CLI_DIR:-opencode-gemini-bridge-cli}"
 STATE_DIR_NAME="${AGENTX_STATE_DIR:-agentx}"
 SOURCE_PACKAGE_DIR="${AGENTX_SOURCE_PACKAGE_DIR:-agentx}"
+WRITE_LEGACY_ALIAS="${AGENTX_WRITE_LEGACY_ALIAS:-0}"
 
 usage() {
   cat <<EOF
-Usage: install-posix.sh [--platform darwin|linux] [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [--no-opencode] [--force] [--rulesync MODE]
+Usage: install-posix.sh [--platform darwin|linux] [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [--no-opencode] [--force] [--keep-legacy] [--rulesync MODE]
 
 Installs the $PRODUCT_NAME CLI, then delegates the install ritual to:
 $BINARY_NAME install
@@ -61,6 +62,13 @@ default_prefix() {
 
 bash_quote() {
   printf '%q' "$1"
+}
+
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 require_node_22() {
@@ -286,6 +294,11 @@ write_legacy_binary_alias() {
     return
   fi
 
+  if ! is_truthy "$WRITE_LEGACY_ALIAS"; then
+    rm -f "$LEGACY_BIN"
+    return
+  fi
+
   {
     printf '#!/usr/bin/env bash\n'
     printf 'exec %s "$@"\n' "$(bash_quote "$PRIMARY_BIN")"
@@ -337,6 +350,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force)
       FORCE=1
+      shift
+      ;;
+    --keep-legacy)
+      WRITE_LEGACY_ALIAS=1
       shift
       ;;
     -h|--help)

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
+import { DISPLAY } from "./brand.js";
 import { sha256File, sha256Text } from "./file-hash.js";
 import { resolveProjectPaths } from "./paths.js";
 import { AGENTX_VERSION, type HookInfo } from "./types.js";
@@ -305,7 +306,7 @@ export function printTrustReport(report: TrustReport, json = false): void {
     console.log(JSON.stringify(report, null, 2));
     return;
   }
-  console.log("OpenCode Gemini Bridge Trust");
+  console.log(`${DISPLAY} Trust`);
   console.log(`Project: ${report.projectRoot}`);
   console.log(`Extension: ${report.extension}`);
   console.log(`Status: ${report.status}`);
@@ -320,7 +321,7 @@ export function runTrustReview(options: { projectRoot?: string; homeDir?: string
   if (options.json) {
     console.log(JSON.stringify(report, null, 2));
   } else {
-    console.log("OpenCode Gemini Bridge Trust Review");
+    console.log(`${DISPLAY} Trust Review`);
     console.log(`Project: ${report.projectRoot}`);
     if (report.extension) console.log(`Extension: ${report.extension}`);
     for (const item of report.items) {

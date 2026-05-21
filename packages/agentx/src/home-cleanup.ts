@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { bridgeConfigDirForHome, createBackupSession, type BackupRecord } from "./backup-policy.js";
+import { DISPLAY } from "./brand.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS } from "./built-ins.js";
 import { AGENTX_VERSION } from "./types.js";
 
@@ -179,7 +180,7 @@ function managedPathsFromOldState(homeDir: string, warnings: string[]): string[]
     if (file.source !== "ogb") continue;
     const relPath = normalizeRelPath(file.path);
     if (safeRelPath(relPath)) out.push(relPath);
-    else warnings.push(`Ignorando path inseguro no estado antigo: ${file.path}`);
+    else warnings.push(`Ignoring unsafe path in old state: ${file.path}`);
   }
   return out;
 }
@@ -187,22 +188,22 @@ function managedPathsFromOldState(homeDir: string, warnings: string[]): string[]
 function collectCandidates(homeDir: string, warnings: string[]): Candidate[] {
   const candidates = new Map<string, Candidate>();
   for (const relPath of managedPathsFromOldState(homeDir, warnings)) {
-    addCandidate(candidates, relPath, "estado antigo do OGB na home");
+    addCandidate(candidates, relPath, `old ${DISPLAY} home state`);
   }
-  for (const relPath of GENERATED_FILES) addCandidate(candidates, relPath, "arquivo gerado pelo OGB na home");
-  for (const relPath of PROJECT_FILES) addCandidate(candidates, relPath, "arquivo de projeto OGB criado na home");
-  for (const relPath of PROJECT_DIRS) addCandidate(candidates, relPath, "diretorio de projeto OpenCode antigo criado na home");
-  for (const agent of BUILT_IN_AGENTS) addCandidate(candidates, `.opencode/agents/${agent.name}.md`, "agente OGB projetado na home");
-  for (const command of BUILT_IN_COMMANDS) addCandidate(candidates, `.opencode/commands/${command.name}.md`, "comando OGB projetado na home");
+  for (const relPath of GENERATED_FILES) addCandidate(candidates, relPath, `${DISPLAY} generated file in home`);
+  for (const relPath of PROJECT_FILES) addCandidate(candidates, relPath, `${DISPLAY} project file created in home`);
+  for (const relPath of PROJECT_DIRS) addCandidate(candidates, relPath, "old OpenCode project directory created in home");
+  for (const agent of BUILT_IN_AGENTS) addCandidate(candidates, `.opencode/agents/${agent.name}.md`, `${DISPLAY} projected agent in home`);
+  for (const command of BUILT_IN_COMMANDS) addCandidate(candidates, `.opencode/commands/${command.name}.md`, `${DISPLAY} projected command in home`);
 
   const homeProjectConfig = path.join(homeDir, "opencode.jsonc");
   if (homeProjectConfigLooksManaged(homeProjectConfig)) {
-    addCandidate(candidates, "opencode.jsonc", "opencode.jsonc de projeto criado na home");
+    addCandidate(candidates, "opencode.jsonc", "project opencode.jsonc created in home");
   }
 
   const tuiConfig = path.join(homeDir, ".opencode", "tui.jsonc");
   if (tuiConfigLooksManaged(tuiConfig)) {
-    addCandidate(candidates, ".opencode/tui.jsonc", "config TUI OGB de projeto criado na home");
+    addCandidate(candidates, ".opencode/tui.jsonc", `${DISPLAY} project TUI config created in home`);
   }
 
   const nestedGlobalConfig = path.join(homeDir, ".config", "opencode", "opencode");
@@ -308,7 +309,7 @@ export function printHomeCleanupReport(report: HomeCleanupReport, json = false):
     return;
   }
 
-  console.log("OpenCode Gemini Bridge home cleanup");
+  console.log(`${DISPLAY} home cleanup`);
   console.log(`Home: ${report.homeDir}`);
   if (report.actions.length === 0) {
     console.log("No old home project artifacts found.");

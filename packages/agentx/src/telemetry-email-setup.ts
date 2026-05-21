@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import { DISPLAY } from "./brand.js";
 import { enableTelemetry, type TelemetryPayloadLevel } from "./telemetry.js";
 
 const DEFAULT_WORKER_NAME = "agentx-telemetry-email-worker";
@@ -96,7 +97,7 @@ function templateDir(): string {
   for (const candidate of candidates) {
     if (fs.existsSync(path.join(candidate, "worker.js")) && fs.existsSync(path.join(candidate, "wrangler.toml.example"))) return candidate;
   }
-  throw new TelemetrySetupError("telemetry email Worker template not found", "Check packages/agentx/telemetry-email-worker or reinstall the OGB package.");
+  throw new TelemetrySetupError("telemetry email Worker template not found", `Check packages/agentx/telemetry-email-worker or reinstall the ${DISPLAY} package.`);
 }
 
 function stateRoot(homeDir = os.homedir()): string {
@@ -444,18 +445,18 @@ export async function setupTelemetryEmailReceiver(options: TelemetryEmailSetupOp
 
 export function formatTelemetryEmailSetupResult(result: TelemetryEmailSetupResult): string {
   const lines = [
-    "Telemetria por email configurada.",
+    "Telemetry email is configured.",
     "",
     `Endpoint: ${result.endpointUrl}`,
-    `Reports chegam em: ${result.toEmail}`,
-    `Remetente: ${result.fromEmail}`,
-    `Worker local: ${result.workerDir}`,
-    `Recibo local: ${result.receiptPath}`,
-    `Defaults para build privado: ${result.distributionDefaultsPath}`,
-    `Digest: ${result.kvNamespace?.ok === false ? "fallback email imediato" : `${result.digestWindowMinutes} min`}`,
+    `Reports arrive at: ${result.toEmail}`,
+    `Sender: ${result.fromEmail}`,
+    `Local worker: ${result.workerDir}`,
+    `Local receipt: ${result.receiptPath}`,
+    `Private build defaults: ${result.distributionDefaultsPath}`,
+    `Digest: ${result.kvNamespace?.ok === false ? "immediate email fallback" : `${result.digestWindowMinutes} min`}`,
   ];
-  if (result.dryRun) lines.splice(1, 0, "DRY RUN: nada foi enviado ao Cloudflare.");
-  if (result.localActivation) lines.push("", "Esta instalacao local ja foi ativada.");
-  if (!result.dryRun) lines.push("", "O token de ingestao ficou salvo no recibo local e nos defaults privados; ele nao foi impresso aqui.");
+  if (result.dryRun) lines.splice(1, 0, "DRY RUN: nothing was sent to Cloudflare.");
+  if (result.localActivation) lines.push("", "This local installation is now active.");
+  if (!result.dryRun) lines.push("", "The ingest token was saved in the local receipt and private defaults; it was not printed here.");
   return `${lines.join("\n")}\n`;
 }

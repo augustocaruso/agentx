@@ -5,11 +5,12 @@ import { fileURLToPath } from "node:url";
 import { createComponent, createElement, insert, spread } from "@opentui/solid";
 import { createSignal, onCleanup, onMount } from "solid-js";
 
-const id = "ogb:sidebar";
+const id = "agentx:sidebar";
 const REFRESH_MS = 5000;
 const PROMPT_REFRESH_MS = 1000;
+const SIDEBAR_PLUGIN_FILENAME = "ogb-sidebar.js";
 const GLOBAL_GENERATED_DIR = path.join(os.homedir(), ".config", "agentx", "generated");
-const GLOBAL_TUI_PLUGIN_PATH = path.join(os.homedir(), ".config", "opencode", "tui-plugins", "ogb-sidebar.js");
+const GLOBAL_TUI_PLUGIN_PATH = path.join(os.homedir(), ".config", "opencode", "tui-plugins", SIDEBAR_PLUGIN_FILENAME);
 const PLUGIN_FILE = fileURLToPath(import.meta.url);
 let eventsRegistered = false;
 let activeCall;
@@ -49,17 +50,25 @@ function samePath(left, right) {
 }
 
 function projectTuiPluginPath(root) {
-  return path.join(root, ".opencode", "tui-plugins", "ogb-sidebar.js");
+  return path.join(root, ".opencode", "tui-plugins", SIDEBAR_PLUGIN_FILENAME);
 }
 
 function staleProjectSidebarInstalled(root) {
-  const projectPlugin = projectTuiPluginPath(root);
-  if (samePath(PLUGIN_FILE, projectPlugin)) return false;
-  if (!fs.existsSync(projectPlugin)) return false;
-  return textFileIncludes(projectPlugin, "ogb:sidebar") && !textFileIncludes(projectPlugin, "shouldRegisterOgbSidebar");
+  const projectPlugins = [
+    projectTuiPluginPath(root),
+  ];
+  for (const projectPlugin of projectPlugins) {
+    if (samePath(PLUGIN_FILE, projectPlugin)) continue;
+    if (!fs.existsSync(projectPlugin)) continue;
+    if (
+      (textFileIncludes(projectPlugin, "agentx:sidebar") || textFileIncludes(projectPlugin, "ogb:sidebar"))
+      && !textFileIncludes(projectPlugin, "shouldRegisterAgentxSidebar")
+    ) return true;
+  }
+  return false;
 }
 
-function shouldRegisterOgbSidebar(root) {
+function shouldRegisterAgentxSidebar(root) {
   if (samePath(PLUGIN_FILE, GLOBAL_TUI_PLUGIN_PATH)) return !staleProjectSidebarInstalled(root);
   return !fs.existsSync(GLOBAL_TUI_PLUGIN_PATH);
 }
@@ -1089,11 +1098,11 @@ function PromptRight(props) {
 
 const tui = async (api) => {
   const root = api.state.path.directory || process.cwd();
-  if (!shouldRegisterOgbSidebar(root)) return;
+  if (!shouldRegisterAgentxSidebar(root)) return;
   registerElapsedEvents(api);
 
   api.slots.register({
-    id: "ogb-sidebar-content",
+    id: "agentx-sidebar-content",
     order: 160,
     slots: {
       sidebar_content() {
@@ -1107,11 +1116,11 @@ const tui = async (api) => {
 
   api.command.register(() => [
     {
-      title: "Refresh OGB Sidebar",
-      value: "ogb.sidebar.refresh",
-      category: "OGB",
+      title: "Refresh agentX Sidebar",
+      value: "agentx.sidebar.refresh",
+      category: "agentX",
       onSelect() {
-        api.ui.toast({ variant: "info", title: "OGB", message: "Sidebar refreshes automatically." });
+        api.ui.toast({ variant: "info", title: "agentX", message: "Sidebar refreshes automatically." });
       },
     },
   ]);

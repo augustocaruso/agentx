@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
+import { BINARY, DISPLAY } from "./brand.js";
 import { resolveCommand } from "./command-resolution.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { externalOpenCodePlugins, externalTuiPlugins } from "./external-integrations.js";
@@ -14,10 +15,11 @@ import { resolveProjectPaths, toPosixRelative } from "./paths.js";
 import { ensureProjectConfig, type ProjectConfigResult } from "./project-config.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import { emptySyncState, managedHashFor, readSyncState, upsertManagedFile, writeSyncState } from "./sync-state.js";
-import { ensureTuiSidebar } from "./tui-sidebar.js";
+import { ensureTuiSidebar, TUI_SIDEBAR_PLUGIN_PATH } from "./tui-sidebar.js";
 import { AGENTX_VERSION } from "./types.js";
 
-export const STARTUP_SYNC_PLUGIN_PATH = ".opencode/plugins/ogb-startup-sync.js";
+export const STARTUP_SYNC_PLUGIN_FILENAME = "ogb-startup-sync.js";
+export const STARTUP_SYNC_PLUGIN_PATH = `.opencode/plugins/${STARTUP_SYNC_PLUGIN_FILENAME}`;
 export const STARTUP_SYNC_CONFIG_PATH = ".opencode/generated/agentx-startup-sync.json";
 
 export const STARTUP_SYNC_PLUGIN_SOURCE = String.raw`import { spawn } from "node:child_process";
@@ -44,44 +46,44 @@ const EXTENSION_MAP_FILE = "agentx-extension-map.json";
 const STARTUP_DELAY_MS = 2500;
 const OGB_DIRECT_COMMANDS = {
   bridge: {
-    description: "Painel principal do OpenCode Gemini Bridge",
-    template: "Mostra o painel OGB diretamente no chat.",
+    description: ${JSON.stringify(`${DISPLAY} main panel`)},
+    template: ${JSON.stringify(`Shows the ${DISPLAY} panel directly in chat.`)},
   },
   doctor: {
-    description: "Mostra diagnostico do OpenCode Gemini Bridge",
-    template: "Executa agentx doctor e imprime o resultado diretamente no chat.",
+    description: ${JSON.stringify(`${DISPLAY} diagnostics`)},
+    template: ${JSON.stringify(`Runs ${BINARY} doctor and prints the result directly in chat.`)},
   },
   resources: {
-    description: "Lista recursos projetados pelo bridge",
-    template: "Mostra os recursos OGB diretamente no chat.",
+    description: "List projected bridge resources",
+    template: ${JSON.stringify(`Shows ${DISPLAY} resources directly in chat.`)},
   },
   validate: {
-    description: "Valida o bridge de ponta a ponta sem chamar modelo por padrao",
-    template: "Executa agentx validate e imprime o resultado diretamente no chat.",
+    description: "Validate the bridge end-to-end without calling a model by default",
+    template: ${JSON.stringify(`Runs ${BINARY} validate and prints the result directly in chat.`)},
   },
   "security-check": {
-    description: "Verifica riscos obvios de seguranca do bridge",
-    template: "Executa agentx security-check e imprime o resultado diretamente no chat.",
+    description: "Check obvious bridge safety risks",
+    template: ${JSON.stringify(`Runs ${BINARY} security-check and prints the result directly in chat.`)},
   },
   telemetry: {
-    description: "Mostra e envia telemetria local do OpenCode Gemini Bridge",
-    template: "Executa agentx telemetry status por padrao, ou a acao informada.",
+    description: ${JSON.stringify(`Show and send local ${DISPLAY} telemetry`)},
+    template: ${JSON.stringify(`Runs ${BINARY} telemetry status by default, or the requested action.`)},
   },
   "agent-sync": {
-    description: "Planeja adocao segura do agent-rules-sync",
-    template: "Executa ogb adopt-agent-sync e imprime o resultado diretamente no chat.",
+    description: "Plan safe agent-rules-sync adoption",
+    template: ${JSON.stringify(`Runs ${BINARY} adopt-agent-sync and prints the result directly in chat.`)},
   },
   status: {
-    description: "Resume o estado atual do bridge",
-    template: "Mostra o status OGB diretamente no chat.",
+    description: "Summarize the current bridge state",
+    template: ${JSON.stringify(`Shows ${DISPLAY} status directly in chat.`)},
   },
   "update-extensions": {
-    description: "Atualiza Gemini Extensions e reprojeta OpenCode",
-    template: "Roda dry-run por padrao. Use --apply --auto-consent para atualizar sem prompts.",
+    description: "Update Gemini Extensions and reproject OpenCode",
+    template: "Runs dry-run by default. Use --apply --auto-consent to update without prompts.",
   },
   "upgrade-ogb": {
-    description: "Atualiza o OpenCode Gemini Bridge pela release oficial",
-    template: "Executa agentx update e depois agentx doctor diretamente no chat.",
+    description: ${JSON.stringify(`Update ${DISPLAY} from the official release`)},
+    template: ${JSON.stringify(`Runs ${BINARY} update and then ${BINARY} doctor directly in chat.`)},
   },
 };
 const BRIDGE_COMMANDS = new Set([...Object.keys(OGB_DIRECT_COMMANDS), "sync"]);
@@ -259,7 +261,7 @@ function commandPlan(cwd) {
     };
   }
 
-  const command = expandRuntimeTokens(config.command || "ogb");
+  const command = expandRuntimeTokens(config.command || "agentx");
   const baseArgs = Array.isArray(config.baseArgs) ? config.baseArgs.map((arg) => expandRuntimeTokens(arg)) : [];
   const syncArgs = process.env.OGB_STARTUP_SYNC_ARGS
     ? splitArgs(process.env.OGB_STARTUP_SYNC_ARGS)
@@ -848,7 +850,7 @@ async function runGeminiExtensionToolHooks(cwd, client, eventName, input, output
     }
     if (result.timedOut || result.code !== 0) {
       await log(client, {
-        service: "ogb-extension-hooks",
+        service: "agentx-extension-hooks",
         level: "warn",
         message: "Gemini extension hook failed open.",
         extension: command.extensionName,
@@ -887,7 +889,7 @@ async function runGeminiExtensionAgentHooks(cwd, client, eventName, event, seenE
     }
     if (result.timedOut || result.code !== 0) {
       await log(client, {
-        service: "ogb-extension-hooks",
+        service: "agentx-extension-hooks",
         level: "warn",
         message: "Gemini extension agent hook failed open.",
         extension: command.extensionName,
@@ -906,7 +908,7 @@ async function runGeminiExtensionAgentHooks(cwd, client, eventName, event, seenE
     const additionalContext = hookOutput?.hookSpecificOutput?.additionalContext;
     if (typeof additionalContext === "string" && additionalContext.trim()) {
       await log(client, {
-        service: "ogb-extension-hooks",
+        service: "agentx-extension-hooks",
         level: "warn",
         message: "BeforeAgent additionalContext was produced, but OpenCode has no compatible prompt-injection hook; validation/blocking still ran.",
         extension: command.extensionName,
@@ -1103,7 +1105,7 @@ function chatTail(text, maxChars = 12000) {
 
 function formatDirectCommandMessage(commandName, results) {
   const lines = [
-    "OpenCode Gemini Bridge /" + commandName,
+    "agentX Bridge /" + commandName,
     "",
   ];
   for (const result of results) {
@@ -1148,7 +1150,7 @@ async function sendDirectChatMessage(client, sessionID, text) {
     });
   } catch (error) {
     await log(client, {
-      service: "ogb-startup-sync",
+      service: "agentx-startup-sync",
       level: "warn",
       message: "Failed to send direct command output",
       extra: { error: String(error?.message || error) },
@@ -1163,10 +1165,10 @@ async function handleDirectBridgeCommand({ cwd, client, input }) {
   if (!input?.sessionID) return false;
 
   await showToast(client, cwd, {
-    title: "OGB " + commandName.toUpperCase(),
+    title: "agentX " + commandName.toUpperCase(),
     message: commandName === "sync" && !hasApplyFlag(splitCommandArgs(input.arguments || ""))
-      ? "Rodando preview do bridge."
-      : "Rodando comando do bridge.",
+      ? "Running bridge preview."
+      : "Running bridge command.",
     variant: "info",
     duration: 2200,
   });
@@ -1181,9 +1183,9 @@ async function handleDirectBridgeCommand({ cwd, client, input }) {
 
   await sendDirectChatMessage(client, input.sessionID, formatDirectCommandMessage(commandName, results));
   await log(client, {
-    service: "ogb-startup-sync",
+    service: "agentx-startup-sync",
     level: results.every((result) => result.ok) ? "info" : "warn",
-    message: "ogb direct command executed",
+    message: "agentx direct command executed",
     extra: {
       cwd,
       command: commandName,
@@ -1319,7 +1321,7 @@ async function updateDashboard({ cwd, client, syncPlan }) {
   const result = await runProcess({ cwd, plan });
 
   await log(client, {
-    service: "ogb-startup-sync",
+    service: "agentx-startup-sync",
     level: result.ok ? "info" : "warn",
     message: result.ok ? "agentx dashboard refreshed" : "agentx dashboard refresh failed",
     extra: {
@@ -1341,7 +1343,7 @@ async function updateLimits({ cwd, client, syncPlan, reason }) {
   const result = await runProcess({ cwd, plan });
 
   await log(client, {
-    service: "ogb-startup-sync",
+    service: "agentx-startup-sync",
     level: result.ok ? "info" : "warn",
     message: result.ok ? "agentx limits refreshed" : "agentx limits refresh failed",
     extra: {
@@ -1389,7 +1391,7 @@ async function recordTelemetry({ cwd, client, syncPlan, reason, result, update, 
   const telemetry = await runProcess({ cwd, plan: { command: plan.command, args }, input: JSON.stringify(payload) + "\n" });
 
   await log(client, {
-    service: "ogb-startup-sync",
+    service: "agentx-startup-sync",
     level: telemetry.ok ? "info" : "warn",
     message: telemetry.ok ? "agentx telemetry recorded" : "agentx telemetry record failed",
     extra: {
@@ -1409,7 +1411,7 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
   if (!plan.enabled) return { skipped: true, status: "disabled" };
 
   await log(client, {
-    service: "ogb-startup-sync",
+    service: "agentx-startup-sync",
     level: "info",
     message: "Checking agentX auto-update (" + reason + ")",
     extra: { cwd, command: plan.command, args: plan.args },
@@ -1421,7 +1423,7 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
   const failed = !result.ok || status.status === "error";
 
   await log(client, {
-    service: "ogb-startup-sync",
+    service: "agentx-startup-sync",
     level: failed ? "warn" : "info",
     message: updated ? "agentX auto-update applied; restart OpenCode" : failed ? "agentX auto-update failed" : "agentX auto-update check completed",
     extra: {
@@ -1438,8 +1440,8 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
 
   if (updated) {
     await showToast(client, cwd, {
-      title: "agentX atualizado",
-      message: "Reinicie o OpenCode para carregar plugin e comandos novos.",
+      title: "agentX UPDATED",
+      message: "Restart OpenCode to load new plugins and commands.",
       variant: "warning",
       duration: 9000,
     });
@@ -1533,7 +1535,7 @@ async function runCommand({ cwd, client, reason, notifications, failureBackoffMs
   writeStatus(cwd, status);
 
   await log(client, {
-    service: "ogb-startup-sync",
+    service: "agentx-startup-sync",
     level: result.ok ? "info" : "warn",
     message: result.ok ? "agentx sync completed" : "agentx sync failed",
     extra: status,
@@ -1543,22 +1545,22 @@ async function runCommand({ cwd, client, reason, notifications, failureBackoffMs
 
   if (result.ok && update.restartRequired === true && notifications.success()) {
     await showToast(client, cwd, {
-      title: "REINICIE OPENCODE",
-      message: "O OGB foi atualizado e a sessao atual ainda usa partes antigas.",
+      title: "RESTART OPENCODE",
+      message: "agentX was updated and the current session is still using older pieces.",
       variant: "warning",
       duration: 9000,
     });
   } else if (result.ok && notifications.success()) {
     await showToast(client, cwd, {
-      title: "OGB SYNC OK",
-      message: "Bridge atualizado. Use /bridge para ver o painel.",
+      title: "agentX SYNC OK",
+      message: "Bridge updated. Use /bridge to open the dashboard.",
       variant: "success",
       duration: 4500,
     });
   } else if (!result.ok && notifications.failure()) {
     await showToast(client, cwd, {
-      title: "OGB SYNC FALHOU",
-      message: shortFailure(result) || "Rode /bridge ou agentx dashboard para ver o motivo.",
+      title: "agentX SYNC FAILED",
+      message: shortFailure(result) || "Run /bridge or agentx dashboard to see why.",
       variant: "error",
       duration: 6500,
     });
@@ -1567,14 +1569,14 @@ async function runCommand({ cwd, client, reason, notifications, failureBackoffMs
   return result.ok;
 }
 
-export const OgbStartupSync = async ({ client, directory, worktree }) => {
+export const AgentXStartupSync = async ({ client, directory, worktree }) => {
   hydrateMcpEnvironment();
   const cwd = resolveCwd({ directory, worktree });
   if (!cwd) {
     await log(client, {
-      service: "ogb-startup-sync",
+      service: "agentx-startup-sync",
       level: "info",
-      message: "Skipping ogb startup sync: no project startup config found",
+      message: "Skipping agentx startup sync: no project startup config found",
       extra: { directory, worktree },
     });
     return {};
@@ -1626,9 +1628,9 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
     if (!enabled) return;
     if (startupStarted) {
       await log(client, {
-        service: "ogb-startup-sync",
+        service: "agentx-startup-sync",
         level: "info",
-        message: "Skipping ogb startup sync: already attempted in this OpenCode process",
+        message: "Skipping agentx startup sync: already attempted in this OpenCode process",
         extra: { cwd, reason },
       });
       return;
@@ -1636,9 +1638,9 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
     const backoff = backoffStatus();
     if (backoff.blocked) {
       await log(client, {
-        service: "ogb-startup-sync",
+        service: "agentx-startup-sync",
         level: "warn",
-        message: "Skipping ogb startup sync: failure backoff is active",
+        message: "Skipping agentx startup sync: failure backoff is active",
         extra: { cwd, reason, nextRetryAfter: backoff.nextRetryAfter, failureCount: backoff.failureCount },
       });
       return;
@@ -1647,9 +1649,9 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
     const lock = acquireLock(lockPath, plan.lockTtlMs);
     if (!lock.acquired) {
       await log(client, {
-        service: "ogb-startup-sync",
+        service: "agentx-startup-sync",
         level: "info",
-        message: lock.reason === "active" ? "Skipping ogb startup sync: active lock" : "Skipping ogb startup sync: lock unavailable",
+        message: lock.reason === "active" ? "Skipping agentx startup sync: active lock" : "Skipping agentx startup sync: lock unavailable",
         extra: { cwd, lockPath, lock },
       });
       return;
@@ -1657,9 +1659,9 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
 
     try {
       await log(client, {
-        service: "ogb-startup-sync",
+        service: "agentx-startup-sync",
         level: "info",
-        message: "Running ogb startup sync (" + reason + ")",
+        message: "Running agentx startup sync (" + reason + ")",
         extra: { cwd, command: plan.command, args: plan.args },
       });
       await runCommand({ cwd, client, reason, notifications, failureBackoffMs });
@@ -1724,7 +1726,7 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
     },
     "command.execute.before": async (input) => {
       if (await handleDirectBridgeCommand({ cwd, client, input })) {
-        throw new Error("__OGB_COMMAND_HANDLED__");
+        throw new Error("__AGENTX_COMMAND_HANDLED__");
       }
     },
     "tool.execute.before": async (input, output) => {
@@ -1736,7 +1738,7 @@ export const OgbStartupSync = async ({ client, directory, worktree }) => {
   };
 };
 
-export default OgbStartupSync;
+export default AgentXStartupSync;
 `;
 
 export interface SetupCommandPlan {
@@ -1818,10 +1820,10 @@ export function defaultCommandPlan(options: SetupOpenCodeOptions): SetupCommandP
   }
 
   if (!options.baseArgs) {
-    const ogbCommand = resolveCommand("ogb", { homeDir: options.homeDir });
-    if (ogbCommand) {
+    const agentxCommand = resolveCommand(BINARY, { homeDir: options.homeDir });
+    if (agentxCommand) {
       return {
-        command: ogbCommand,
+        command: agentxCommand,
         baseArgs: [],
         syncArgs: options.syncArgs ?? ["startup-sync"],
       };
@@ -1838,7 +1840,7 @@ export function defaultCommandPlan(options: SetupOpenCodeOptions): SetupCommandP
   }
 
   return {
-    command: "ogb",
+    command: BINARY,
     baseArgs: [],
     syncArgs: options.syncArgs ?? ["startup-sync"],
   };
@@ -1866,16 +1868,19 @@ function writeManagedText(options: {
   dryRun?: boolean;
   force?: boolean;
   backupSession: BackupSession;
+  displayName?: string;
+  managedContentMarkers?: readonly string[];
 }): ManagedWriteResult {
   const absPath = path.join(options.projectRoot, ...options.relPath.split("/"));
   const desiredHash = sha256Text(options.content);
+  const label = options.displayName ?? options.relPath;
 
   if (options.dryRun) {
     return {
       path: absPath,
       relPath: options.relPath,
       status: fs.existsSync(absPath) ? "unchanged" : "preview",
-      message: fs.existsSync(absPath) ? `Would leave existing ${options.relPath}` : `Would create ${options.relPath}`,
+      message: fs.existsSync(absPath) ? `Would leave existing ${label}` : `Would create ${label}`,
     };
   }
 
@@ -1892,16 +1897,19 @@ function writeManagedText(options: {
       path: absPath,
       relPath: options.relPath,
       status: "unchanged",
-      message: `${options.relPath} already installed`,
+      message: `${label} already installed`,
     };
   }
 
-  if (exists && !options.force && previousHash !== currentHash) {
+  const recognizedRuntimeFile = exists
+    && options.managedContentMarkers !== undefined
+    && options.managedContentMarkers.some((marker) => currentText.includes(marker));
+  if (exists && !options.force && previousHash !== currentHash && !recognizedRuntimeFile) {
     return {
       path: absPath,
       relPath: options.relPath,
       status: "conflict",
-      message: `${options.relPath} exists and is not managed by ogb; use --force to overwrite`,
+      message: `${label} exists and is not managed by ${DISPLAY}; use --force to overwrite`,
     };
   }
 
@@ -1916,7 +1924,7 @@ function writeManagedText(options: {
     relPath: options.relPath,
     status: exists ? "updated" : "created",
     backup,
-    message: `${exists ? "Updated" : "Created"} ${options.relPath}`,
+    message: `${exists ? "Updated" : "Created"} ${label}`,
   };
 }
 
@@ -1956,8 +1964,8 @@ export function checkPluginSyntax(pluginPath?: string, source = STARTUP_SYNC_PLU
   let tempDir: string | undefined;
 
   if (!target) {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-plugin-check-"));
-    target = path.join(tempDir, "ogb-startup-sync.js");
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentx-plugin-check-"));
+    target = path.join(tempDir, `${BINARY}-startup-sync.js`);
     fs.writeFileSync(target, source, "utf8");
   }
 
@@ -2039,7 +2047,7 @@ export function setupOpenCode(options: SetupOpenCodeOptions = {}): SetupOpenCode
       opencodeConfig: skippedConfig,
       plugin: skippedWrite(STARTUP_SYNC_PLUGIN_PATH),
       startupConfig: skippedWrite(STARTUP_SYNC_CONFIG_PATH),
-      sidebarPlugin: skippedWrite(".opencode/tui-plugins/ogb-sidebar.js"),
+      sidebarPlugin: skippedWrite(TUI_SIDEBAR_PLUGIN_PATH),
       tuiConfig: skippedWrite(".opencode/tui.jsonc"),
       backups: [],
       commandPlan: plan,
@@ -2085,6 +2093,8 @@ export function setupOpenCode(options: SetupOpenCodeOptions = {}): SetupOpenCode
     dryRun: options.dryRun,
     force: options.force,
     backupSession,
+    displayName: `${DISPLAY} startup plugin`,
+    managedContentMarkers: ["ogb-startup-sync", "agentx-startup-sync", "STARTUP_CONFIG_FILE"],
   });
   if (plugin.status === "conflict") warnings.push(plugin.message);
 
@@ -2159,7 +2169,7 @@ export function printSetupReport(report: SetupOpenCodeReport, json = false): voi
     return;
   }
 
-  console.log("OpenCode Gemini Bridge setup");
+  console.log(`${DISPLAY} Bridge setup`);
   console.log(`Project: ${report.projectRoot}`);
   console.log(`Config: ${report.opencodeConfig.message ?? report.opencodeConfig.status}`);
   console.log(`Plugin: ${report.plugin.message}`);

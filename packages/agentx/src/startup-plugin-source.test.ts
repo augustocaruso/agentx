@@ -31,6 +31,6 @@ test("startup plugin uses the dedicated startup command and quiet lifecycle", ()
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /\["auto-update", "update", "self-update", "upgrade-ogb"\]/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /function withoutProjectArgs/);
   assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /commandName === "bridge"\) return \[plan\(\["check"/);
-  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /export default OgbStartupSync/);
+  assert.match(STARTUP_SYNC_PLUGIN_SOURCE, /export default AgentXStartupSync/);
   assert.doesNotMatch(STARTUP_SYNC_PLUGIN_SOURCE, /"session\.updated", "session\.idle"/);
 });

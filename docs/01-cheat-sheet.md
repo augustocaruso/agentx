@@ -25,7 +25,7 @@ Não edite manualmente arquivos gerados do OpenCode.
 | MCPs | `.gemini/settings.json` | `opencode.jsonc` → `mcp` | Converter/sincronizar. |
 | Subagentes | `agents/` em Gemini Extensions | `.opencode/agents` | Projetar com leitura/edição/diretório externo liberados; bash continua pedindo confirmação. |
 | Commands | Gemini custom commands/extensions | `.opencode/commands` | Converter. |
-| Hooks | `settings.json` e Gemini extension hooks | OGB OpenCode plugin | `BeforeTool`/`AfterTool`/`BeforeAgent` sincronizam automaticamente. |
+| Hooks | `settings.json` e Gemini extension hooks | agentX OpenCode plugin | `BeforeTool`/`AfterTool`/`BeforeAgent` sincronizam automaticamente. |
 | Extensões | Gemini Extensions | projeção OpenCode | Gemini continua pacote publicável. |
 | Status/diagnóstico | `/memory`, `/mcp`, `/skills` | `/bridge`, `/doctor`, sidebar | dashboard + plugin de startup + TUI. |
 
@@ -72,5 +72,5 @@ Não edite manualmente arquivos gerados do OpenCode.
 O primeiro MVP já passou da prova inicial. O alvo atual é:
 
 ```text
-Gemini Extension → ogb sync → OpenCode com contexto, MCP, skills, comandos, agentes, quota e status.
+Gemini Extension → agentx sync → OpenCode com contexto, MCP, skills, comandos, agentes, quota e status.
 ```

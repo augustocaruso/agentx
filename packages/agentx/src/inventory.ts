@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
+import { DISPLAY } from "./brand.js";
 import { flattenGeminiMd } from "./flatten.js";
 import { projectGeminiMcpEnvironment } from "./mcp-projection.js";
 import { defaultGeminiInput, resolveProjectPaths } from "./paths.js";
@@ -313,7 +314,7 @@ function collectHooks(projectRoot: string, homeDir: string, homeMode: boolean): 
         scope,
         status: autoSynced ? "ok" : "needs_review",
         message: autoSynced
-          ? "Synced automatically through the OGB OpenCode plugin"
+          ? `Synced automatically through the ${DISPLAY} OpenCode plugin`
           : "No compatible OpenCode hook projection yet; keep under manual review",
       });
     }

@@ -8,6 +8,7 @@ param(
   [switch]$NoUx,
   [switch]$NoOpenCode,
   [switch]$Force,
+  [switch]$KeepLegacy,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$InstallerArgs
 )
@@ -21,6 +22,9 @@ $ReleaseAsset = if ($env:AGENTX_RELEASE_ASSET) { $env:AGENTX_RELEASE_ASSET } els
 $StateDirName = if ($env:AGENTX_STATE_DIR) { $env:AGENTX_STATE_DIR } else { "agentx" }
 $TempPrefix = if ($env:AGENTX_TEMP_PREFIX) { $env:AGENTX_TEMP_PREFIX } else { "agentx-bootstrap" }
 $ZipName = if ($env:AGENTX_RELEASE_ZIP_NAME) { $env:AGENTX_RELEASE_ZIP_NAME } else { "agentx.zip" }
+$LegacyBinaryName = if ($env:AGENTX_LEGACY_BINARY) { $env:AGENTX_LEGACY_BINARY } else { "ogb" }
+$LegacyPackageName = if ($env:AGENTX_LEGACY_PACKAGE) { $env:AGENTX_LEGACY_PACKAGE } else { "opencode-gemini-bridge" }
+$LegacyStableCliDirName = if ($env:AGENTX_LEGACY_STABLE_CLI_DIR) { $env:AGENTX_LEGACY_STABLE_CLI_DIR } else { "opencode-gemini-bridge-cli" }
 $Repo = if ($Repo) { $Repo } elseif ($env:OGB_GITHUB_REPO) { $env:OGB_GITHUB_REPO } else { $DefaultRepo }
 $Version = if ($Version) { $Version } elseif ($env:OGB_RELEASE_VERSION) { $env:OGB_RELEASE_VERSION } else { "latest" }
 
@@ -75,6 +79,37 @@ function Repair-ReadOnlyDirectory($Dir, $Operation) {
   }
 }
 
+function Remove-LegacyInstall {
+  if ($KeepLegacy) {
+    return
+  }
+
+  $LegacyCommand = Get-Command $LegacyBinaryName -ErrorAction SilentlyContinue | Select-Object -First 1
+  $LegacyDir = Join-Path (Join-Path $HOME ".ai\opencode-pack") $LegacyStableCliDirName
+  if ($LegacyCommand -or (Test-Path -LiteralPath $LegacyDir)) {
+    Write-Host "Detected legacy $LegacyBinaryName install - removing before installing $ProductName."
+  }
+
+  if ($LegacyCommand -and $LegacyCommand.Source) {
+    $LegacyBinDir = Split-Path -Parent $LegacyCommand.Source
+    foreach ($Name in @($LegacyBinaryName, "$LegacyBinaryName.cmd", "$LegacyBinaryName.ps1") | Select-Object -Unique) {
+      Remove-Item -Force (Join-Path $LegacyBinDir $Name) -ErrorAction SilentlyContinue
+    }
+  }
+  Remove-Item -Recurse -Force $LegacyDir -ErrorAction SilentlyContinue
+
+  $NpmCommand = Get-Command "npm.cmd" -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $NpmCommand) {
+    $NpmCommand = Get-Command "npm.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+  }
+  if (-not $NpmCommand) {
+    $NpmCommand = Get-Command "npm" -ErrorAction SilentlyContinue | Select-Object -First 1
+  }
+  if ($NpmCommand) {
+    & $NpmCommand.Source uninstall -g $LegacyPackageName *> $null
+  }
+}
+
 $Project = Normalize-PathArgument $Project
 $Prefix = Normalize-PathArgument $Prefix
 Repair-DirectoryBlocker (Join-Path $HOME ".config\opencode") "bootstrap"
@@ -113,7 +148,9 @@ try {
   if ($NoUx) { $InstallerParams["NoUx"] = $true }
   if ($NoOpenCode) { $InstallerParams["NoOpenCode"] = $true }
   if ($Force) { $InstallerParams["Force"] = $true }
+  if ($KeepLegacy) { $InstallerParams["KeepLegacy"] = $true }
 
+  Remove-LegacyInstall
   if ($InstallerArgs -and $InstallerArgs.Count -gt 0) {
     & $Installer.FullName @InstallerParams @InstallerArgs
   } else {

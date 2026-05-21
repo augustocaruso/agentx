@@ -244,7 +244,7 @@ export const NATIVE_CAPABILITY_REGISTRY: readonly NativeCapabilityEntry[] = [
     mcpAliases: ["notion", "notion-mcp"],
     pluginAliases: [],
     docs: [],
-    notes: ["Known MCP-shaped capability; keep secrets in the OGB MCP env store when projecting config."],
+    notes: [`Known MCP-shaped capability; keep secrets in the ${DISPLAY} MCP env store when projecting config.`],
   },
   {
     entityId: "honcho",
@@ -402,3 +402,4 @@ export function entityIdFromMcpServer(name: string, config: unknown): NativeCapa
     return install?.kind === "opencode-mcp" && install.packageNames.some((pkg) => haystack.toLowerCase().includes(pkg.toLowerCase()));
   })?.entityId;
 }
+import { DISPLAY } from "./brand.js";

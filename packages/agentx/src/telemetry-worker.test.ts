@@ -65,8 +65,8 @@ function actionableRecord(overrides: Record<string, unknown> = {}) {
     recordedAt: "2026-05-06T12:00:00.000Z",
     diagnosticContext: {
       rootCauseCode: "plugin_inactive",
-      rootCauseLabel: "Plugin OpenCode configurado mas inativo",
-      recoveryCommand: "Rode agentx sync e reinicie o OpenCode se o aviso continuar.",
+      rootCauseLabel: "Configured OpenCode plugin is inactive",
+      recoveryCommand: "Run agentx sync and restart OpenCode if the warning persists.",
     },
     payloadSummary: {
       warnings: ["opencode-auto-fallback is enabled in OGB config, but the OpenCode plugin is not active."],
@@ -85,7 +85,7 @@ function cleanRecord(overrides: Record<string, unknown> = {}) {
     recordedAt: "2026-05-06T12:00:00.000Z",
     diagnosticContext: {
       rootCauseCode: "no_issue_detected",
-      rootCauseLabel: "Nenhum problema detectado",
+      rootCauseLabel: "No issue detected",
     },
     payloadSummary: { warnings: [], errors: [] },
     ...overrides,
@@ -101,8 +101,8 @@ function legacyGenericWarningRecord(overrides: Record<string, unknown> = {}) {
     recordedAt: "2026-05-06T12:00:00.000Z",
     diagnosticContext: {
       rootCauseCode: "workflow_warn",
-      rootCauseLabel: "Workflow OGB terminou com avisos",
-      recoveryCommand: "Rode ogb bridge para ver os proximos passos.",
+      rootCauseLabel: "agentX workflow finished with warnings",
+      recoveryCommand: "Run agentx bridge --json to see the next steps.",
     },
     payloadSummary: {
       warnings: ["Rulesync disabled"],
@@ -266,7 +266,7 @@ test("telemetry email worker sends immediate email without KV", async () => {
     assert.equal(body.queued, false);
     assert.equal(body.actionable, 1);
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /\[OGB\]\[medium\] 1 issue\(s\): Plugin OpenCode configurado mas inativo/);
+    assert.match(sent[0].subject, /\[agentX\]\[medium\] 1 issue\(s\): Configured OpenCode plugin is inactive/);
     assert.match(sent[0].text, /Sanitized Envelope JSON/);
     assert.match(sent[0].text, /"schema"/);
     assert.match(sent[0].text, /telemetry\.outboxCount/);
@@ -312,9 +312,9 @@ test("telemetry email worker upgrades old generic warnings to specific causes", 
     assert.equal(response.status, 200);
     assert.equal(body.actionable, 1);
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /Arquivos gerados estao desatualizados/);
+    assert.match(sent[0].subject, /Generated files are stale/);
     assert.match(sent[0].text, /Cause: stale_generated_files/);
-    assert.doesNotMatch(sent[0].subject, /Workflow OGB terminou com avisos/);
+    assert.doesNotMatch(sent[0].subject, /agentX workflow finished with warnings/);
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -415,7 +415,7 @@ test("telemetry email worker scheduled digest sends and clears KV", async () => 
     await Promise.all(pending);
 
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /\[OGB\]\[digest\]\[medium\] 1 issue\(s\): Plugin OpenCode configurado mas inativo/);
+    assert.match(sent[0].subject, /\[agentX\]\[digest\]\[medium\] 1 issue\(s\): Configured OpenCode plugin is inactive/);
     assert.equal(kv.size, 0);
   } finally {
     globalThis.fetch = previousFetch;
@@ -457,8 +457,8 @@ test("telemetry email worker groups repeated fingerprints in digest subject and 
     assert.equal(response.status, 200);
     assert.equal(body.sent, true);
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /\[OGB\]\[digest\]\[medium\] 1 issue\(s\): Plugin OpenCode configurado mas inativo/);
-    assert.match(sent[0].text, /2x \[medium\] Plugin OpenCode configurado mas inativo/);
+    assert.match(sent[0].subject, /\[agentX\]\[digest\]\[medium\] 1 issue\(s\): Configured OpenCode plugin is inactive/);
+    assert.match(sent[0].text, /2x \[medium\] Configured OpenCode plugin is inactive/);
     assert.match(sent[0].text, /sync completed\/pass/);
     assert.match(sent[0].text, /Sanitized Envelope JSON/);
   } finally {
@@ -491,8 +491,8 @@ test("telemetry email worker keeps warning exit codes out of high failure digest
           environmentContext: { appVersion: "0.1.8", automationSignals: ["codex"] },
           diagnosticContext: {
             rootCauseCode: "workflow_warn",
-            rootCauseLabel: "Check terminou com avisos",
-            recoveryCommand: "Rode agentx check --json para ver os proximos passos.",
+            rootCauseLabel: "Check finished with warnings",
+            recoveryCommand: "Run agentx check --json to see the next steps.",
           },
           payloadSummary: {
             counts: {
@@ -519,10 +519,10 @@ test("telemetry email worker keeps warning exit codes out of high failure digest
 
     assert.equal(response.status, 200);
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /\[OGB\]\[digest\]\[medium\] 1 issue\(s\): Check terminou com avisos/);
+    assert.match(sent[0].subject, /\[agentX\]\[digest\]\[medium\] 1 issue\(s\): Check finished with warnings/);
     assert.doesNotMatch(sent[0].subject, /high/);
-    assert.doesNotMatch(sent[0].text, /Check falhou/);
-    assert.match(sent[0].text, /Next: Rode agentx check --json para ver os proximos passos\./);
+    assert.doesNotMatch(sent[0].text, /Check failed/);
+    assert.match(sent[0].text, /Next: Run agentx check --json to see the next steps\./);
     assert.match(sent[0].text, /Scope: tmp\/ogb-smoke\.abc123/);
     assert.match(sent[0].text, /Signals: codex/);
     assert.match(sent[0].text, /Counts: doctor\.warnings=8/);
@@ -544,8 +544,8 @@ test("telemetry email worker groups restart-required across workflows", async ()
   try {
     const restartDiagnostic = {
       rootCauseCode: "restart_required",
-      rootCauseLabel: "OpenCode precisa reiniciar para carregar mudancas",
-      recoveryCommand: "Reinicie o OpenCode e rode /bridge novamente.",
+      rootCauseLabel: "OpenCode needs a restart to load changes",
+      recoveryCommand: "Restart OpenCode and run /bridge again.",
     };
     await worker.fetch(request("/v1/telemetry/workflow-runs", {
       method: "POST",
@@ -567,7 +567,7 @@ test("telemetry email worker groups restart-required across workflows", async ()
           outcome: "warn",
           recordedAt: "2026-05-06T12:01:00.000Z",
           diagnosticContext: restartDiagnostic,
-          payloadSummary: { warnings: ["OGB foi atualizado automaticamente; reinicie o OpenCode."], errors: [] },
+          payloadSummary: { warnings: ["agentX was updated automatically; restart OpenCode."], errors: [] },
         }),
       ])),
     }), { OGB_TELEMETRY_TOKEN: "secret", TELEMETRY_BUFFER: kv });
@@ -585,8 +585,8 @@ test("telemetry email worker groups restart-required across workflows", async ()
 
     assert.equal(response.status, 200);
     assert.equal(sent.length, 1);
-    assert.match(sent[0].subject, /\[OGB\]\[digest\]\[medium\] 1 issue\(s\): OpenCode precisa reiniciar para carregar mudancas/);
-    assert.match(sent[0].text, /2x \[medium\] OpenCode precisa reiniciar para carregar mudancas/);
+    assert.match(sent[0].subject, /\[agentX\]\[digest\]\[medium\] 1 issue\(s\): OpenCode needs a restart to load changes/);
+    assert.match(sent[0].text, /2x \[medium\] OpenCode needs a restart to load changes/);
     assert.match(sent[0].text, /Cause: restart_required/);
     assert.match(sent[0].text, /Workflows: auto-update, dashboard/);
   } finally {

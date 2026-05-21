@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
+import { DISPLAY } from "./brand.js";
 import { sha256Text } from "./file-hash.js";
 import { resolveProjectPaths } from "./paths.js";
 import { AGENTX_VERSION } from "./types.js";
@@ -96,7 +97,7 @@ function syncGroup(options: {
         source,
         target,
         status: "conflict",
-        message: "Target differs. Re-run with --force after reviewing; OGB will create a backup before updating.",
+        message: `${DISPLAY} found a local difference. Re-run with --force after reviewing; a backup will be created before updating.`,
       });
       continue;
     }
@@ -173,7 +174,7 @@ export function runBidirectionalSync(options: BidirectionalSyncOptions = {}): Bi
 
   if (options.json) console.log(JSON.stringify(report, null, 2));
   else {
-    console.log("OpenCode Gemini Bridge Bidirectional Sync");
+    console.log(`${DISPLAY} Bidirectional Sync`);
     console.log(`Project: ${report.projectRoot}`);
     console.log(`Mode: ${report.mode}`);
     for (const change of changes) {

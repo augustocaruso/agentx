@@ -1,3 +1,4 @@
+import { BINARY, DISPLAY } from "./brand.js";
 import type { GeminiMcpServer } from "./types.js";
 
 const SENSITIVE_ENV_KEY = /(SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL|AUTH|PRIVATE)/i;
@@ -205,7 +206,7 @@ export function diagnoseOpenCodeMcpConfig(
         const foundInStore = storedEnvKeys.has(envName);
         const foundInProcess = options.processEnv?.[envName] !== undefined;
         if (!foundInStore && !foundInProcess) {
-          warnings.push(`OpenCode MCP environment warning: ${name}.environment.${key} references ${openCodeEnvReference(envName)}, but ${envName} is missing from the OGB MCP env store and current process environment. Run agentx sync from the Gemini MCP source with the literal present, or set ${envName} before launching OpenCode.`);
+          warnings.push(`OpenCode MCP environment warning: ${name}.environment.${key} references ${openCodeEnvReference(envName)}, but ${envName} is missing from the ${DISPLAY} MCP env store and current process environment. Run ${BINARY} sync from the Gemini MCP source with the literal present, or set ${envName} before launching OpenCode.`);
         }
       }
     }

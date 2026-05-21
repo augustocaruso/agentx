@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
+import { BINARY } from "./brand.js";
 import { commandExists, resolveCommand } from "./command-resolution.js";
 import { readEnvAgentx } from "./env.js";
 import {
@@ -56,7 +57,7 @@ export interface NativeCapabilityDecision {
 
 export interface NativeCapabilityReport {
   _generated: {
-    tool: "ogb";
+    tool: "agentx" | "ogb";
     version: string;
     warning: string;
   };
@@ -353,7 +354,7 @@ export function resolveNativeCapabilities(options: ResolveNativeCapabilitiesOpti
 
   return {
     _generated: {
-      tool: "ogb",
+      tool: BINARY,
       version: AGENTX_VERSION,
       warning: "DO NOT EDIT. Regenerate with agentx sync.",
     },

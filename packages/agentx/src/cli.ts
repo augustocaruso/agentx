@@ -184,7 +184,7 @@ async function runRitualProgressJson<TReport>(options: {
       summary: {
         statusLabel: "FAIL",
         callouts: [message],
-        next: [`Run \`ogb ${options.kind} --plain\` to inspect the classic logs.`],
+        next: [`Run \`${BINARY} ${options.kind} --plain\` to inspect the plain logs.`],
       },
     });
     process.exitCode = 2;
@@ -217,7 +217,7 @@ function printLocalRoleStatus(status: LocalRoleStatus, json = false): void {
     console.log(JSON.stringify(status, null, 2));
     return;
   }
-  console.log(`OGB maintainer mode: ${status.enabled ? "enabled" : "disabled"}`);
+  console.log(`${DISPLAY} maintainer mode: ${status.enabled ? "enabled" : "disabled"}`);
   console.log(`Flag: ${status.path}`);
   if (status.enabledAt) console.log(`Enabled at: ${status.enabledAt}`);
 }
@@ -438,12 +438,12 @@ function addCheckOptions(command: Command): Command {
     .option("--plain", "Use the classic text report instead of the rich terminal UI")
     .option("--progress-json", "Emit versioned NDJSON progress events for automation")
     .option("--dry-run", "Preview check actions without writing trust changes")
-    .option("--force", "Overwrite files previously changed outside ogb management")
+    .option("--force", `Overwrite files previously changed outside ${DISPLAY} management`)
     .option("--accept-hooks", "Legacy: record unsupported Gemini hook events as reviewed by hash")
     .option("--windows", "Include Windows installer/static checks during validation")
     .option("--no-setup", "Skip setup-opencode")
     .option("--no-extension-update", "Skip automatic Gemini CLI extension updates before sync")
-    .option("--no-patches", "Skip OGB versioned patches during check")
+    .option("--no-patches", `Skip ${DISPLAY} versioned patches during check`)
     .option("--no-sync", "Skip sync")
     .option("--rulesync <mode>", "Rulesync mode used by sync during check", "auto")
     .option("--no-rulesync", "Disable Rulesync during check")
@@ -592,7 +592,7 @@ program
 program.addHelpCommand(false);
 
 program.command("help")
-  .description("Explore OGB commands with an interactive command guide")
+  .description(`Explore ${DISPLAY} commands with an interactive command guide`)
   .argument("[command]", "Command name or alias to explain")
   .option("--plain", "Print a classic text guide instead of the interactive terminal UI")
   .option("--json", "Print command metadata as JSON")
@@ -632,11 +632,11 @@ program.command("help")
 program.command("init")
   .description("Create a conservative opencode.jsonc for the bridge")
   .option("--dry-run", "Show what would be created without writing")
-  .option("--force", "Overwrite ogb-managed opencode.jsonc")
+  .option("--force", `Overwrite ${DISPLAY}-managed opencode.jsonc`)
   .action((opts) => {
     const { project } = commonProjectOptions();
     if (isHomeProject(project)) {
-      console.log("Diretorio home detectado; init de projeto pulado. Use os arquivos globais do OpenCode/Gemini.");
+      console.log("Home directory detected; project init skipped. Use the global OpenCode/Gemini files.");
       return;
     }
     const config = readOgbConfig(project);
@@ -686,7 +686,7 @@ program.command("flatten")
 program.command("sync")
   .description("Generate OpenCode projection")
   .option("--dry-run", "Show generated config and run Rulesync preview without final writes")
-  .option("--force", "Overwrite files previously changed outside ogb/Rulesync management")
+  .option("--force", `Overwrite files previously changed outside ${DISPLAY}/Rulesync management`)
   .option("--bidirectional", "First sync user-owned rule files between Gemini, OpenCode, and Codex")
   .option("--rulesync <mode>", "Rulesync mode: auto, off, require", "auto")
   .option("--no-rulesync", "Disable Rulesync")
@@ -716,7 +716,7 @@ program.command("sync")
 
 program.command("startup-sync")
   .description("Run the lightweight startup projection used by the OpenCode plugin")
-  .option("--force", "Overwrite files previously changed outside ogb management")
+  .option("--force", `Overwrite files previously changed outside ${DISPLAY} management`)
   .option("--dry-run", "Preview startup projection without writing")
   .option("--json", "Print JSON report")
   .action((opts) => {
@@ -749,7 +749,7 @@ program.command("bidirectional-sync")
 program.command("import")
   .description("First-time Gemini to OpenCode import: inventory, flatten, Rulesync-backed sync, doctor")
   .option("--dry-run", "Preview the import without final writes")
-  .option("--force", "Allow overwriting files tracked by ogb or Rulesync")
+  .option("--force", `Allow overwriting files tracked by ${DISPLAY} or Rulesync`)
   .option("--rulesync <mode>", "Rulesync mode: auto, off, require", "auto")
   .option("--no-rulesync", "Disable Rulesync")
   .option("--features <list>", `Rulesync feature list (${rulesyncDefaultFeatures().join(",")})`)
@@ -782,7 +782,7 @@ addCheckOptions(program.command("pass")
 
 program.command("dashboard")
   .alias("bridge")
-  .description("Show a simple OpenCode Gemini Bridge dashboard")
+  .description(`Show a simple ${DISPLAY} Bridge dashboard`)
   .option("--json", "Print JSON report")
   .option("--no-refresh", "Do not refresh doctor before building the dashboard")
   .option("--write-only", "Write dashboard JSON/Markdown without printing")
@@ -814,13 +814,13 @@ function printPatchesReport(opts: { json?: boolean } = {}): void {
 }
 
 program.command("patches")
-  .description("Inspect versioned OGB repair patches and lifecycle policy")
+  .description(`Inspect versioned ${DISPLAY} repair patches and lifecycle policy`)
   .argument("[action]", "Optional action: status or list")
   .option("--json", "Print JSON report")
   .action((action: string | undefined, opts) => {
     if (action && action !== "status" && action !== "list") {
       console.error(`Unknown patches action: ${action}`);
-      console.error("Use `ogb patches`, `ogb patches status`, or `ogb patches list --json`.");
+      console.error(`Use \`${BINARY} patches\`, \`${BINARY} patches status\`, or \`${BINARY} patches list --json\`.`);
       process.exitCode = 1;
       return;
     }
@@ -829,7 +829,7 @@ program.command("patches")
 
 program.command("limits")
   .alias("quota")
-  .description("Refresh and show provider usage limits used by the OGB TUI")
+  .description(`Refresh and show provider usage limits used by the ${DISPLAY} TUI`)
   .option("--json", "Print JSON report")
   .option("--cached", "Use a fresh cache entry when available")
   .option("--no-write", "Do not write .opencode/generated/agentx-limits.json")
@@ -998,7 +998,7 @@ const maintainer = program.command("maintainer")
   .description("Manage the local maintainer protection flag");
 
 maintainer.command("enable")
-  .description("Protect local OpenCode profile files from OGB preset overwrites")
+  .description(`Protect local OpenCode profile files from ${DISPLAY} preset overwrites`)
   .option("--json", "Print JSON status")
   .action((opts) => {
     const status = enableMaintainerRole(localRoleHomeOptions());
@@ -1006,7 +1006,7 @@ maintainer.command("enable")
   });
 
 maintainer.command("disable")
-  .description("Allow OGB preset writes on this machine again")
+  .description(`Allow ${DISPLAY} preset writes on this machine again`)
   .option("--json", "Print JSON status")
   .action((opts) => {
     const status = disableMaintainerRole(localRoleHomeOptions());
@@ -1182,7 +1182,7 @@ program.command("install")
 program.command("setup-opencode")
   .description("Install the OpenCode startup sync plugin and validate the setup")
   .option("--dry-run", "Preview files and validation without writing")
-  .option("--force", "Overwrite files previously changed outside ogb management")
+  .option("--force", `Overwrite files previously changed outside ${DISPLAY} management`)
   .option("--skip-doctor", "Do not run agentx doctor after setup")
   .option("--skip-command-check", "Do not verify the startup command")
   .option("--strict", "Exit non-zero when setup has warnings")
@@ -1214,7 +1214,7 @@ program.command("setup-opencode")
 program.command("setup-ux")
   .description(`Install the global OpenCode UX profile used by ${DISPLAY}`)
   .option("--dry-run", "Preview files and plugin installs without writing")
-  .option("--force", "Replace an existing project .opencode/ogb.config.jsonc profile")
+  .option("--force", "Replace an existing project .opencode/agentx.config.jsonc profile")
   .option("--reset-global", `Replace the global OpenCode config from ${DISPLAY} defaults instead of merging existing fields`)
   .option("--no-install-opencode", "Do not install OpenCode when it is missing")
   .option("--no-plugins", "Do not run global OpenCode plugin installers")
@@ -1237,7 +1237,7 @@ program.command("setup-ux")
   });
 
 program.command("cleanup-home")
-  .description("Backup and remove old OGB project artifacts that were mistakenly created in the home directory")
+  .description(`Backup and remove old ${DISPLAY} project artifacts that were mistakenly created in the home directory`)
   .option("--dry-run", "Preview cleanup without removing files")
   .option("--json", "Print JSON report")
   .action((opts) => {
@@ -1247,7 +1247,7 @@ program.command("cleanup-home")
   });
 
 program.command("reset")
-  .description("Reset the global OGB/OpenCode profile; only works when project is the home directory")
+  .description(`Reset the global ${DISPLAY}/OpenCode profile; only works when project is the home directory`)
   .option("--yes", "Confirm the reset without the interactive prompt")
   .option("--dry-run", "Preview cleanup, global config reset, and sync without writing")
   .option("--rulesync <mode>", "Rulesync mode passed to global sync", "auto")
@@ -1453,9 +1453,9 @@ function announceMigration(report: MigrationReport): void {
     ? ` Moved ${report.movedHomeDir.from} → ${report.movedHomeDir.to}.`
     : "";
   const renamed = report.renamedFiles.length > 0
-    ? ` Renamed ${report.renamedFiles.length} legacy ogb-* file(s) to agentx-*.`
+    ? ` Renamed ${report.renamedFiles.length} legacy file(s) to ${BINARY}-*.`
     : "";
-  process.stderr.write(`${DISPLAY}: migrated state from the legacy ogb layout.${movedDir}${renamed}\n`);
+  process.stderr.write(`${DISPLAY}: migrated state from the legacy layout.${movedDir}${renamed}\n`);
   for (const warning of report.warnings) process.stderr.write(`${DISPLAY} migration warning: ${warning}\n`);
 }
 

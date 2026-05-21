@@ -98,7 +98,7 @@ test("runValidation can use fast PATH-only tool checks inside pass", () => {
   const binDir = path.join(homeDir, "bin");
   const marker = path.join(homeDir, "tool-version-invoked");
   fs.mkdirSync(binDir, { recursive: true });
-  for (const command of ["node", "npm", "gemini", "ogb", "opencode"]) {
+  for (const command of ["node", "npm", "gemini", "agentx", "opencode"]) {
     fs.writeFileSync(path.join(binDir, command), `#!/usr/bin/env sh\necho ${command} >> "${marker}"\nexit 0\n`, { mode: 0o755 });
   }
 
@@ -119,7 +119,7 @@ test("runValidation can use fast PATH-only tool checks inside pass", () => {
 
     assert.equal(fs.existsSync(marker), false);
     assert.equal(report.checks.find((check) => check.name === "gemini executable")?.status, "pass");
-    assert.equal(report.checks.find((check) => check.name === "ogb global binary")?.status, "pass");
+    assert.equal(report.checks.find((check) => check.name === "agentx global binary")?.status, "pass");
   } finally {
     process.env.PATH = originalPath;
   }

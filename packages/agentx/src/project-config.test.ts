@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DISPLAY } from "./brand.js";
 import { ensureProjectConfig, configReferencesExpandedGemini } from "./project-config.js";
 
 function tempProject(): string {
@@ -60,6 +61,8 @@ test("ensureProjectConfig creates a conservative OpenCode config and avoids manu
   const conflict = ensureProjectConfig({ projectRoot });
 
   assert.equal(conflict.status, "conflict");
+  assert.equal(conflict.message, `opencode.jsonc exists and is not managed by ${DISPLAY}; leaving it unchanged`);
+  assert.doesNotMatch(conflict.message ?? "", /\bogb\b|OGB|OpenCode Gemini Bridge/);
   assert.equal(configReferencesExpandedGemini(projectRoot), false);
 });
 

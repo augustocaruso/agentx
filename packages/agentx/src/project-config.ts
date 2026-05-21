@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession, type BackupRecord, type BackupRetentionReport } from "./backup-policy.js";
+import { DISPLAY } from "./brand.js";
 import { sha256Text } from "./file-hash.js";
 import { PLAN_NATIVE_READ_PERMISSIONS, PLAN_READ_ONLY_BASH_PERMISSIONS } from "./opencode-permissions.js";
 import { resolveProjectPaths } from "./paths.js";
@@ -115,7 +116,7 @@ export function ensureProjectConfig(options: ProjectConfigOptions = {}): Project
       return {
         path: configPath,
         status: "conflict",
-        message: "opencode.jsonc exists and is not managed by ogb; leaving it unchanged",
+        message: `opencode.jsonc exists and is not managed by ${DISPLAY}; leaving it unchanged`,
       };
     }
   }

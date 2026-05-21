@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { DISPLAY } from "./brand.js";
 import { resolveProjectPaths } from "./paths.js";
 import { refreshQuota, type QuotaReport } from "./quota.js";
 import { AGENTX_VERSION } from "./types.js";
@@ -253,7 +254,7 @@ function resolveOpenAIOAuth(homeDir: string): { accessToken?: string; accountId?
       expires,
     };
   }
-  return { message: "OpenAI OAuth do OpenCode nao encontrado." };
+  return { message: "OpenCode OpenAI OAuth not found." };
 }
 
 function extractExportedString(text: string | undefined, name: string): string | undefined {
@@ -342,7 +343,7 @@ async function resolveAnthropicOAuth(homeDir: string): Promise<{ accessToken?: s
     if (!accessToken) continue;
     return { accessToken, expires: typeof effective.expires === "number" ? effective.expires : expires };
   }
-  return { message: "Anthropic OAuth do OpenCode nao encontrado." };
+  return { message: "OpenCode Anthropic OAuth not found." };
 }
 
 function resetIsoFromWindow(window: any): string | undefined {
@@ -541,7 +542,7 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
       }
     } catch (error) {
       openaiChatGPT = {
-        status: error instanceof Error && /nao encontrado|unavailable/i.test(error.message) ? "unavailable" : "error",
+        status: error instanceof Error && /not found|unavailable/i.test(error.message) ? "unavailable" : "error",
         message: error instanceof Error ? error.message : String(error),
       };
     }
@@ -556,7 +557,7 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
       }
     } catch (error) {
       anthropicClaude = {
-        status: error instanceof Error && /nao encontrado|unavailable/i.test(error.message) ? "unavailable" : "error",
+        status: error instanceof Error && /not found|unavailable/i.test(error.message) ? "unavailable" : "error",
         message: error instanceof Error ? error.message : String(error),
       };
     }
@@ -634,7 +635,7 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
 
 export function formatLimits(report: LimitsReport): string {
   const lines = [
-    "OpenCode Gemini Bridge Limits",
+    `${DISPLAY} Limits`,
     `Status: ${report.status.toUpperCase()}`,
     `Providers: ${report.providers.length}`,
     `OpenUsage: ${report.sources.openusage.status}`,

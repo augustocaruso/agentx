@@ -42,7 +42,7 @@ test("runReset refuses to run outside the home project", async () => {
       installPlugins: false,
       installTuiDependencies: false,
     }),
-    /so pode ser rodado no home/,
+    /can only run from home/,
   );
 });
 

@@ -57,7 +57,7 @@ test("syncToOpenCode writes bridge-native generated config without Rulesync", ()
 
   assert.equal(report.rulesync.status, "skipped");
   assert.deepEqual(generated._generated, {
-    tool: "ogb",
+    tool: "agentx",
     version: AGENTX_VERSION,
     warning: "DO NOT EDIT. Regenerate with agentx sync.",
   });
@@ -409,7 +409,7 @@ test("syncToOpenCode projects built-in YOLO agent", () => {
     && file.projection === "opencode"
     && file.origin === "ogb:built-in-agent"
   ));
-  assert.match(yolo, /description: Execucao direta com minima friccao em workspace confiavel\./);
+  assert.match(yolo, /description: Direct execution with minimal friction in a trusted workspace\./);
   assert.doesNotMatch(yolo, /description: YOLO:/);
   assert.match(yolo, /mode: primary/);
   assert.match(yolo, /color: "#ffb4b4"/);
@@ -519,8 +519,8 @@ test("syncToOpenCode projects built-in OpenCode commands", () => {
   assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "commands", "automate.md")), false);
   assert.doesNotMatch(doctorCommand, /^agent:/m);
   assert.match(bridgeCommand, /agentx check/);
-  assert.match(bridgeCommand, /Nao use glob/);
-  assert.match(resourcesCommand, /MCPs ativos/);
+  assert.match(bridgeCommand, /Do not use glob/);
+  assert.match(resourcesCommand, /active MCPs/);
 });
 
 test("syncToOpenCode removes old lowercase YOLO agent when it was managed by ogb", () => {
@@ -1775,7 +1775,7 @@ test("syncToOpenCode warns when a sensitive MCP env reference cannot be material
   assert.ok(report.warnings.some((warning) =>
     warning.includes("notion.environment.OPENAPI_MCP_HEADERS")
     && warning.includes("{env:OPENAPI_MCP_HEADERS}")
-    && warning.includes("missing from the OGB MCP env store")
+    && warning.includes("missing from the agentX MCP env store")
   ));
 });
 

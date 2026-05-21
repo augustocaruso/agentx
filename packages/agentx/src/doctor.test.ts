@@ -480,7 +480,7 @@ test("runDoctor reports sensitive OpenCode MCP env references missing from the O
 
     assert.ok(report.warnings.some((warning) =>
       warning.includes("notion.environment.OPENAPI_MCP_HEADERS")
-      && warning.includes("missing from the OGB MCP env store")
+      && warning.includes("missing from the agentX MCP env store")
     ));
     assert.equal(JSON.stringify(report).includes(fakeNotionToken), false);
   } finally {

@@ -212,8 +212,8 @@ test("runDashboard keeps a clean bridge passing when only OpenCode restart is pe
   assert.equal(report.update.status, "updated");
   assert.equal(report.update.restartRequired, true);
   assert.match(markdown, /agentX update: UPDATED v0\.0\.39 - restart OpenCode/);
-  assert.ok(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")));
-  assert.equal(report.warnings.some((warning) => warning.includes("reinicie o OpenCode")), false);
+  assert.ok(report.nextSteps.some((step) => step.includes("Restart OpenCode")));
+  assert.equal(report.warnings.some((warning) => warning.includes("Restart OpenCode")), false);
 });
 
 test("runDashboard consumes restart-required update after current-version pass reports exist", () => {
@@ -255,9 +255,9 @@ test("runDashboard consumes restart-required update after current-version pass r
   assert.equal(report.update.restartRequired, false);
   assert.equal(saved.status, "current");
   assert.equal(saved.restartRequired, false);
-  assert.match(saved.message, /check pos-update foi regenerado/);
+  assert.match(saved.message, /post-update check was regenerated/);
   assert.match(markdown, /agentX update: CURRENT v/);
-  assert.equal(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")), false);
+  assert.equal(report.nextSteps.some((step) => step.includes("Restart OpenCode")), false);
 });
 
 test("runDashboard consumes latest self-update restart after current-version pass reports exist", () => {
@@ -296,7 +296,7 @@ test("runDashboard consumes latest self-update restart after current-version pas
   assert.equal(report.update.restartRequired, false);
   assert.equal(saved.status, "current");
   assert.equal(saved.restartRequired, false);
-  assert.equal(report.nextSteps.some((step) => step.includes("Reinicie o OpenCode")), false);
+  assert.equal(report.nextSteps.some((step) => step.includes("Restart OpenCode")), false);
 });
 
 test("runDashboard treats validation/security reports without generatedAt as stale after self-update", () => {
@@ -349,8 +349,8 @@ test("runDashboard treats validation/security reports without generatedAt as sta
   assert.equal(report.reports.validation.status, "warn");
   assert.equal(report.reports.security.status, "warn");
   assert.deepEqual(report.errors, []);
-  assert.ok(report.warnings.some((warning) => warning.includes("validation foi gerado antes do ultimo self-update")));
-  assert.ok(report.warnings.some((warning) => warning.includes("security foi gerado antes do ultimo self-update")));
+  assert.ok(report.warnings.some((warning) => warning.includes("validation was generated before the last self-update")));
+  assert.ok(report.warnings.some((warning) => warning.includes("security was generated before the last self-update")));
 });
 
 test("runDashboard treats validation/security reports generated before self-update as stale", () => {
@@ -549,7 +549,7 @@ test("runDashboard surfaces startup sync failure details", () => {
   assert.equal(report.startupSync.failureCount, 3);
   assert.equal(report.startupSync.nextRetryAfter, "2026-05-06T18:57:02.300Z");
   assert.ok(report.errors.some((error) => error.includes("exit code 1") && error.includes("node nao foi encontrado")));
-  assert.match(markdown, /Startup sync falhou com exit code 1: node nao foi encontrado no PATH/);
+  assert.match(markdown, /Startup sync failed with exit code 1: node nao foi encontrado no PATH/);
   assert.match(markdown, /retry after 2026-05-06T18:57:02\.300Z/);
 });
 
@@ -589,10 +589,10 @@ test("runDashboard surfaces first validation and security failure details", () =
   const markdown = fs.readFileSync(paths.dashboardMarkdownPath, "utf8");
 
   assert.equal(report.outcome, "fail");
-  assert.ok(report.errors.some((error) => error.includes("validation falhou: Global OpenCode config")));
-  assert.ok(report.errors.some((error) => error.includes("security falhou: YOLO guardrails")));
-  assert.match(markdown, /Validation: FAIL - validation falhou: Global OpenCode config/);
-  assert.match(markdown, /Security: FAIL - security falhou: YOLO guardrails/);
+  assert.ok(report.errors.some((error) => error.includes("validation failed: Global OpenCode config")));
+  assert.ok(report.errors.some((error) => error.includes("security failed: YOLO guardrails")));
+  assert.match(markdown, /Validation: FAIL - validation failed: Global OpenCode config/);
+  assert.match(markdown, /Security: FAIL - security failed: YOLO guardrails/);
 });
 
 test("runDashboard does not fail home/global dashboard from stale project-mode reports", () => {
@@ -620,7 +620,7 @@ test("runDashboard does not fail home/global dashboard from stale project-mode r
     projectRoot: homeDir,
     outcome: "fail",
     checks: [
-      { name: "Generated config marker", status: "fail", message: "Missing ogb generated config marker." },
+      { name: "Generated config marker", status: "fail", message: "Missing agentx generated config marker." },
     ],
   });
   writeJson(paths.securityPath, {
@@ -648,10 +648,10 @@ test("runDashboard does not fail home/global dashboard from stale project-mode r
   assert.equal(report.reports.security.status, "warn");
   assert.equal(report.update.status, "unknown");
   assert.deepEqual(report.errors, []);
-  assert.equal(report.warnings.some((warning) => warning.includes("Auto-update do OGB falhou")), false);
-  assert.match(markdown, /Validation: WARN - validation foi gerado pelo ogb 0\.0\.53/);
-  assert.match(markdown, /Security: WARN - security foi gerado pelo ogb 0\.0\.53/);
+  assert.equal(report.warnings.some((warning) => warning.includes("agentX auto-update failed")), false);
+  assert.match(markdown, /Validation: WARN - validation was generated by agentx 0\.0\.53/);
+  assert.match(markdown, /Security: WARN - security was generated by agentx 0\.0\.53/);
   assert.match(markdown, /agentX update: UNKNOWN/);
-  assert.doesNotMatch(markdown, /Generated config marker: Missing ogb generated config marker/);
+  assert.doesNotMatch(markdown, /Generated config marker: Missing agentx generated config marker/);
   assert.doesNotMatch(markdown, /Missing \.opencode\/agents\/YOLO\.md/);
 });

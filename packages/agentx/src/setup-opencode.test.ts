@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
+import { DISPLAY } from "./brand.js";
 import { configReferencesExpandedGemini } from "./project-config.js";
 import { readSyncState } from "./sync-state.js";
 import { setupOpenCode, STARTUP_SYNC_CONFIG_PATH, STARTUP_SYNC_PLUGIN_PATH, STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
@@ -62,7 +63,7 @@ test("setupOpenCode installs startup plugin, config, and project OpenCode config
   assert.equal(fs.existsSync(projectPath(projectRoot, TUI_CONFIG_PATH)), true);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /agentx-plugin-status\.json/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /startup-sync/);
-  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /REINICIE OPENCODE/);
+  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /RESTART OPENCODE/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /agentx dashboard refreshed/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /telemetry record/);
   assert.match(fs.readFileSync(projectPath(projectRoot, TUI_SIDEBAR_PLUGIN_PATH), "utf8"), /sidebar_content/);
@@ -122,6 +123,8 @@ test("setupOpenCode refuses to overwrite a manually changed startup plugin witho
   });
 
   assert.equal(conflict.plugin.status, "conflict");
+  assert.equal(conflict.plugin.message, `${DISPLAY} startup plugin exists and is not managed by ${DISPLAY}; use --force to overwrite`);
+  assert.doesNotMatch(conflict.plugin.message, /\bogb\b|OGB|OpenCode Gemini Bridge/);
   assert.match(fs.readFileSync(pluginPath, "utf8"), /ManualPlugin/);
 
   const forced = setupOpenCode({
@@ -137,7 +140,33 @@ test("setupOpenCode refuses to overwrite a manually changed startup plugin witho
   assert.ok(forced.plugin.backup);
   assert.ok(forced.plugin.backup.startsWith(path.join(homeDir, ".config", "agentx", "backups", "setup-opencode")));
   assert.match(fs.readFileSync(forced.plugin.backup, "utf8"), /ManualPlugin/);
-  assert.match(fs.readFileSync(pluginPath, "utf8"), /OgbStartupSync/);
+  assert.match(fs.readFileSync(pluginPath, "utf8"), /AgentXStartupSync/);
+});
+
+test("setupOpenCode overwrites legacy managed startup plugin without force", () => {
+  const projectRoot = tempProject();
+  const homeDir = tempProject();
+  const pluginPath = projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH);
+  fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
+  fs.writeFileSync(pluginPath, [
+    "export const OgbStartupSync = async () => ({});",
+    "const service = \"ogb-startup-sync\";",
+    "",
+  ].join("\n"), "utf8");
+
+  const report = setupOpenCode({
+    projectRoot,
+    homeDir,
+    skipDoctor: true,
+    skipCommandCheck: true,
+  });
+
+  assert.equal(report.plugin.status, "updated");
+  assert.notEqual(report.plugin.status, "conflict");
+  assert.doesNotMatch(report.warnings.join("\n"), /not managed by/);
+  const plugin = fs.readFileSync(pluginPath, "utf8");
+  assert.match(plugin, /AgentXStartupSync/);
+  assert.match(plugin, /agentx-startup-sync/);
 });
 
 test("setupOpenCode dry-run previews without writing project files", () => {
@@ -248,7 +277,7 @@ test("startup plugin uses global generated lock and status when cwd is home", as
   process.env.OGB_STARTUP_DELAY_MS = "600000";
   try {
     const mod = await import(`${pathToFileURL(pluginPath).href}?t=${Date.now()}`);
-    assert.equal(typeof mod.OgbStartupSync, "function");
+    assert.equal(typeof mod.AgentXStartupSync, "function");
     assert.equal(typeof mod.default, "function");
 
     const logs: unknown[] = [];
@@ -280,7 +309,7 @@ test("startup plugin uses global generated lock and status when cwd is home", as
     assert.equal(status.lockPath, globalLockPath);
     assert.equal(fs.existsSync(globalLockPath), false);
     assert.equal(fs.existsSync(oldHomeLockPath), false);
-    assert.equal(logs.some((entry) => JSON.stringify(entry).includes("Running ogb startup sync")), true);
+    assert.equal(logs.some((entry) => JSON.stringify(entry).includes("Running agentx startup sync")), true);
   } finally {
     restoreHome();
     if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
@@ -340,7 +369,7 @@ test("startup plugin expands runtime home placeholders before spawning", async (
   }
 });
 
-test("startup plugin sends OGB command output directly to chat", async () => {
+test("startup plugin sends agentX command output directly to chat", async () => {
   const root = tempProject();
   const projectRoot = path.join(root, "project");
   const pluginDir = path.join(root, "plugin");
@@ -379,19 +408,19 @@ test("startup plugin sends OGB command output directly to chat", async () => {
 
     const config: any = {};
     await plugin.config(config);
-    assert.equal(config.command.bridge.description, "Painel principal do OpenCode Gemini Bridge");
+    assert.equal(config.command.bridge.description, "agentX main panel");
     assert.equal(config.command.sync, undefined);
 
     await assert.rejects(
       () => plugin["command.execute.before"]({ command: "doctor", arguments: "--json", sessionID: "session-1" }),
-      /__OGB_COMMAND_HANDLED__/,
+      /__AGENTX_COMMAND_HANDLED__/,
     );
 
     assert.equal(prompts.length, 1);
     assert.equal(prompts[0].path.id, "session-1");
     assert.equal(prompts[0].body.noReply, true);
     assert.equal(prompts[0].body.parts[0].ignored, true);
-    assert.match(prompts[0].body.parts[0].text, /OpenCode Gemini Bridge \/doctor/);
+    assert.match(prompts[0].body.parts[0].text, /agentX Bridge \/doctor/);
     assert.match(prompts[0].body.parts[0].text, /RUNNER_ARGS=/);
     assert.match(prompts[0].body.parts[0].text, /"doctor"/);
     assert.match(prompts[0].body.parts[0].text, /"--project"/);
@@ -400,11 +429,11 @@ test("startup plugin sends OGB command output directly to chat", async () => {
 
     await assert.rejects(
       () => plugin["command.execute.before"]({ command: "bridge", arguments: "", sessionID: "session-2" }),
-      /__OGB_COMMAND_HANDLED__/,
+      /__AGENTX_COMMAND_HANDLED__/,
     );
 
     assert.equal(prompts.length, 2);
-    assert.match(prompts[1].body.parts[0].text, /OpenCode Gemini Bridge \/bridge/);
+    assert.match(prompts[1].body.parts[0].text, /agentX Bridge \/bridge/);
     assert.match(prompts[1].body.parts[0].text, /"check"/);
     assert.doesNotMatch(prompts[1].body.parts[0].text, /"dashboard"/);
     const bridgeArgs = JSON.parse(prompts[1].body.parts[0].text.match(/RUNNER_ARGS=(\[[^\n]+\])/)?.[1] ?? "[]");
@@ -908,8 +937,8 @@ test("startup plugin runs once for a burst of startup events", async () => {
     const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
     assert.equal(status.state, "pass");
     assert.equal(status.failureCount, 0);
-    await waitFor(() => toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC OK")).length === 1);
-    assert.equal(toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC OK")).length, 1);
+    await waitFor(() => toasts.filter((toast) => JSON.stringify(toast).includes("agentX SYNC OK")).length === 1);
+    assert.equal(toasts.filter((toast) => JSON.stringify(toast).includes("agentX SYNC OK")).length, 1);
   } finally {
     if (previousDelay === undefined) delete process.env.OGB_STARTUP_DELAY_MS;
     else process.env.OGB_STARTUP_DELAY_MS = previousDelay;
@@ -979,8 +1008,8 @@ test("startup plugin records failure diagnostics and suppresses retries during b
     assert.equal(typeof status.nextRetryAfter, "string");
     assert.match(status.stderrTail, /startup exploded clearly/);
     assert.deepEqual(status.args.slice(-1), ["startup-sync"]);
-    await waitFor(() => toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC FALHOU")).length === 1);
-    assert.equal(toasts.filter((toast) => JSON.stringify(toast).includes("OGB SYNC FALHOU")).length, 1);
+    await waitFor(() => toasts.filter((toast) => JSON.stringify(toast).includes("agentX SYNC FAILED")).length === 1);
+    assert.equal(toasts.filter((toast) => JSON.stringify(toast).includes("agentX SYNC FAILED")).length, 1);
 
     const secondPlugin = await mod.default({ directory: projectRoot, worktree: projectRoot, client });
     await secondPlugin.event({ event: { type: "session.created" } });

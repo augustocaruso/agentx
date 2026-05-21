@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { applyEdits, modify, parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession, type BackupRecord, type BackupSession } from "./backup-policy.js";
+import { BINARY, DISPLAY } from "./brand.js";
 import { sha256Text } from "./file-hash.js";
 import { resolveProjectPaths } from "./paths.js";
 import type { ProfileWriteReason, ProfileWriteStatus, ProfileWriter } from "./profile-writer.js";
@@ -13,11 +14,12 @@ import { AGENTX_VERSION } from "./types.js";
 
 export { TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar-source.js";
 
-export const TUI_SIDEBAR_PLUGIN_PATH = ".opencode/tui-plugins/ogb-sidebar.js";
+export const TUI_SIDEBAR_PLUGIN_FILENAME = "ogb-sidebar.js";
+export const TUI_SIDEBAR_PLUGIN_PATH = `.opencode/tui-plugins/${TUI_SIDEBAR_PLUGIN_FILENAME}`;
 export const TUI_CONFIG_PATH = ".opencode/tui.jsonc";
-export const GLOBAL_TUI_SIDEBAR_PLUGIN_PATH = "tui-plugins/ogb-sidebar.js";
+export const GLOBAL_TUI_SIDEBAR_PLUGIN_PATH = `tui-plugins/${TUI_SIDEBAR_PLUGIN_FILENAME}`;
 export const GLOBAL_TUI_CONFIG_PATH = "tui.json";
-export const TUI_SIDEBAR_PLUGIN_SPEC = "./tui-plugins/ogb-sidebar.js";
+export const TUI_SIDEBAR_PLUGIN_SPEC = `./tui-plugins/${TUI_SIDEBAR_PLUGIN_FILENAME}`;
 const TUI_SYNC_METADATA = {
   kind: "tui" as const,
   projection: "opencode" as const,
@@ -58,16 +60,19 @@ function writeManagedText(options: {
   dryRun?: boolean;
   force?: boolean;
   backupSession: BackupSession;
+  displayName?: string;
+  managedContentMarkers?: readonly string[];
 }): TuiSidebarResult["plugin"] {
   const absPath = path.join(options.projectRoot, ...options.relPath.split("/"));
   const desiredHash = sha256Text(options.content);
+  const label = options.displayName ?? options.relPath;
 
   if (options.dryRun) {
     return {
       path: absPath,
       relPath: options.relPath,
       status: fs.existsSync(absPath) ? "unchanged" : "preview",
-      message: fs.existsSync(absPath) ? `Would leave existing ${options.relPath}` : `Would create ${options.relPath}`,
+      message: fs.existsSync(absPath) ? `Would leave existing ${label}` : `Would create ${label}`,
     };
   }
 
@@ -84,16 +89,19 @@ function writeManagedText(options: {
       path: absPath,
       relPath: options.relPath,
       status: "unchanged",
-      message: `${options.relPath} already installed`,
+      message: `${label} already installed`,
     };
   }
 
-  if (exists && !options.force && previousHash !== currentHash) {
+  const recognizedRuntimeFile = exists
+    && options.managedContentMarkers !== undefined
+    && options.managedContentMarkers.some((marker) => currentText.includes(marker));
+  if (exists && !options.force && previousHash !== currentHash && !recognizedRuntimeFile) {
     return {
       path: absPath,
       relPath: options.relPath,
       status: "conflict",
-      message: `${options.relPath} exists and is not managed by ogb; use --force to overwrite`,
+      message: `${label} exists and is not managed by ${DISPLAY}; use --force to overwrite`,
     };
   }
 
@@ -108,7 +116,7 @@ function writeManagedText(options: {
     relPath: options.relPath,
     status: exists ? "updated" : "created",
     backup,
-    message: `${exists ? "Updated" : "Created"} ${options.relPath}`,
+    message: `${exists ? "Updated" : "Created"} ${label}`,
   };
 }
 
@@ -367,8 +375,8 @@ export function checkTuiSidebarPluginSyntax(pluginPath?: string, source = TUI_SI
   let tempDir: string | undefined;
 
   if (!target) {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-sidebar-check-"));
-    target = path.join(tempDir, "ogb-sidebar.js");
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `${BINARY}-sidebar-check-`));
+    target = path.join(tempDir, `${BINARY}-sidebar.js`);
     fs.writeFileSync(target, source, "utf8");
   }
 
@@ -417,6 +425,8 @@ export function ensureTuiSidebar(options: { projectRoot?: string; homeDir?: stri
     dryRun: options.dryRun,
     force: options.force,
     backupSession,
+    displayName: `${DISPLAY} TUI sidebar plugin`,
+    managedContentMarkers: ["ogb:sidebar", "agentx:sidebar", "shouldRegisterOgbSidebar", "shouldRegisterAgentxSidebar"],
   });
   if (plugin.status === "conflict") warnings.push(plugin.message);
 

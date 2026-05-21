@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, render, useApp, useInput, type Instance } from "ink";
+import { BINARY, DISPLAY } from "../../brand.js";
 import { filterHelpCommands, formatHelpRunLine, helpActionsForCommand, type HelpAction, type HelpCommand } from "../../help-catalog.js";
 import { HELP_CATEGORY_COLORS } from "../../presentation/theme.js";
 
@@ -60,7 +61,7 @@ const HelpDetails = React.memo(function HelpDetails(props: { command: HelpComman
     Box,
     { flexDirection: "column", marginTop: 1 },
     props.title ? React.createElement(Text, { color: "gray" }, props.title) : null,
-    React.createElement(Text, { bold: true }, `ogb ${command.name}`),
+    React.createElement(Text, { bold: true }, `${BINARY} ${command.name}`),
     command.aliases?.length
       ? React.createElement(Text, { color: "gray" }, `Aliases: ${command.aliases.join(", ")}`)
       : null,
@@ -251,13 +252,13 @@ function HelpApp(props: { commands: HelpCommand[]; onLaunch: (selection: Interac
     { borderStyle: "round", borderColor: "gray", paddingX: 1, flexDirection: "column", width },
     narrow
       ? React.createElement(Box, { flexDirection: "column" },
-        React.createElement(Text, { bold: true, color: "green" }, "OGB command guide"),
+        React.createElement(Text, { bold: true, color: "green" }, `${DISPLAY} command guide`),
         React.createElement(Text, { color: "gray" }, controls),
       )
       : React.createElement(
         Box,
         { flexDirection: "row", justifyContent: "space-between" },
-        React.createElement(Text, { bold: true, color: "green" }, "OGB command guide"),
+        React.createElement(Text, { bold: true, color: "green" }, `${DISPLAY} command guide`),
         React.createElement(Text, { color: "gray" }, controls),
     ),
     detailMode

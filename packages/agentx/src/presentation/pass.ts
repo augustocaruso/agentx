@@ -1,4 +1,5 @@
 import path from "node:path";
+import { publicBrandText } from "../brand.js";
 import type { PassBlocker, PassReport, PassStep, PassSyncSummary } from "../pass.js";
 import { formatDuration, kvRow, sectionHeader, statusRow } from "./format.js";
 import { ICONS, INDENT, type Tone } from "./theme.js";
@@ -54,7 +55,7 @@ function friendlyBlockerMessage(item: PassBlocker): string {
   if (item.source === "security" && item.severity === "warn") return "Security check surfaced warnings.";
   if (item.source === "dashboard" && item.severity === "warn") return "Dashboard inherited warnings from earlier checks.";
   if (item.source === "patch" && item.severity === "warn") return "An agentX patch needs review.";
-  return item.message;
+  return publicBrandText(item.message);
 }
 
 export function formatPassReport(report: PassReport): string {
@@ -88,7 +89,7 @@ export function formatPassReport(report: PassReport): string {
     lines.push(sectionHeader("Needs Attention"));
     for (const item of report.blockers) {
       lines.push(statusRow(toneFromStep(item.severity), `${item.source}: ${friendlyBlockerMessage(item)}`));
-      lines.push(`${INDENT}${INDENT}fix: ${item.action}`);
+      lines.push(`${INDENT}${INDENT}fix: ${publicBrandText(item.action)}`);
     }
   } else {
     lines.push(sectionHeader("No pending fixes."));

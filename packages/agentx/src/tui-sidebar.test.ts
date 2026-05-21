@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { parse as parseJsonc } from "jsonc-parser";
+import { DISPLAY } from "./brand.js";
 import { readSyncState } from "./sync-state.js";
 import { ensureGlobalTuiSidebar, ensureTuiSidebar, GLOBAL_TUI_CONFIG_PATH, GLOBAL_TUI_SIDEBAR_PLUGIN_PATH, TUI_CONFIG_PATH, TUI_SIDEBAR_PLUGIN_PATH, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 
@@ -36,8 +37,8 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.match(plugin, /fileURLToPath\(import\.meta\.url\)/);
   assert.match(plugin, /GLOBAL_TUI_PLUGIN_PATH/);
   assert.match(plugin, /function staleProjectSidebarInstalled\(root\)/);
-  assert.match(plugin, /function shouldRegisterOgbSidebar\(root\)/);
-  assert.match(plugin, /if \(!shouldRegisterOgbSidebar\(root\)\) return;/);
+  assert.match(plugin, /function shouldRegisterAgentxSidebar\(root\)/);
+  assert.match(plugin, /if \(!shouldRegisterAgentxSidebar\(root\)\) return;/);
   assert.doesNotMatch(plugin, new RegExp("OGB_TUI_HIDE_" + "LSP"));
   assert.doesNotMatch(plugin, new RegExp("installHide" + "LspPatch"));
   assert.doesNotMatch(plugin, new RegExp("__ogbHidden" + "Lsp"));
@@ -199,6 +200,8 @@ test("ensureTuiSidebar refuses to overwrite manually changed plugin without forc
 
   const conflict = ensureTuiSidebar({ projectRoot, homeDir });
   assert.equal(conflict.plugin.status, "conflict");
+  assert.equal(conflict.plugin.message, `${DISPLAY} TUI sidebar plugin exists and is not managed by ${DISPLAY}; use --force to overwrite`);
+  assert.doesNotMatch(conflict.plugin.message, /\bogb\b|OGB|OpenCode Gemini Bridge/);
   assert.match(fs.readFileSync(pluginPath, "utf8"), /manual/);
 
   const forced = ensureTuiSidebar({ projectRoot, homeDir, force: true });
@@ -206,7 +209,21 @@ test("ensureTuiSidebar refuses to overwrite manually changed plugin without forc
   assert.ok(forced.plugin.backup);
   assert.ok(forced.plugin.backup.startsWith(path.join(homeDir, ".config", "agentx", "backups", "tui-sidebar")));
   assert.match(fs.readFileSync(forced.plugin.backup, "utf8"), /manual/);
-  assert.match(fs.readFileSync(pluginPath, "utf8"), /ogb:sidebar/);
+  assert.match(fs.readFileSync(pluginPath, "utf8"), /agentx:sidebar/);
+});
+
+test("ensureTuiSidebar overwrites legacy managed sidebar plugin without force", () => {
+  const projectRoot = tempProject();
+  const homeDir = tempProject();
+  const pluginPath = projectPath(projectRoot, TUI_SIDEBAR_PLUGIN_PATH);
+  fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
+  fs.writeFileSync(pluginPath, "export default { id: 'ogb:sidebar', tui: async () => {} }\n", "utf8");
+
+  const report = ensureTuiSidebar({ projectRoot, homeDir });
+
+  assert.equal(report.plugin.status, "updated");
+  assert.doesNotMatch(report.warnings.join("\n"), /not managed by/);
+  assert.match(fs.readFileSync(pluginPath, "utf8"), /agentx:sidebar/);
 });
 
 test("ensureGlobalTuiSidebar installs global TUI plugin and preserves config settings", () => {

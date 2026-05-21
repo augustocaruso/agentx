@@ -52,6 +52,8 @@ test("mac installer remains a darwin wrapper around the shared POSIX installer",
   assert.match(text, /install-posix\.sh/);
   assert.match(text, /--platform darwin/);
   assert.match(script("bootstrap-mac.sh"), /run_installer/);
+  assert.match(script("bootstrap-mac.sh"), /cleanup_legacy/);
+  assert.match(script("bootstrap-mac.sh"), /--keep-legacy/);
   assert.match(script("bootstrap-mac.sh"), /\$\{#INSTALLER_ARGS\[@\]\}/);
 });
 
@@ -68,6 +70,8 @@ test("linux public scripts wrap the shared POSIX implementation", () => {
   assert.match(script("bootstrap-linux.sh"), /legacy POSIX installer/);
   assert.match(script("bootstrap-linux.sh"), /agentx-pack\.zip/);
   assert.match(script("bootstrap-linux.sh"), /run_installer/);
+  assert.match(script("bootstrap-linux.sh"), /cleanup_legacy/);
+  assert.match(script("bootstrap-linux.sh"), /--keep-legacy/);
   assert.match(script("bootstrap-linux.sh"), /\$\{#INSTALLER_ARGS_PREFIX\[@\]\}/);
   assert.match(script("bootstrap-linux.sh"), /\$\{#INSTALLER_ARGS\[@\]\}/);
   assert.match(script("upgrade-linux.sh"), /install-linux\.sh/);
@@ -89,6 +93,8 @@ test("linux POSIX installer persists env without macOS zsh config", () => {
   assert.match(text, /install_stable_cli/);
   assert.match(text, /Installing \$BINARY_NAME into a stable local folder/);
   assert.match(text, /rm -f "\$PRIMARY_BIN"/);
+  assert.match(text, /rm -f "\$LEGACY_BIN"/);
+  assert.match(text, /WRITE_LEGACY_ALIAS/);
   assert.match(text, /exec node/);
   assert.match(text, /Installed \$BINARY_NAME at \$PRIMARY_BIN, but it did not run/);
   const linuxTargets = text.match(/linux_profile_targets\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
@@ -136,6 +142,7 @@ test("windows installer contract delegates the ritual to agentx install", () => 
   assert.match(text, /%USERPROFILE%\\\.ai\\opencode-pack\\\$StableCliDirName\\dist\\cli\.js/);
   assert.match(text, /\$PrimaryBin = Join-Path \$Prefix "\$BinaryName\.cmd"/);
   assert.match(text, /\$LegacyBin = Join-Path \$Prefix "\$LegacyBinaryName\.cmd"/);
+  assert.match(text, /if \(\$KeepLegacy -and \$LegacyBinaryName -ne \$BinaryName\)/);
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-check/);

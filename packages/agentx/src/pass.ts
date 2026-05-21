@@ -121,15 +121,15 @@ export interface PassReport {
 }
 
 function actionForWarning(warning: string): string {
-  if (/^Hook needs review:/.test(warning)) return "Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` ja sincronizam automaticamente; para eventos sem equivalente OpenCode, revise o recurso e use hash legado so se quiser silenciar a auditoria.";
-  if (/Duplicate name/i.test(warning)) return "Rode `agentx check --json` ou abra `.opencode/generated/agentx-inventory.json` para ver os paths duplicados; mantenha uma copia.";
-  if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Ative o fallback gerado ou desative `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc`.";
-  if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Instale `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, rode `agentx sync` e reinicie o OpenCode.";
-  if (/opencode-auto-fallback/i.test(warning)) return "Revise `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc` e o plugin global do OpenCode.";
-  if (/Run agentx sync/i.test(warning)) return "O `agentx check` ja tentou `agentx sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
-  if (/Model resolution warning/i.test(warning)) return "Revise os modelos em `.opencode/agentx.config.jsonc` e compare com `opencode models`.";
-  if (/MCP command warning/i.test(warning)) return "Instale o comando do MCP ou remova/desabilite esse MCP na configuracao de origem.";
-  return "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `agentx check --force` depois de revisar.";
+  if (/^Hook needs review:/.test(warning)) return "Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` already sync automatically; for events without an OpenCode equivalent, review the resource and keep the legacy hash only if you want to silence the audit.";
+  if (/Duplicate name/i.test(warning)) return "Run `agentx check --json` or open `.opencode/generated/agentx-inventory.json` to inspect duplicate paths; keep one copy.";
+  if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Enable the generated fallback config or disable `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc`.";
+  if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Install `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, run `agentx sync`, then restart OpenCode.";
+  if (/opencode-auto-fallback/i.test(warning)) return "Review `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc` and the global OpenCode plugin.";
+  if (/Run agentx sync/i.test(warning)) return "`agentx check` already tried `agentx sync`; if this persists, review managed-file conflicts and rerun with `--force` only if safe.";
+  if (/Model resolution warning/i.test(warning)) return "Review the models in `.opencode/agentx.config.jsonc` and compare them with `opencode models`.";
+  if (/MCP command warning/i.test(warning)) return "Install the MCP command or remove/disable that MCP in the source configuration.";
+  return `Read the doctor warning; if this is a ${DISPLAY}-managed resource, rerun \`agentx check --force\` after reviewing it.`;
 }
 
 function compactLine(value: string | undefined, maxChars = 180): string | undefined {
@@ -174,20 +174,20 @@ function extensionUpdateMessage(report: ExtensionCommandReport): string {
 }
 
 function extensionUpdateAction(): string {
-  return "Rode `agentx update-extensions --auto-consent` para ver o erro do Gemini CLI; depois rode `agentx check` novamente.";
+  return "Run `agentx update-extensions --auto-consent` to see the Gemini CLI error, then run `agentx check` again.";
 }
 
 function validationAction(options: PassOptions): string {
   const command = options.windows ? "agentx validate --windows --plain" : "agentx validate --plain";
-  return `Rode \`${command}\` para ver os checks detalhados e confirme se o problema e arquivo gerenciado, PATH/comando nativo ou config do OpenCode.`;
+  return `Run \`${command}\` to see detailed checks and confirm whether the issue is a managed file, PATH/native command, or OpenCode config.`;
 }
 
 function securityAction(): string {
-  return "Rode `agentx security-check --plain`, revise o finding destacado e corrija antes de confiar no perfil gerado.";
+  return "Run `agentx security-check --plain`, review the highlighted finding, and fix it before trusting the generated profile.";
 }
 
 function dashboardAction(): string {
-  return "Rode `agentx dashboard --plain` e abra o arquivo Markdown do dashboard para ver o estado persistido completo.";
+  return "Run `agentx dashboard --plain` and open the dashboard Markdown file to inspect the persisted state.";
 }
 
 function needsGlobalTuiRepair(warnings: readonly string[]): boolean {
@@ -205,7 +205,7 @@ function checkSetupWarnings(report: SetupOpenCodeReport | SetupUxReport): string
 }
 
 function patchAction(result: { nextAction?: string; id: string }): string {
-  return result.nextAction ?? `Rode \`agentx check --plain\` para ver detalhes do patch ${result.id}; se o patch mexe em arquivo gerenciado, rode novamente com \`--force\` so depois de revisar.`;
+  return result.nextAction ?? `Run \`agentx check --plain\` for details about patch ${result.id}; if the patch touches a managed file, rerun with \`--force\` only after reviewing it.`;
 }
 
 function blocker(source: PassBlocker["source"], severity: PassBlocker["severity"], message: string, action: string): PassBlocker {
@@ -377,7 +377,7 @@ export function runPass(options: PassOptions = {}): PassReport {
           : "Startup sync wiring is present.",
     );
     automated.push(paths.homeMode ? "setup-ux" : "setup-opencode");
-    for (const warning of setupWarnings) blockers.push(blocker("setup", "warn", warning, "Revise conflitos do setup; rode `agentx check --force` se quiser sobrescrever arquivos gerenciados."));
+    for (const warning of setupWarnings) blockers.push(blocker("setup", "warn", warning, "Review setup conflicts; rerun `agentx check --force` only if you want to overwrite managed files."));
     recordTiming(paths.homeMode ? "setup-ux" : "setup-opencode", setupStartedAt);
   }
 
@@ -410,11 +410,11 @@ export function runPass(options: PassOptions = {}): PassReport {
         blockers.push(blocker(
           "patch",
           result.required ? "fail" : "warn",
-          `Patch OGB encontrou um problema em ${result.id}: ${result.message}`,
+          `${DISPLAY} patch found a problem in ${result.id}: ${result.message}`,
           patchAction(result),
         ));
       } else if (result.status === "warning") {
-        blockers.push(blocker("patch", "warn", `Patch OGB pediu atencao em ${result.id}: ${result.message}`, patchAction(result)));
+        blockers.push(blocker("patch", "warn", `${DISPLAY} patch needs attention in ${result.id}: ${result.message}`, patchAction(result)));
       }
     }
   }
@@ -496,7 +496,7 @@ export function runPass(options: PassOptions = {}): PassReport {
     );
     if (globalSync) automated.push("global-sync");
     automated.push("sync");
-    for (const warning of syncWarnings) blockers.push(blocker("sync", "warn", warning, "Revise conflitos do sync; rode `agentx check --force` se quiser sobrescrever arquivos gerenciados."));
+    for (const warning of syncWarnings) blockers.push(blocker("sync", "warn", warning, "Review sync conflicts; rerun `agentx check --force` only if you want to overwrite managed files."));
     runPatchPhase("post-sync");
   }
 
@@ -532,8 +532,8 @@ export function runPass(options: PassOptions = {}): PassReport {
       });
       automated.push("repair-global-startup-plugin");
       globalStartupRepaired = repair.plugin.status === "created" || repair.plugin.status === "updated";
-      if (!repair.pluginCheck.ok) blockers.push(blocker("setup", "warn", repair.pluginCheck.message, "Rode `ogb setup-ux` para reinstalar o plugin global de startup."));
-      for (const warning of repair.warnings) blockers.push(blocker("setup", "warn", warning, "Rode `ogb setup-ux` para revisar o plugin global de startup."));
+      if (!repair.pluginCheck.ok) blockers.push(blocker("setup", "warn", repair.pluginCheck.message, "Run `agentx setup-ux` to reinstall the global startup plugin."));
+      for (const warning of repair.warnings) blockers.push(blocker("setup", "warn", warning, "Run `agentx setup-ux` to review the global startup plugin."));
     }
     if (shouldRepairGlobalTui) {
       const repair = ensureGlobalTuiSidebar({
@@ -541,8 +541,8 @@ export function runPass(options: PassOptions = {}): PassReport {
       });
       automated.push("repair-global-tui-sidebar");
       globalTuiRepaired = repair.plugin.status === "created" || repair.plugin.status === "updated";
-      if (!repair.pluginCheck.ok) blockers.push(blocker("setup", "warn", repair.pluginCheck.message, "Rode `ogb setup-ux` para reinstalar o plugin TUI global."));
-      for (const warning of repair.warnings) blockers.push(blocker("setup", "warn", warning, "Rode `ogb setup-ux` para revisar o perfil TUI global."));
+      if (!repair.pluginCheck.ok) blockers.push(blocker("setup", "warn", repair.pluginCheck.message, "Run `agentx setup-ux` to reinstall the global TUI plugin."));
+      for (const warning of repair.warnings) blockers.push(blocker("setup", "warn", warning, "Run `agentx setup-ux` to review the global TUI profile."));
     }
     doctor = runDoctor({ projectRoot: paths.projectRoot, homeDir: paths.homeDir, silent: true });
     emitCheckProgress(
@@ -654,16 +654,16 @@ export function runPass(options: PassOptions = {}): PassReport {
 
   runPatchPhase("post-check");
 
-  for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Corrija o erro indicado pelo doctor e rode `agentx check` novamente."));
+  for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Fix the doctor error and run `agentx check` again."));
   for (const warning of doctor.warnings) blockers.push(blocker("doctor", "warn", warning, actionForWarning(warning)));
-  if (globalStartupRepaired) blockers.push(blocker("setup", "warn", `Global ${DISPLAY} startup plugin was repaired automatically.`, "Reinicie o OpenCode para carregar o refresh automatico do usage."));
-  if (globalTuiRepaired) blockers.push(blocker("setup", "warn", `Global ${DISPLAY} TUI sidebar plugin was repaired automatically.`, "Reinicie o OpenCode para carregar a TUI nova."));
-  if (validation?.outcome === "fail") blockers.push(blocker("validation", "fail", `Validation falhou: ${firstValidationIssue(validation, "fail") ?? "um check obrigatorio falhou."}`, validationAction(options)));
-  if (validation?.outcome === "warn") blockers.push(blocker("validation", "warn", `Validation passou com avisos: ${firstValidationIssue(validation, "warn") ?? "ha checks que precisam de revisao."}`, validationAction(options)));
-  if (security?.outcome === "fail") blockers.push(blocker("security", "fail", `Security-check falhou: ${firstSecurityIssue(security, "fail") ?? "um guardrail obrigatorio falhou."}`, securityAction()));
-  if (security?.outcome === "warn") blockers.push(blocker("security", "warn", `Security-check passou com avisos: ${firstSecurityIssue(security, "warn") ?? "ha guardrails que precisam de revisao."}`, securityAction()));
-  if (dashboard?.outcome === "fail") blockers.push(blocker("dashboard", "fail", `Dashboard final falhou: ${firstDashboardIssue(dashboard, "fail") ?? "o resumo final registrou erro."}`, dashboardAction()));
-  if (dashboard?.outcome === "warn") blockers.push(blocker("dashboard", "warn", `Dashboard final passou com avisos: ${firstDashboardIssue(dashboard, "warn") ?? "o resumo final registrou avisos."}`, dashboardAction()));
+  if (globalStartupRepaired) blockers.push(blocker("setup", "warn", `Global ${DISPLAY} startup plugin was repaired automatically.`, "Restart OpenCode to load the automatic usage refresh."));
+  if (globalTuiRepaired) blockers.push(blocker("setup", "warn", `Global ${DISPLAY} TUI sidebar plugin was repaired automatically.`, "Restart OpenCode to load the new TUI."));
+  if (validation?.outcome === "fail") blockers.push(blocker("validation", "fail", `Validation failed: ${firstValidationIssue(validation, "fail") ?? "a required check failed."}`, validationAction(options)));
+  if (validation?.outcome === "warn") blockers.push(blocker("validation", "warn", `Validation passed with warnings: ${firstValidationIssue(validation, "warn") ?? "some checks need review."}`, validationAction(options)));
+  if (security?.outcome === "fail") blockers.push(blocker("security", "fail", `Security check failed: ${firstSecurityIssue(security, "fail") ?? "a required guardrail failed."}`, securityAction()));
+  if (security?.outcome === "warn") blockers.push(blocker("security", "warn", `Security check passed with warnings: ${firstSecurityIssue(security, "warn") ?? "some guardrails need review."}`, securityAction()));
+  if (dashboard?.outcome === "fail") blockers.push(blocker("dashboard", "fail", `Final dashboard failed: ${firstDashboardIssue(dashboard, "fail") ?? "the final summary recorded an error."}`, dashboardAction()));
+  if (dashboard?.outcome === "warn") blockers.push(blocker("dashboard", "warn", `Final dashboard passed with warnings: ${firstDashboardIssue(dashboard, "warn") ?? "the final summary recorded warnings."}`, dashboardAction()));
 
   const outcome = blockers.some((item) => item.severity === "fail")
     ? "fail"

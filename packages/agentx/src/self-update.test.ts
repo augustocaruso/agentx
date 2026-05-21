@@ -166,7 +166,7 @@ test("runSelfUpdate forwards post-update check progress in canonical order", () 
       timestamp: "2026-05-06T00:00:00.000Z",
       type: "ritual.step",
       stepId: "patches-pre-sync",
-      label: "Apply OGB patches before sync.",
+      label: "Apply agentX patches before sync.",
       status: "pass",
       message: "1 applied",
     },
@@ -368,7 +368,7 @@ test("runSelfUpdate persists detailed update diagnostics when bootstrap fails", 
       args: spec.args ?? [],
       status: 1,
       signal: null,
-      stdout: "Downloading OGB from release pack...",
+      stdout: "Downloading agentX from release pack...",
       stderr: "npm is not recognized as a command",
     }),
   });
@@ -380,8 +380,8 @@ test("runSelfUpdate persists detailed update diagnostics when bootstrap fails", 
   assert.equal(saved.selfUpdate.status, "error");
   assert.equal(saved.selfUpdate.stderrTail, "npm is not recognized as a command");
   assert.match(saved.message, /Bootstrap exited with code 1/);
-  assert.match(saved.selfUpdate.stdoutTail, /Downloading OGB/);
-  assert.equal(saved.ogbVersion, AGENTX_VERSION);
+  assert.match(saved.selfUpdate.stdoutTail, /Downloading agentX/);
+  assert.equal(saved.agentxVersion, AGENTX_VERSION);
   assert.equal(typeof saved.finishedAt, "string");
 });
 
@@ -406,7 +406,7 @@ test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   assert.equal(saved.status, "updated");
   assert.equal(saved.latestTag, "v0.0.53");
   assert.equal(saved.restartRequired, true);
-  assert.equal(saved.ogbVersion, AGENTX_VERSION);
+  assert.equal(saved.agentxVersion, AGENTX_VERSION);
   assert.equal(typeof saved.generatedAt, "string");
   assert.match(saved.message, /full bridge check/);
   assert.doesNotMatch(saved.message, /reset --yes/);
@@ -452,7 +452,7 @@ test("checkOgbUpdate reports available releases and writes status", async () => 
   assert.equal(saved.status, "available");
   assert.equal(saved.checkedAt, "2026-05-06T12:00:00.000Z");
   assert.equal(typeof saved.generatedAt, "string");
-  assert.equal(saved.ogbVersion, AGENTX_VERSION);
+  assert.equal(saved.agentxVersion, AGENTX_VERSION);
 });
 
 test("checkOgbUpdate reports current when latest tag matches current version", async () => {

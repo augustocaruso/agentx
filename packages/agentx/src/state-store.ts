@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { BINARY } from "./brand.js";
 import { resolveProjectPaths } from "./paths.js";
 import { AGENTX_VERSION } from "./types.js";
 
@@ -42,8 +43,8 @@ const REPORT_FILES: Record<StateReportKind, keyof ReturnType<typeof resolveProje
 
 export function stateRecordPath(kind: StateReportKind, options: StateStoreOptions = {}): string {
   const paths = resolveProjectPaths(options.projectRoot, options.homeDir);
-  if (kind === "install") return path.join(paths.generatedDir, "ogb-install.json");
-  if (kind === "patches") return path.join(paths.generatedDir, "ogb-patches.json");
+  if (kind === "install") return path.join(paths.generatedDir, `${BINARY}-install.json`);
+  if (kind === "patches") return path.join(paths.generatedDir, `${BINARY}-patches.json`);
   const key = REPORT_FILES[kind];
   return String(paths[key as keyof typeof paths]);
 }
@@ -58,7 +59,8 @@ function parseJson(filePath: string): Record<string, unknown> | undefined {
 
 function hasModernMarker(data: Record<string, unknown> | undefined): boolean {
   return Boolean(data && (
-    typeof data.ogbVersion === "string"
+    typeof data.agentxVersion === "string"
+    || typeof data.ogbVersion === "string"
     || typeof data.generatedAt === "string"
     || typeof data.checkedAt === "string"
     || typeof data.finishedAt === "string"
@@ -85,7 +87,7 @@ export function writeStateRecord(kind: StateReportKind, data: Record<string, unk
   const filePath = stateRecordPath(kind, options);
   const stamped = {
     generatedAt: (options.now ?? new Date()).toISOString(),
-    ogbVersion: AGENTX_VERSION,
+    agentxVersion: AGENTX_VERSION,
     ...data,
   };
   fs.mkdirSync(path.dirname(filePath), { recursive: true });

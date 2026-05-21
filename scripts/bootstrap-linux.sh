@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: bootstrap-linux.sh [--repo OWNER/REPO] [--version vX.Y.Z|latest] [installer args...]
+Usage: bootstrap-linux.sh [--repo OWNER/REPO] [--version vX.Y.Z|latest] [--keep-legacy] [installer args...]
 
 Downloads the $PRODUCT_NAME release pack from GitHub and runs the
 bundled Linux installer.
@@ -19,10 +19,14 @@ DEFAULT_REPO="${AGENTX_GITHUB_REPO:-augustocaruso/agentx}"
 RELEASE_ASSET="${AGENTX_RELEASE_ASSET:-agentx-pack.zip}"
 TEMP_PREFIX="${AGENTX_TEMP_PREFIX:-agentx-bootstrap}"
 ZIP_NAME="${AGENTX_RELEASE_ZIP_NAME:-agentx.zip}"
+LEGACY_BINARY_NAME="${AGENTX_LEGACY_BINARY:-ogb}"
+LEGACY_PACKAGE_NAME="${AGENTX_LEGACY_PACKAGE:-opencode-gemini-bridge}"
+LEGACY_STABLE_CLI_DIR_NAME="${AGENTX_LEGACY_STABLE_CLI_DIR:-opencode-gemini-bridge-cli}"
 REPO="${OGB_GITHUB_REPO:-$DEFAULT_REPO}"
 VERSION="${OGB_RELEASE_VERSION:-latest}"
 INSTALLER_ARGS=()
 INSTALLER_ARGS_PREFIX=()
+KEEP_LEGACY=0
 
 run_installer() {
   local args=()
@@ -38,6 +42,35 @@ run_installer() {
   exec bash "$INSTALLER"
 }
 
+cleanup_legacy() {
+  if [[ "$KEEP_LEGACY" -eq 1 ]]; then
+    return
+  fi
+
+  local legacy_bin
+  local legacy_dir
+  local found=0
+  legacy_bin="$(command -v "$LEGACY_BINARY_NAME" 2>/dev/null || true)"
+  legacy_dir="$HOME/.ai/opencode-pack/$LEGACY_STABLE_CLI_DIR_NAME"
+
+  if [[ -n "$legacy_bin" || -d "$legacy_dir" ]]; then
+    found=1
+    echo "Detected legacy $LEGACY_BINARY_NAME install - removing before installing $PRODUCT_NAME."
+  fi
+
+  if [[ -n "$legacy_bin" && -e "$legacy_bin" ]]; then
+    rm -f "$legacy_bin" 2>/dev/null || true
+  fi
+  rm -rf "$legacy_dir" 2>/dev/null || true
+  if command -v npm >/dev/null 2>&1; then
+    npm uninstall -g "$LEGACY_PACKAGE_NAME" >/dev/null 2>&1 || true
+  fi
+
+  if [[ "$found" -eq 1 ]]; then
+    export AGENTX_WRITE_LEGACY_ALIAS=0
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)
@@ -47,6 +80,11 @@ while [[ $# -gt 0 ]]; do
     --version)
       VERSION="$2"
       shift 2
+      ;;
+    --keep-legacy)
+      KEEP_LEGACY=1
+      INSTALLER_ARGS+=("--keep-legacy")
+      shift
       ;;
     -h|--help)
       usage
@@ -107,4 +145,5 @@ if [[ -z "$INSTALLER" ]]; then
 fi
 
 chmod +x "$INSTALLER"
+cleanup_legacy
 run_installer

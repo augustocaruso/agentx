@@ -9,13 +9,14 @@ import { runPass, type PassReport } from "./pass.js";
 import { formatPassReport } from "./presentation/pass.js";
 import type { OgbPatch } from "./patches.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
-import { STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
+import { STARTUP_SYNC_PLUGIN_PATH, STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
 import { globalStartupPluginSpec } from "./setup-ux.js";
 import { syncToOpenCode } from "./sync.js";
-import { TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
+import { GLOBAL_TUI_SIDEBAR_PLUGIN_PATH, TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
+import { AGENTX_VERSION } from "./types.js";
 
 function tempRoot(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-pass-"));
+  return fs.mkdtempSync(path.join(os.tmpdir(), "agentx-pass-"));
 }
 
 function writeFakeGemini(root: string, content: string): string {
@@ -170,11 +171,49 @@ test("runPass emits check timing with non-negative durations", () => {
   process.exitCode = oldExitCode;
 });
 
+test("plain check report does not leak the legacy brand in public blocker copy", () => {
+  const projectRoot = tempRoot();
+  const report: PassReport = {
+    version: AGENTX_VERSION,
+    projectRoot,
+    outcome: "warn",
+    plan: buildInstallerPlan({
+      intent: "check",
+      projectRoot,
+      homeDir: projectRoot,
+    }),
+    automated: [],
+    steps: [],
+    acceptedHooks: [],
+    blockers: [
+      {
+        source: "setup",
+        severity: "warn",
+        message: "opencode.jsonc exists and is not managed by ogb; leaving it unchanged",
+        action: "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `agentx check --force` depois de revisar.",
+      },
+    ],
+    doctor: {
+      warnings: 1,
+      errors: 0,
+    },
+    files: {
+      pass: path.join(projectRoot, ".opencode", "generated", "agentx-pass.json"),
+      doctor: path.join(projectRoot, ".opencode", "generated", "agentx-doctor.json"),
+      dashboard: path.join(projectRoot, ".opencode", "generated", "agentx-dashboard.json"),
+    },
+  };
+  const output = formatPassReport(report);
+
+  assert.doesNotMatch(output, /\bogb\b|OGB|OpenCode Gemini Bridge/);
+  assert.match(output, /agentX/);
+});
+
 test("runPass repairs stale global TUI sidebar without install force", () => {
   const homeDir = tempRoot();
   const oldExitCode = process.exitCode;
   const configDir = path.join(homeDir, ".config", "opencode");
-  const pluginPath = path.join(configDir, "tui-plugins", "ogb-sidebar.js");
+  const pluginPath = path.join(configDir, ...GLOBAL_TUI_SIDEBAR_PLUGIN_PATH.split("/"));
   fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
   fs.writeFileSync(path.join(configDir, "tui.json"), JSON.stringify({
     plugin: [TUI_SIDEBAR_PLUGIN_SPEC],
@@ -198,7 +237,7 @@ test("runPass repairs stale global TUI sidebar without install force", () => {
   assert.equal(report.automated.includes("repair-global-tui-sidebar"), true);
   assert.equal(report.blockers.some((item) =>
     item.message.includes("repaired automatically")
-    && item.action.includes("Reinicie o OpenCode")
+    && item.action.includes("Restart OpenCode")
   ), true);
   assert.equal(doctor.warnings.some((warning) => warning.includes("TUI sidebar plugin is stale")), false);
   process.exitCode = oldExitCode;
@@ -208,7 +247,7 @@ test("runPass repairs stale global startup plugin without install force", () => 
   const homeDir = tempRoot();
   const oldExitCode = process.exitCode;
   const configDir = path.join(homeDir, ".config", "opencode");
-  const pluginPath = path.join(configDir, "plugins", "ogb-startup-sync.js");
+  const pluginPath = path.join(configDir, ...STARTUP_SYNC_PLUGIN_PATH.replace(/^\.opencode\//, "").split("/"));
   fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
   fs.writeFileSync(path.join(configDir, "opencode.json"), JSON.stringify({
     plugin: [globalStartupPluginSpec(pluginPath)],
@@ -233,7 +272,7 @@ test("runPass repairs stale global startup plugin without install force", () => 
   assert.equal(report.automated.includes("repair-global-startup-plugin"), true);
   assert.equal(report.blockers.some((item) =>
     item.message.includes("startup plugin was repaired automatically")
-    && item.action.includes("Reinicie o OpenCode")
+    && item.action.includes("Restart OpenCode")
   ), true);
   assert.equal(doctor.warnings.some((warning) => warning.includes("startup plugin is stale")), false);
   process.exitCode = oldExitCode;
@@ -259,7 +298,7 @@ test("runPass installs the global OpenCode profile when checking home mode", () 
   const configDir = path.join(homeDir, ".config", "opencode");
   const configPath = path.join(configDir, "opencode.json");
   const yoloPath = path.join(configDir, "agents", "YOLO.md");
-  const startupPluginPath = path.join(configDir, "plugins", "ogb-startup-sync.js");
+  const startupPluginPath = path.join(configDir, ...STARTUP_SYNC_PLUGIN_PATH.replace(/^\.opencode\//, "").split("/"));
   const startupConfigPath = path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json");
 
   assert.equal(report.automated.includes("setup-ux"), true);
@@ -334,7 +373,7 @@ test("runPass carries the first validation failure into blocker copy and next ac
   const validationEvent = events.find((event) => event.stepId === "validate" && event.status === "fail");
   assert.equal(report.outcome, "fail");
   assert.ok(validationBlocker);
-  assert.match(validationBlocker.message, /Validation falhou: .+:/);
+  assert.match(validationBlocker.message, /Validation failed: .+:/);
   assert.match(validationBlocker.action, /agentx validate --plain/);
   assert.match(validationEvent?.message ?? "", /:/);
   process.exitCode = oldExitCode;

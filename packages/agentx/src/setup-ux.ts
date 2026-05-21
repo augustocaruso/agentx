@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
-import { DISPLAY } from "./brand.js";
+import { BINARY, DISPLAY } from "./brand.js";
 import { resolveCommand } from "./command-resolution.js";
 import { readLocalRole } from "./local-role.js";
 import { normalizeRuntimeOptions, type OgbConfig } from "./ogb-config.js";
@@ -14,7 +14,7 @@ import { createProfileWriter, type ProfileWriteReason, type ProfileWriteStatus, 
 import { checkPluginSyntax, STARTUP_SYNC_PLUGIN_SOURCE, startupConfigSource } from "./setup-opencode.js";
 import { recoverStaleStartupStatus } from "./startup-status.js";
 import type { ManagedFileKind, ManagedProjection } from "./sync-state.js";
-import { ensureGlobalTuiSidebar, TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar.js";
+import { ensureGlobalTuiSidebar, TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 import { AGENTX_VERSION } from "./types.js";
 import { UX_PROFILE_PRESET } from "./ux-profile.generated.js";
 import { clearWindowsReadOnlyDirectoryAttribute } from "./windows-attributes.js";
@@ -25,10 +25,11 @@ export const OGB_UX_PLUGINS = OGB_UX_SAFE_PLUGINS;
 export const OGB_TUI_RUNTIME_DEPENDENCIES = { ...UX_PROFILE_PRESET.tuiRuntimeDependencies };
 export const REMOVED_GLOBAL_UX_COMMANDS = [...UX_PROFILE_PRESET.removedGlobalCommands];
 const UX_PROFILE_COMMANDS: Record<string, string> = UX_PROFILE_PRESET.files.commands;
+const GLOBAL_STARTUP_PLUGIN_FILENAME = "ogb-startup-sync.js";
 export const LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC = "file:plugins/ogb-startup-sync.js";
 
 export function globalStartupPluginSpec(pluginPath?: string): string {
-  const target = pluginPath ?? path.join(os.homedir(), ".config", "opencode", "plugins", "ogb-startup-sync.js");
+  const target = pluginPath ?? path.join(os.homedir(), ".config", "opencode", "plugins", GLOBAL_STARTUP_PLUGIN_FILENAME);
   return pathToFileURL(path.resolve(target)).href;
 }
 
@@ -331,9 +332,9 @@ function fallbackConfigFromProfile(config: OgbConfig): Record<string, unknown> {
   return {
     $schema: "https://raw.githubusercontent.com/HyeokjaeLee/opencode-auto-fallback/main/docs/fallback.schema.json",
     _generated: {
-      tool: "ogb",
+      tool: BINARY,
       version: AGENTX_VERSION,
-      warning: "Generated from the OGB UX profile. Project sync may refine it from local Gemini extension agents.",
+      warning: `Generated from the ${DISPLAY} UX profile. Project sync may refine it from local Gemini extension agents.`,
     },
     enabled: fallback.enabled === true,
     defaultFallback: (fallback.defaultFallback ?? [])
@@ -546,16 +547,16 @@ function pathWithRuntimeToken(value: string, adapter: PlatformAdapter): string {
 
 function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptions, "platform" | "env">): { command: string; baseArgs: string[] } {
   const crossPlatformResolution = options.platform !== undefined && options.platform !== process.platform;
-  const ogbCommand = resolveCommand("ogb", {
+  const agentxCommand = resolveCommand(BINARY, {
     homeDir: adapter.homeDir,
     platform: adapter.platform,
     env: adapter.env,
     includeLookup: crossPlatformResolution ? false : undefined,
     includeNpmPrefix: crossPlatformResolution ? false : undefined,
   });
-  if (ogbCommand) {
+  if (agentxCommand) {
     return {
-      command: pathWithRuntimeToken(ogbCommand, adapter),
+      command: pathWithRuntimeToken(agentxCommand, adapter),
       baseArgs: ["--project", pathWithRuntimeToken(adapter.homeDir, adapter)],
     };
   }
@@ -576,7 +577,7 @@ function startupCommandPlan(adapter: PlatformAdapter, options: Pick<SetupUxOptio
   }
 
   return {
-    command: "ogb",
+    command: BINARY,
     baseArgs: ["--project", pathWithRuntimeToken(adapter.homeDir, adapter)],
   };
 }
@@ -651,7 +652,7 @@ export function ensureGlobalStartupPlugin(options: {
     pathApi: adapter.pathApi,
   });
   const startupCommand = startupCommandPlan(adapter, options);
-  const pluginPath = adapter.join(root, "plugins", "ogb-startup-sync.js");
+  const pluginPath = adapter.join(root, "plugins", GLOBAL_STARTUP_PLUGIN_FILENAME);
   const configPath = adapter.join(adapter.generatedDir, "agentx-startup-sync.json");
   const source = ogbStartupPluginSource();
   const plugin = profileWriter.writeText({
@@ -705,7 +706,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const agentsDir = adapter.join(root, "agents");
   const dcpConfigPath = adapter.join(root, "dcp.jsonc");
   const fallbackConfigPath = adapter.join(root, "plugins", "fallback.json");
-  const globalStartupPluginPath = adapter.join(root, "plugins", "ogb-startup-sync.js");
+  const globalStartupPluginPath = adapter.join(root, "plugins", GLOBAL_STARTUP_PLUGIN_FILENAME);
   const globalStartupConfigPath = adapter.join(adapter.generatedDir, "agentx-startup-sync.json");
   const globalGeneratedDir = adapter.pathApi.dirname(globalStartupConfigPath);
   const agentxConfigPath = projectRoot
@@ -757,13 +758,13 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const baseConfig = options.resetGlobal ? {} : hasCurrentConfig ? currentConfig : legacyConfig;
 
   if (hasStaleWebsearchCitedConfig(currentConfig) || hasStaleWebsearchCitedConfig(legacyConfig)) {
-    warnings.push("opencode-websearch-cited foi desativado porque sobrescreve o OAuth de OpenAI/Google no OpenCode atual.");
+    warnings.push("opencode-websearch-cited was disabled because it overwrites OpenAI/Google OAuth in the current OpenCode.");
   }
   if (hasDisabledUxPluginConfig(legacyConfig)) {
-    warnings.push(`${legacyConfigPath} contem plugin(s) OGB desativados; a config global atual fica em ${configPath}.`);
+    warnings.push(`${legacyConfigPath} contains disabled ${DISPLAY} plugin(s); the current global config is ${configPath}.`);
   }
   if (hasLegacyGlobalStartupPluginConfig(currentConfig) || hasLegacyGlobalStartupPluginConfig(legacyConfig)) {
-    warnings.push("A config global continha o plugin OGB antigo em file:plugins/ogb-startup-sync.js; setup-ux vai trocar pela URL local absoluta.");
+    warnings.push(`Global config referenced the old startup plugin; setup-ux will replace it with the current ${DISPLAY} plugin.`);
   }
   const repairedRoot = profileWriter.ensureDirectory(root, { force: true });
   if (repairedRoot) writes.push(repairedRoot);
@@ -834,7 +835,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
       dryRun: options.dryRun,
       profileWriter,
       pluginSource: tuiSidebarPluginSourceText,
-      configDefaults: UX_PROFILE_PRESET.tuiConfig,
+      configDefaults: { ...UX_PROFILE_PRESET.tuiConfig, plugin: [TUI_SIDEBAR_PLUGIN_SPEC] },
     });
     writes.push(
       markOpenCodeExclusive(globalTui.plugin, "tui", "ogb:global-tui-sidebar"),
@@ -976,7 +977,7 @@ export function printSetupUxReport(report: SetupUxReport, json = false): void {
     return;
   }
 
-  console.log("OpenCode Gemini Bridge UX setup");
+  console.log(`${DISPLAY} Bridge UX setup`);
   console.log(`Home: ${report.homeDir}`);
   if (report.projectRoot) console.log(`Project: ${report.projectRoot}`);
   for (const write of report.writes) console.log(`${write.status}: ${write.path}${write.backup ? ` (backup: ${write.backup})` : ""}`);
