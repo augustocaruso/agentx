@@ -152,7 +152,7 @@ function ensureExaEnv(options: { homeDir: string; platform?: NodeJS.Platform; en
 function clearStartupSyncStatus(homeDir: string): void {
   const paths = resolveProjectPaths(homeDir, homeDir);
   fs.rmSync(paths.pluginStatusPath, { force: true });
-  fs.rmSync(path.join(paths.generatedDir, "ogb-startup-sync.lock"), { force: true });
+  fs.rmSync(path.join(paths.generatedDir, "agentx-startup-sync.lock"), { force: true });
   fs.rmSync(paths.updateStatusPath, { force: true });
   fs.rmSync(paths.validationPath, { force: true });
   fs.rmSync(paths.securityPath, { force: true });

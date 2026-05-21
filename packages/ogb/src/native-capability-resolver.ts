@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parse as parseJsonc } from "jsonc-parser";
 import { commandExists, resolveCommand } from "./command-resolution.js";
+import { readEnvAgentx } from "./env.js";
 import {
   capabilityEntry,
   entityIdFromGeminiExtensionName,
@@ -375,7 +376,7 @@ export function resolveNativeCapabilities(options: ResolveNativeCapabilitiesOpti
 }
 
 function smokeTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
-  const parsed = Number(env.OGB_NATIVE_CAPABILITY_SMOKE_TIMEOUT_MS);
+  const parsed = Number(readEnvAgentx("NATIVE_CAPABILITY_SMOKE_TIMEOUT_MS", env));
   if (!Number.isFinite(parsed) || parsed <= 0) return 15_000;
   return Math.min(120_000, Math.max(1, Math.trunc(parsed)));
 }

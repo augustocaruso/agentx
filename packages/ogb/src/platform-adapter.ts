@@ -85,7 +85,7 @@ export function createPlatformAdapter(input: PlatformAdapterInput): PlatformAdap
       ? xdgConfigHome
       : path.join(xdgConfigHome, "opencode")
     : pathApi.join(homeDir, ".config", "opencode");
-  const bridgeConfigDir = pathApi.join(homeDir, ".config", "opencode-gemini-bridge");
+  const bridgeConfigDir = pathApi.join(homeDir, ".config", "agentx");
   const generatedDir = pathApi.join(bridgeConfigDir, "generated");
   const npmGlobalDir = platform === "win32" ? defaultInstallPrefix : pathApi.join(defaultInstallPrefix, "bin");
   const powershellCommands = platform === "win32" ? ["pwsh", "powershell.exe", "powershell"] : [];

@@ -47,7 +47,7 @@ function envelope(records: Array<Record<string, unknown>> = [actionableRecord()]
     generatedAt: "2026-05-06T12:00:00.000Z",
     installId: "install-1",
     payloadLevel: "diagnostic_redacted",
-    client: { app: "opencode-gemini-bridge" },
+    client: { app: "agentx" },
     limits: { maxEnvelopeBytes: 262144 },
     truncated: false,
     records,

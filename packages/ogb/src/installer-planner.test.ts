@@ -46,7 +46,7 @@ test("planner contract builds a Windows install plan and exposes adapter details
   assert.equal(plan.adapter.pathSeparator, ";");
   assert.equal(plan.adapter.globalConfigDir, "C:\\Users\\leona\\.config\\opencode");
   assert.equal(plan.adapter.legacyGlobalConfigDir, "C:\\Users\\leona\\AppData\\Roaming\\opencode");
-  assert.equal(plan.adapter.generatedDir, "C:\\Users\\leona\\.config\\opencode-gemini-bridge\\generated");
+  assert.equal(plan.adapter.generatedDir, "C:\\Users\\leona\\.config\\agentx\\generated");
   assert.equal(plan.adapter.npmGlobalDir, "C:\\Users\\leona\\AppData\\Roaming\\npm");
   assert.deepEqual(plan.adapter.powershellCommands, ["pwsh", "powershell.exe", "powershell"]);
   assert.equal(plan.delegation.args.at(-1), "--windows");

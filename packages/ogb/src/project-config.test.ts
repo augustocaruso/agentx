@@ -97,6 +97,6 @@ test("ensureProjectConfig creates a central backup before forced overwrite", () 
   const forced = ensureProjectConfig({ projectRoot, homeDir, force: true });
   assert.equal(forced.status, "updated");
   assert.ok(forced.backup);
-  assert.ok(forced.backup.startsWith(path.join(homeDir, ".config", "opencode-gemini-bridge", "backups", "project-config")));
+  assert.ok(forced.backup.startsWith(path.join(homeDir, ".config", "agentx", "backups", "project-config")));
   assert.equal(fs.readFileSync(forced.backup, "utf8"), "{ \"manual\": true }\n");
 });

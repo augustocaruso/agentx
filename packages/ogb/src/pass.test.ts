@@ -260,7 +260,7 @@ test("runPass installs the global OpenCode profile when checking home mode", () 
   const configPath = path.join(configDir, "opencode.json");
   const yoloPath = path.join(configDir, "agents", "YOLO.md");
   const startupPluginPath = path.join(configDir, "plugins", "ogb-startup-sync.js");
-  const startupConfigPath = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json");
+  const startupConfigPath = path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json");
 
   assert.equal(report.automated.includes("setup-ux"), true);
   assert.equal(fs.existsSync(configPath), true);
@@ -528,7 +528,7 @@ test("formatPassReport prints a compact human report", () => {
         source: "doctor",
         severity: "warn",
         message: "opencode-auto-fallback is enabled in OGB config, but the OpenCode plugin is not active; disable externalPlugins.autoFallback or install a compatible plugin version.",
-        action: "Desative `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc`.",
+        action: "Desative `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc`.",
       },
     ],
     sync: {
@@ -560,9 +560,9 @@ test("formatPassReport prints a compact human report", () => {
       ],
     },
     files: {
-      pass: "/tmp/project/.opencode/generated/ogb-pass.json",
-      doctor: "/tmp/project/.opencode/generated/ogb-doctor.json",
-      dashboard: "/tmp/project/.opencode/generated/ogb-dashboard.md",
+      pass: "/tmp/project/.opencode/generated/agentx-pass.json",
+      doctor: "/tmp/project/.opencode/generated/agentx-doctor.json",
+      dashboard: "/tmp/project/.opencode/generated/agentx-dashboard.md",
     },
   };
 
@@ -575,6 +575,6 @@ test("formatPassReport prints a compact human report", () => {
   assert.match(text, /Needs Attention/);
   assert.match(text, /Auto fallback esta ligado, mas o plugin externo nao carregou\./);
   assert.match(text, /Notes\n- Antigravity skill skipped: defuddle/);
-  assert.match(text, /report:    \.opencode[/\\]generated[/\\]ogb-pass\.json/);
+  assert.match(text, /report:    \.opencode[/\\]generated[/\\]agentx-pass\.json/);
   assert.doesNotMatch(text, /Automacao|Pendencias|Relatorio/);
 });

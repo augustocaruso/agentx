@@ -24,7 +24,7 @@ function readJson(filePath: string): any {
 }
 
 function expectedGlobalExpandedInstruction(homeDir: string): string {
-  return path.resolve(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")).replace(/\\/g, "/");
+  return path.resolve(path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md")).replace(/\\/g, "/");
 }
 
 test("runReset refuses to run outside the home project", async () => {
@@ -51,7 +51,7 @@ test("runReset accepts an accidentally quoted home project path", async () => {
   const homeDir = path.join(root, "home");
   fs.mkdirSync(homeDir, { recursive: true });
   writeFile(path.join(homeDir, ".gemini", "GEMINI.md"), "# Global Gemini\n");
-  writeFile(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json"), JSON.stringify({
+  writeFile(path.join(homeDir, ".config", "agentx", "generated", "agentx-plugin-status.json"), JSON.stringify({
     state: "fail",
     nextRetryAfter: "2026-05-06T19:17:50.242Z",
   }) + "\n");
@@ -64,7 +64,7 @@ test("runReset accepts an accidentally quoted home project path", async () => {
     installPlugins: false,
     installTuiDependencies: false,
   });
-  const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
+  const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
 
   assert.equal(report.outcome, "pass");
   assert.equal(report.plan.intent, "reset");
@@ -74,7 +74,7 @@ test("runReset accepts an accidentally quoted home project path", async () => {
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated")), false);
   assert.deepEqual(startupConfig.baseArgs, ["--project", process.platform === "win32" ? "{OGB_HOME}" : path.resolve(homeDir)]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-plugin-status.json")), false);
 });
 
 test("runReset dry-run emits reset ritual progress without applying changes", async () => {
@@ -146,7 +146,7 @@ test("runReset cleans home project artifacts and recreates global config", { ski
     instructions: [".opencode/generated/GEMINI.expanded.md"],
   }, null, 2));
   writeFile(path.join(homeDir, ".opencode", "commands", "sync.md"), "old project command\n");
-  writeFile(path.join(homeDir, ".opencode", "generated", "ogb-startup-sync.lock"), JSON.stringify({
+  writeFile(path.join(homeDir, ".opencode", "generated", "agentx-startup-sync.lock"), JSON.stringify({
     pid: 99999999,
     startedAt: "2026-05-06T12:00:00.000Z",
   }) + "\n");
@@ -160,17 +160,17 @@ test("runReset cleans home project artifacts and recreates global config", { ski
   }, null, 2));
   writeFile(path.join(homeDir, ".config", "opencode", "AGENTS.md"), "User AGENTS\n");
   writeFile(path.join(homeDir, ".config", "opencode", "commands", "dev-server.md"), "old dev server command\n");
-  writeFile(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json"), JSON.stringify({
+  writeFile(path.join(homeDir, ".config", "agentx", "generated", "agentx-plugin-status.json"), JSON.stringify({
     state: "fail",
     exitCode: null,
   }) + "\n");
-  writeFile(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-update-status.json"), JSON.stringify({
+  writeFile(path.join(homeDir, ".config", "agentx", "generated", "agentx-update-status.json"), JSON.stringify({
     status: "error",
   }) + "\n");
-  writeFile(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-validation.json"), JSON.stringify({
+  writeFile(path.join(homeDir, ".config", "agentx", "generated", "agentx-validation.json"), JSON.stringify({
     outcome: "fail",
   }) + "\n");
-  writeFile(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-security.json"), JSON.stringify({
+  writeFile(path.join(homeDir, ".config", "agentx", "generated", "agentx-security.json"), JSON.stringify({
     outcome: "fail",
   }) + "\n");
 
@@ -189,7 +189,7 @@ test("runReset cleans home project artifacts and recreates global config", { ski
   assert.ok(report.check);
   assert.equal(fs.existsSync(path.join(homeDir, "opencode.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands", "sync.md")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "ogb-startup-sync.lock")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "agentx-startup-sync.lock")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode")), false);
   assert.ok(report.cleanup.backupDir);
   assert.equal(fs.existsSync(path.join(report.cleanup.backupDir!, "opencode.jsonc")), true);
@@ -201,20 +201,20 @@ test("runReset cleans home project artifacts and recreates global config", { ski
   assert.ok(globalConfig.plugin.includes(globalStartupPluginSpec(path.join(homeDir, ".config", "opencode", "plugins", "ogb-startup-sync.js"))));
   assert.equal(globalConfig.permission.websearch, "allow");
   assert.ok(globalConfig.instructions.includes(expectedGlobalExpandedInstruction(homeDir)));
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md")), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "plugins", "ogb-startup-sync.js")), true);
   assert.equal(fs.readFileSync(path.join(homeDir, ".config", "opencode", "AGENTS.md"), "utf8"), GLOBAL_AGENTS_MD);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "commands", "dev-server.md")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "tui-plugins", "ogb-sidebar.js")), true);
   assert.deepEqual(readJson(path.join(homeDir, ".config", "opencode", "tui.json")).plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json")), true);
-  const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json")), true);
+  const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
   assert.equal(startupConfig.autoUpdate, false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-plugin-status.json")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-update-status.json")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-validation.json")), true);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-security.json")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-plugin-status.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-update-status.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-validation.json")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-security.json")), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
   assert.match(fs.readFileSync(path.join(homeDir, ".config", "zsh", ".zshrc"), "utf8"), /OPENCODE_ENABLE_EXA=1/);
   assert.equal(report.doctor?.warnings.some((warning) => warning.includes("Last OpenCode startup sync failed")), false);

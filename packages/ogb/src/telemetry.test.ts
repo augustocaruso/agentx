@@ -407,7 +407,7 @@ test("OGB development checkout records are skipped by default", async () => {
     recordWorkflowRun({
       workflow: "doctor",
       status: "completed_with_warnings",
-      projectRoot: path.join(homeDir, "opencode-gemini-bridge", "packages", "ogb"),
+      projectRoot: path.join(homeDir, "agentx", "packages", "ogb"),
       payload: { warnings: ["Missing built-in OpenCode commands: bridge"] },
     }, { homeDir });
 

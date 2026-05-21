@@ -799,13 +799,13 @@ export function projectGeminiExtensionCommands(options: ExtensionProjectionOptio
     fs.mkdirSync(path.dirname(paths.extensionMapPath), { recursive: true });
     fs.writeFileSync(paths.extensionMapPath, `${JSON.stringify(map, null, 2)}\n`, "utf8");
     upsertManagedFile(state, {
-      path: ".opencode/generated/ogb-extension-map.json",
+      path: ".opencode/generated/agentx-extension-map.json",
       sha256: sha256File(paths.extensionMapPath),
       source: "ogb",
     });
     writeModelRoutingReport(paths.modelRoutingPath, routing.report);
     upsertManagedFile(state, {
-      path: ".opencode/generated/ogb-model-routing.json",
+      path: ".opencode/generated/agentx-model-routing.json",
       sha256: sha256File(paths.modelRoutingPath),
       source: "ogb",
     });
@@ -818,7 +818,7 @@ export function projectGeminiExtensionCommands(options: ExtensionProjectionOptio
     removedCommands: stale.removed,
     removedAgents: staleAgents.removed,
     projectedModelFallbackConfig: ohMyConfig.projected,
-    projectedModelRoutingConfig: options.dryRun ? ".opencode/generated/ogb-model-routing.json" : ".opencode/generated/ogb-model-routing.json",
+    projectedModelRoutingConfig: options.dryRun ? ".opencode/generated/agentx-model-routing.json" : ".opencode/generated/agentx-model-routing.json",
     map,
     backups: backupSession.backups,
     warnings: reportWarnings,

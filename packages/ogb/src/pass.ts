@@ -121,12 +121,12 @@ export interface PassReport {
 
 function actionForWarning(warning: string): string {
   if (/^Hook needs review:/.test(warning)) return "Hooks `BeforeTool`/`AfterTool`/`BeforeAgent` ja sincronizam automaticamente; para eventos sem equivalente OpenCode, revise o recurso e use hash legado so se quiser silenciar a auditoria.";
-  if (/Duplicate name/i.test(warning)) return "Rode `ogb check --json` ou abra `.opencode/generated/ogb-inventory.json` para ver os paths duplicados; mantenha uma copia.";
-  if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Ative o fallback gerado ou desative `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc`.";
+  if (/Duplicate name/i.test(warning)) return "Rode `ogb check --json` ou abra `.opencode/generated/agentx-inventory.json` para ver os paths duplicados; mantenha uma copia.";
+  if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Ative o fallback gerado ou desative `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc`.";
   if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Instale `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, rode `ogb sync` e reinicie o OpenCode.";
-  if (/opencode-auto-fallback/i.test(warning)) return "Revise `externalPlugins.autoFallback` em `.opencode/ogb.config.jsonc` e o plugin global do OpenCode.";
+  if (/opencode-auto-fallback/i.test(warning)) return "Revise `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc` e o plugin global do OpenCode.";
   if (/Run ogb sync/i.test(warning)) return "O `ogb check` ja tentou `ogb sync`; se persistir, revise conflitos em arquivos gerenciados e rode com `--force` se for seguro.";
-  if (/Model resolution warning/i.test(warning)) return "Revise os modelos em `.opencode/ogb.config.jsonc` e compare com `opencode models`.";
+  if (/Model resolution warning/i.test(warning)) return "Revise os modelos em `.opencode/agentx.config.jsonc` e compare com `opencode models`.";
   if (/MCP command warning/i.test(warning)) return "Instale o comando do MCP ou remova/desabilite esse MCP na configuracao de origem.";
   return "Leia o aviso do doctor; se for recurso gerenciado pelo OGB, rode `ogb check --force` depois de revisar.";
 }

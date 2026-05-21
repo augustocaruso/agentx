@@ -50,9 +50,9 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.match(plugin, /⏱ /);
   assert.doesNotMatch(plugin, /\bRUN\b/);
   assert.match(plugin, /gemini_quota/);
-  assert.match(plugin, /ogb-limits\.json/);
+  assert.match(plugin, /agentx-limits\.json/);
   assert.match(plugin, /function newestLimitsReport\(root\)/);
-  assert.match(plugin, /path\.join\(GLOBAL_GENERATED_DIR, "ogb-limits\.json"\)/);
+  assert.match(plugin, /path\.join\(GLOBAL_GENERATED_DIR, "agentx-limits\.json"\)/);
   assert.match(plugin, /Date\.parse\(String\(limits\.generatedAt \|\| ""\)\)/);
   assert.match(plugin, /report\.timestamp > best\.timestamp/);
   assert.match(plugin, /Quota/);
@@ -104,13 +104,13 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.ok(warningOffset > bridgeRowsOffset);
   assert.ok(warningOffset < spacerOffset);
   assert.ok(spacerOffset < inventoryOffset);
-  assert.match(plugin, /ogb-ui\.json/);
+  assert.match(plugin, /agentx-ui\.json/);
   assert.match(plugin, /externalQuotaPanel/);
   assert.match(plugin, /function externalQuotaPromptInstalled\(root\)/);
   assert.match(plugin, /@slkiser\/opencode-quota/);
   assert.match(plugin, /function suppressOgbPromptQuota\(root\)/);
   assert.match(plugin, /const suppressQuota = \(\) => suppressOgbPromptQuota\(props\.root\);/);
-  assert.doesNotMatch(plugin, /ogb-telemetry-status\.json/);
+  assert.doesNotMatch(plugin, /agentx-telemetry-status\.json/);
   assert.doesNotMatch(plugin, /telemetry ready/);
   assert.match(plugin, /GEMINI\.md · /);
   assert.match(plugin, /MCP · /);
@@ -128,7 +128,7 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.match(plugin, /api\.client\.session\.get/);
   assert.match(plugin, /tui\.session\.select/);
   assert.match(plugin, /ctx n\/a/);
-  assert.match(plugin, /ogb-dashboard\.json/);
+  assert.match(plugin, /agentx-dashboard\.json/);
   assert.deepEqual(config.plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
   assert.ok(state?.managedFiles.some((file) => file.path === TUI_SIDEBAR_PLUGIN_PATH && file.source === "ogb"));
   assert.ok(state?.managedFiles.some((file) => file.path === TUI_CONFIG_PATH && file.source === "ogb"));
@@ -204,7 +204,7 @@ test("ensureTuiSidebar refuses to overwrite manually changed plugin without forc
   const forced = ensureTuiSidebar({ projectRoot, homeDir, force: true });
   assert.equal(forced.plugin.status, "updated");
   assert.ok(forced.plugin.backup);
-  assert.ok(forced.plugin.backup.startsWith(path.join(homeDir, ".config", "opencode-gemini-bridge", "backups", "tui-sidebar")));
+  assert.ok(forced.plugin.backup.startsWith(path.join(homeDir, ".config", "agentx", "backups", "tui-sidebar")));
   assert.match(fs.readFileSync(forced.plugin.backup, "utf8"), /manual/);
   assert.match(fs.readFileSync(pluginPath, "utf8"), /ogb:sidebar/);
 });

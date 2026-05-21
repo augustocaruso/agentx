@@ -51,7 +51,7 @@ test("refreshLimits stores OpenUsage providers in a safe cache", async () => {
 
   try {
     const report = await refreshLimits({ projectRoot, homeDir, force: true, includeGeminiFallback: false });
-    const cacheFile = path.join(projectRoot, ".opencode", "generated", "ogb-limits.json");
+    const cacheFile = path.join(projectRoot, ".opencode", "generated", "agentx-limits.json");
 
     assert.equal(report.status, "ok");
     assert.equal(report.providers.length, 2);
@@ -188,7 +188,7 @@ test("refreshLimits uses native Anthropic OAuth fallback when OpenUsage is unava
 test("refreshLimits keeps last Claude usage when Anthropic refresh is rate limited", async () => {
   const projectRoot = tempDir("ogb-limits-project-");
   const homeDir = tempDir("ogb-limits-home-");
-  const cacheFile = path.join(projectRoot, ".opencode", "generated", "ogb-limits.json");
+  const cacheFile = path.join(projectRoot, ".opencode", "generated", "agentx-limits.json");
   const authFile = path.join(homeDir, ".local", "share", "opencode", "auth.json");
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
   fs.writeFileSync(authFile, JSON.stringify({

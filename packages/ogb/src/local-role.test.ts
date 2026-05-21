@@ -23,7 +23,7 @@ test("maintainer local-role helpers create, read, and remove the local flag", ()
   assert.equal(enabled.enabled, true);
   assert.equal(enabled.role, "maintainer");
   assert.equal(enabled.schema, LOCAL_ROLE_SCHEMA);
-  assert.equal(enabled.path, path.join(homeDir, ".config", "opencode-gemini-bridge", "local-role.json"));
+  assert.equal(enabled.path, path.join(homeDir, ".config", "agentx", "local-role.json"));
   assert.equal(readLocalRole({ homeDir }).enabled, true);
 
   const disabled = disableMaintainerRole({ homeDir });
@@ -39,7 +39,7 @@ test("local-role flag path uses the platform adapter on Windows", () => {
       platform: "win32",
       env: { APPDATA: "C:\\Users\\Ada\\AppData\\Roaming" },
     }),
-    "C:\\Users\\Ada\\.config\\opencode-gemini-bridge\\local-role.json",
+    "C:\\Users\\Ada\\.config\\agentx\\local-role.json",
   );
 });
 
@@ -66,5 +66,5 @@ test("CLI maintainer enable/status/disable manage the local flag", () => {
   const disabled = run(["maintainer", "disable", "--json"]);
   assert.equal(disabled.status, 0, disabled.stderr);
   assert.equal(JSON.parse(disabled.stdout).enabled, false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "local-role.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "local-role.json")), false);
 });

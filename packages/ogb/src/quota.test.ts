@@ -106,7 +106,7 @@ test("refreshQuota reads OpenCode auth and writes a safe quota cache", async () 
 
   try {
     const report = await refreshQuota({ projectRoot, homeDir, force: true });
-    const cacheFile = path.join(projectRoot, ".opencode", "generated", "ogb-quota.json");
+    const cacheFile = path.join(projectRoot, ".opencode", "generated", "agentx-quota.json");
 
     assert.equal(report.status, "ok");
     assert.equal(report.projectId, "managed-project");

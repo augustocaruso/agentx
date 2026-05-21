@@ -23,7 +23,7 @@ test("platform adapter contract returns Windows paths, shell, env persistence, a
     "C:\\Users\\leona\\.config\\opencode\\opencode.jsonc",
   ]);
   assert.equal(adapter.legacyGlobalConfigDir, "C:\\Users\\leona\\AppData\\Roaming\\opencode");
-  assert.equal(adapter.generatedDir, "C:\\Users\\leona\\.config\\opencode-gemini-bridge\\generated");
+  assert.equal(adapter.generatedDir, "C:\\Users\\leona\\.config\\agentx\\generated");
   assert.equal(adapter.resolvePath(`'"C:\\Users\\leona"'`), "C:\\Users\\leona");
   assert.equal(adapter.isHomeProject(`"C:\\Users\\leona"`), true);
   assert.equal(adapter.isHomeProject("c:\\users\\LEONA"), true);

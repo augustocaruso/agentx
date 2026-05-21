@@ -130,11 +130,11 @@ test("projectExternalIntegrations writes quota UI prefs and fallback runtime con
     }),
   });
 
-  assert.ok(report.writes.some((write) => write.relPath === ".opencode/generated/ogb-ui.json"));
+  assert.ok(report.writes.some((write) => write.relPath === ".opencode/generated/agentx-ui.json"));
   assert.ok(report.writes.some((write) => write.relPath === QUOTA_CONFIG_PATH));
   assert.ok(report.writes.some((write) => write.relPath === ".config/opencode/plugins/fallback.json"));
 
-  const ui = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-ui.json"), "utf8"));
+  const ui = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-ui.json"), "utf8"));
   const quota = JSON.parse(fs.readFileSync(path.join(projectRoot, ...QUOTA_CONFIG_PATH.split("/")), "utf8"));
   const fallback = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode", "plugins", "fallback.json"), "utf8"));
 

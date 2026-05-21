@@ -14,7 +14,7 @@ function tempProject(): string {
 }
 
 function expectedGlobalExpandedInstruction(homeDir: string): string {
-  return path.resolve(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")).replace(/\\/g, "/");
+  return path.resolve(path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md")).replace(/\\/g, "/");
 }
 
 function writeFakeOpenCode(binDir: string, output = "OpenCode debug info\nsuperpowers plugin loaded\n"): void {
@@ -74,7 +74,7 @@ test("syncToOpenCode writes bridge-native generated config without Rulesync", ()
     && resource.target === "opencode"
     && resource.exclusive === true
   ));
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
   assert.ok(state.managedFiles.some((file: { path: string; kind?: string; projection?: string; origin?: string }) =>
     file.path === TUI_SIDEBAR_PLUGIN_PATH
     && file.kind === "tui"
@@ -119,7 +119,7 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
 
   const report = syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
   const globalRoot = path.join(homeDir, ".config", "opencode");
-  const expandedGemini = fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md"), "utf8");
+  const expandedGemini = fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md"), "utf8");
   const globalConfig = JSON.parse(fs.readFileSync(path.join(globalRoot, "opencode.json"), "utf8"));
   const helperAgent = fs.readFileSync(path.join(globalRoot, "agents", "helper.md"), "utf8");
   const extensionAgent = fs.readFileSync(path.join(globalRoot, "agents", "researcher.md"), "utf8");
@@ -127,9 +127,9 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   const planCommand = fs.readFileSync(path.join(globalRoot, "commands", "notes", "plan.md"), "utf8");
   const extensionCommand = fs.readFileSync(path.join(globalRoot, "commands", "notes", "review.md"), "utf8");
   const extensionSkill = fs.readFileSync(path.join(globalRoot, "skills", "review-notes", "SKILL.md"), "utf8");
-  const state = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-sync-state.json"), "utf8"));
-  const extensionMap = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-extension-map.json"), "utf8"));
-  const routing = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-model-routing.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-sync-state.json"), "utf8"));
+  const extensionMap = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-extension-map.json"), "utf8"));
+  const routing = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-model-routing.json"), "utf8"));
 
   assert.equal(report.rulesync.status, "skipped");
   assert.equal(report.warnings.length, 0);
@@ -149,8 +149,8 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.match(extensionSkill, new RegExp(path.join(extensionDir, "docs", "guide.md").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode/opencode.json"));
   assert.equal(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode/AGENTS.md"), false);
-  assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode-gemini-bridge/generated/GEMINI.expanded.md"));
-  assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/opencode-gemini-bridge/generated/ogb-extension-map.json"));
+  assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/agentx/generated/GEMINI.expanded.md"));
+  assert.ok(state.managedFiles.some((file: { path: string }) => file.path === ".config/agentx/generated/agentx-extension-map.json"));
   assert.equal(extensionMap._generated.version, OGB_VERSION);
   assert.equal(extensionMap.extensions[0].scope, "global");
   assert.equal(extensionMap.extensions[0].commands[0].target, ".config/opencode/commands/notes/review.md");
@@ -250,7 +250,7 @@ test("syncToOpenCode treats an accidentally quoted home project path as global s
   const globalConfigPath = path.join(homeDir, ".config", "opencode", "opencode.json");
 
   assert.equal(report.projectRoot, path.resolve(homeDir));
-  assert.equal(report.generatedConfigPath, path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md"));
+  assert.equal(report.generatedConfigPath, path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md"));
   assert.match(report.rulesync.skippedReason ?? "", /home/);
   assert.equal(fs.existsSync(globalConfigPath), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated")), false);
@@ -289,7 +289,7 @@ test("syncToOpenCode builds global context from Gemini extensions and imports gl
   syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
 
   const globalRoot = path.join(homeDir, ".config", "opencode");
-  const expandedGemini = fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md"), "utf8");
+  const expandedGemini = fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md"), "utf8");
   const globalConfig = JSON.parse(fs.readFileSync(path.join(globalRoot, "opencode.json"), "utf8"));
 
   assert.match(expandedGemini, /Sources:/);
@@ -316,8 +316,8 @@ test("syncToOpenCode applies global OGB model fallbacks to home extension agents
   fs.mkdirSync(path.join(extensionDir, "agents"), { recursive: true });
   fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench" }));
   fs.writeFileSync(path.join(extensionDir, "agents", "med-chat-triager.md"), "---\ndescription: Triage chats.\n---\n# Med Chat Triager\n");
-  fs.mkdirSync(path.join(homeDir, ".config", "opencode-gemini-bridge"), { recursive: true });
-  fs.writeFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "ogb.config.jsonc"), JSON.stringify({
+  fs.mkdirSync(path.join(homeDir, ".config", "agentx"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".config", "agentx", "agentx.config.jsonc"), JSON.stringify({
     modelFallbacks: {
       agents: {
         "med-chat-triager": {
@@ -335,8 +335,8 @@ test("syncToOpenCode applies global OGB model fallbacks to home extension agents
 
   const globalRoot = path.join(homeDir, ".config", "opencode");
   const agent = fs.readFileSync(path.join(globalRoot, "agents", "med-chat-triager.md"), "utf8");
-  const extensionMap = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-extension-map.json"), "utf8"));
-  const routing = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-model-routing.json"), "utf8"));
+  const extensionMap = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-extension-map.json"), "utf8"));
+  const routing = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-model-routing.json"), "utf8"));
 
   assert.match(agent, /model: "google\/gemini-3-flash-preview"/);
   assert.match(agent, /reasoningEffort: "high"/);
@@ -354,7 +354,7 @@ test("syncToOpenCode projects default OpenCode agent from OGB config", () => {
   const projectRoot = tempProject();
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     openCode: {
       defaultAgent: "YOLO",
     },
@@ -373,7 +373,7 @@ test("syncToOpenCode projects built-in YOLO agent", () => {
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   const yoloPath = path.join(projectRoot, ".opencode", "agents", "YOLO.md");
   const yolo = fs.readFileSync(yoloPath, "utf8");
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.ok(report.projectedAgents.includes(".opencode/agents/YOLO.md"));
   assert.ok(report.projectedAgents.includes(".opencode/agents/YOLO-worker.md"));
@@ -448,7 +448,7 @@ test("syncToOpenCode removes previously managed non-YOLO built-in agents", () =>
   const oldAgent = "old generated study agent\n";
   fs.writeFileSync(oldAgentPath, oldAgent, "utf8");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), JSON.stringify({
     version: OGB_VERSION,
     managedFiles: [
       {
@@ -492,7 +492,7 @@ test("syncToOpenCode force overwrites built-in files with central backup", () =>
   const yoloBackup = report.backups.find((backup) => fs.existsSync(backup.backup) && fs.readFileSync(backup.backup, "utf8") === "manual yolo\n");
 
   assert.ok(yoloBackup);
-  assert.ok(yoloBackup.backup.startsWith(path.join(homeDir, ".config", "opencode-gemini-bridge", "backups", "sync")));
+  assert.ok(yoloBackup.backup.startsWith(path.join(homeDir, ".config", "agentx", "backups", "sync")));
   assert.equal(fs.readFileSync(yoloBackup.backup, "utf8"), "manual yolo\n");
   assert.notEqual(fs.readFileSync(yoloPath, "utf8"), "manual yolo\n");
 });
@@ -525,7 +525,7 @@ test("syncToOpenCode removes old lowercase YOLO agent when it was managed by ogb
 
   syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   fs.renameSync(path.join(projectRoot, ".opencode", "agents", "YOLO.md"), legacyYoloPath);
-  const statePath = path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json");
+  const statePath = path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json");
   const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
   const managed = state.managedFiles.find((file: { path: string; source: string }) => file.path === ".opencode/agents/YOLO.md" && file.source === "ogb");
   managed.path = ".opencode/agents/yolo.md";
@@ -576,7 +576,7 @@ test("syncToOpenCode prefers validated native Superpowers plugin over managed pr
   fs.mkdirSync(staleSkillDir, { recursive: true });
   fs.writeFileSync(path.join(staleSkillDir, "SKILL.md"), staleSkillText, "utf8");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), JSON.stringify({
     version: OGB_VERSION,
     managedFiles: [
       {
@@ -596,7 +596,7 @@ test("syncToOpenCode prefers validated native Superpowers plugin over managed pr
   try {
     const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
     const projectConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
-    const nativeReport = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-native-capabilities.json"), "utf8"));
+    const nativeReport = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-native-capabilities.json"), "utf8"));
 
     assert.ok(projectConfig.plugin.includes("superpowers@git+https://github.com/obra/superpowers.git"));
     assert.equal(fs.existsSync(staleSkillDir), false);
@@ -653,7 +653,7 @@ test("syncToOpenCode replicates Honcho setup as managed Gemini and Antigravity s
     const antigravitySkillPath = path.join(homeDir, ".gemini", "antigravity", "skills", "honcho-setup", "SKILL.md");
     const geminiSkill = fs.readFileSync(geminiSkillPath, "utf8");
     const antigravitySkill = fs.readFileSync(antigravitySkillPath, "utf8");
-    const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+    const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
     assert.match(geminiSkill, /\/honcho:setup/);
     assert.match(geminiSkill, /~\/\.honcho\/config\.json/);
@@ -712,7 +712,7 @@ test("syncToOpenCode removes stale Honcho setup skills when native setup source 
       plugin: [],
     }, null, 2));
     const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
-    const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+    const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
     assert.equal(fs.existsSync(geminiSkillPath), false);
     assert.equal(fs.existsSync(antigravitySkillPath), false);
@@ -740,7 +740,7 @@ test("syncToOpenCode replicates Honcho setup surfaces during global sync", () =>
     const geminiSkillPath = path.join(homeDir, ".gemini", "skills", "honcho-setup", "SKILL.md");
     const antigravitySkillPath = path.join(homeDir, ".gemini", "antigravity", "skills", "honcho-setup", "SKILL.md");
     const geminiSkill = fs.readFileSync(geminiSkillPath, "utf8");
-    const state = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-sync-state.json"), "utf8"));
+    const state = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-sync-state.json"), "utf8"));
 
     assert.match(geminiSkill, /\/honcho:setup/);
     assert.match(geminiSkill, /\/honcho:status/);
@@ -809,7 +809,7 @@ test("syncToOpenCode removes stale managed project extension skills", () => {
 
   fs.rmSync(skillDir, { recursive: true, force: true });
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.ok(report.removedSkills.includes(".opencode/skills/review-notes"));
   assert.equal(fs.existsSync(projected), false);
@@ -829,7 +829,7 @@ test("syncToOpenCode refreshes managed global extension skills instead of duplic
   const globalSkillPath = path.join(homeDir, ".config", "opencode", "skills", "obsidian-ops", "SKILL.md");
   fs.mkdirSync(path.dirname(globalSkillPath), { recursive: true });
   fs.writeFileSync(globalSkillPath, oldGlobalSkill, "utf8");
-  const globalStatePath = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-sync-state.json");
+  const globalStatePath = path.join(homeDir, ".config", "agentx", "generated", "agentx-sync-state.json");
   fs.mkdirSync(path.dirname(globalStatePath), { recursive: true });
   fs.writeFileSync(globalStatePath, JSON.stringify({
     version: OGB_VERSION,
@@ -847,7 +847,7 @@ test("syncToOpenCode refreshes managed global extension skills instead of duplic
   const projectSkillPath = path.join(projectRoot, ".opencode", "skills", "obsidian-ops", "SKILL.md");
   fs.mkdirSync(path.dirname(projectSkillPath), { recursive: true });
   fs.writeFileSync(projectSkillPath, oldProjectSkill, "utf8");
-  const projectStatePath = path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json");
+  const projectStatePath = path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json");
   fs.mkdirSync(path.dirname(projectStatePath), { recursive: true });
   fs.writeFileSync(projectStatePath, JSON.stringify({
     version: OGB_VERSION,
@@ -926,7 +926,7 @@ test("syncToOpenCode projects Gemini skills to global Antigravity skills", () =>
   const globalProjected = path.join(antigravityRoot, "study-notes", "SKILL.md");
   const extensionProjected = path.join(antigravityRoot, "review-notes", "SKILL.md");
   const extensionGuide = path.join(antigravityRoot, "review-notes", "references", "guide.md");
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/study-notes"));
   assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/review-notes"));
@@ -972,7 +972,7 @@ test("syncToOpenCode projects Gemini commands to Antigravity launcher skills", (
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
   const globalSkill = path.join(homeDir, ".gemini", "antigravity", "skills", "research", "SKILL.md");
   const extensionSkill = path.join(homeDir, ".gemini", "antigravity", "skills", "mednotes-fix-wiki", "SKILL.md");
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
   const extensionText = fs.readFileSync(extensionSkill, "utf8");
 
   assert.ok(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/research"));
@@ -1087,7 +1087,7 @@ test("syncToOpenCode adopts identical unmanaged Antigravity skill projections", 
   fs.writeFileSync(path.join(projectedSkillDir, "references", "guide.md"), `Bundle: ${extensionDir}\n`);
 
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.equal(
     report.warnings.some((warning) => warning.includes(".gemini/antigravity/skills/review-notes exists and is not managed")),
@@ -1118,7 +1118,7 @@ test("syncToOpenCode refreshes stale Antigravity skill state when target already
   fs.writeFileSync(path.join(extensionSkillDir, "SKILL.md"), projectedSkillText);
   fs.writeFileSync(path.join(projectedSkillDir, "SKILL.md"), projectedSkillText);
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), JSON.stringify({
     version: "0.1.25",
     managedFiles: [
       {
@@ -1133,7 +1133,7 @@ test("syncToOpenCode refreshes stale Antigravity skill state when target already
   }, null, 2));
 
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
   const managed = state.managedFiles.find((file: { path: string; source: string }) =>
     file.path === ".gemini/antigravity/skills/review-notes/SKILL.md"
     && file.source === "ogb"
@@ -1159,7 +1159,7 @@ test("syncToOpenCode preserves different unmanaged Antigravity skill projections
   fs.writeFileSync(path.join(projectedSkillDir, "SKILL.md"), "---\nname: review-notes\ndescription: Manual edit.\n---\n# Manual\n");
 
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.ok(report.warnings.some((warning) => warning.includes(".gemini/antigravity/skills/review-notes exists and is not managed")));
   assert.equal(report.projectedAntigravitySkills.includes(".gemini/antigravity/skills/review-notes"), false);
@@ -1205,7 +1205,7 @@ test("syncToOpenCode projects global Gemini MCPs to Antigravity mcp_config", () 
 
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
   const config = JSON.parse(fs.readFileSync(path.join(homeDir, ".gemini", "antigravity", "mcp_config.json"), "utf8"));
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.ok(report.projectedAntigravityMcps.includes(".gemini/antigravity/mcp_config.json#mcpServers/anki-mcp"));
   assert.ok(report.projectedAntigravityMcps.includes(".gemini/antigravity/mcp_config.json#mcpServers/study-pack"));
@@ -1272,7 +1272,7 @@ test("syncToOpenCode projects Gemini extension subagents to native Antigravity a
   const promptPath = path.join(homeDir, ".gemini", "antigravity", "agent_prompts", "researcher.md");
   const agent = JSON.parse(fs.readFileSync(agentPath, "utf8"));
   const prompt = fs.readFileSync(promptPath, "utf8");
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.ok(report.projectedAntigravityAgents.includes(".gemini/antigravity/agents/researcher"));
   assert.equal(fs.existsSync(path.join(homeDir, ".gemini", "antigravity", "skills", "agent-researcher")), false);
@@ -1338,7 +1338,7 @@ test("syncToOpenCode migrates old Antigravity agent compatibility skills to nati
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
   const agentsDir = path.join(extensionDir, "agents");
   const oldSkillDir = path.join(homeDir, ".gemini", "antigravity", "skills", "agent-researcher");
-  const statePath = path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json");
+  const statePath = path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json");
   const oldSkill = "---\nname: agent-researcher\n---\n# old compatibility skill\n";
   fs.mkdirSync(agentsDir, { recursive: true });
   fs.mkdirSync(oldSkillDir, { recursive: true });
@@ -1377,7 +1377,7 @@ test("syncToOpenCode projects Gemini extension workflows to global Antigravity w
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
   const projected = path.join(homeDir, ".gemini", "antigravity", "global_workflows", "verify-skills.md");
   const workflow = fs.readFileSync(projected, "utf8");
-  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-sync-state.json"), "utf8"));
+  const state = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-sync-state.json"), "utf8"));
 
   assert.ok(report.projectedAntigravityWorkflows.includes(".gemini/antigravity/global_workflows/verify-skills.md"));
   assert.match(workflow, /# Verify skills/);
@@ -1429,7 +1429,7 @@ test("syncToOpenCode projects Gemini extension TOML commands and maps risky reso
   const command = fs.readFileSync(commandPath, "utf8");
   const agentPath = path.join(projectRoot, ".opencode", "agents", "helper.md");
   const agent = fs.readFileSync(agentPath, "utf8");
-  const extensionMap = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), "utf8"));
+  const extensionMap = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), "utf8"));
 
   assert.ok(report.projectedExtensionCommands.includes(".opencode/commands/notes/review.md"));
   assert.ok(report.projectedExtensionAgents.includes(".opencode/agents/helper.md"));
@@ -1468,7 +1468,7 @@ test("syncToOpenCode keeps extension subagent bash conservative when YOLO is not
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     openCode: {
       defaultAgent: "agent",
     },
@@ -1494,7 +1494,7 @@ test("syncToOpenCode projects configurable model fallbacks for extension subagen
   fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "study-pack" }));
   fs.writeFileSync(path.join(extensionDir, "agents", "helper.md"), "---\nmodel: google/gemini-2.5-pro\ndescription: Helper.\n---\n# Helper\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     modelFallbacks: {
       agents: {
         helper: {
@@ -1511,11 +1511,11 @@ test("syncToOpenCode projects configurable model fallbacks for extension subagen
 
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   const agent = fs.readFileSync(path.join(projectRoot, ".opencode", "agents", "helper.md"), "utf8");
-  const extensionMap = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), "utf8"));
-  const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-model-routing.json"), "utf8"));
+  const extensionMap = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), "utf8"));
+  const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-model-routing.json"), "utf8"));
 
   assert.equal(report.projectedModelFallbackConfig, undefined);
-  assert.equal(report.projectedModelRoutingConfig, ".opencode/generated/ogb-model-routing.json");
+  assert.equal(report.projectedModelRoutingConfig, ".opencode/generated/agentx-model-routing.json");
   assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "oh-my-openagent.jsonc")), false);
   assert.match(agent, /model: "openai\/gpt-5\.5"/);
   assert.match(agent, /reasoningEffort: "xhigh"/);
@@ -1540,7 +1540,7 @@ test("syncToOpenCode preserves the Medical Notes three-model fallback chain", ()
   fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "medical-notes-workbench" }));
   fs.writeFileSync(path.join(extensionDir, "agents", "med-chat-triager.md"), "---\ndescription: Triage chats.\n---\n# Med Chat Triager\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     modelFallbacks: {
       agents: {
         "med-chat-triager": {
@@ -1556,8 +1556,8 @@ test("syncToOpenCode preserves the Medical Notes three-model fallback chain", ()
 
   syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   const agent = fs.readFileSync(path.join(projectRoot, ".opencode", "agents", "med-chat-triager.md"), "utf8");
-  const extensionMap = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), "utf8"));
-  const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-model-routing.json"), "utf8"));
+  const extensionMap = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), "utf8"));
+  const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-model-routing.json"), "utf8"));
 
   assert.match(agent, /model: "google\/gemini-3-flash-preview"/);
   assert.match(agent, /reasoningEffort: "high"/);
@@ -1581,7 +1581,7 @@ test("syncToOpenCode routes extension subagent to fallback when primary provider
   fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "study-pack" }));
   fs.writeFileSync(path.join(extensionDir, "agents", "helper.md"), "---\ndescription: Helper.\n---\n# Helper\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-limits.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-limits.json"), JSON.stringify({
     version: OGB_VERSION,
     projectRoot,
     generatedAt: "2026-05-04T12:00:00.000Z",
@@ -1605,10 +1605,10 @@ test("syncToOpenCode routes extension subagent to fallback when primary provider
       geminiCodeAssist: { status: "skipped" },
     },
     warnings: [],
-    files: { limits: path.join(projectRoot, ".opencode", "generated", "ogb-limits.json") },
+    files: { limits: path.join(projectRoot, ".opencode", "generated", "agentx-limits.json") },
   }, null, 2) + "\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     modelFallbacks: {
       routing: { thresholdPercent: 95 },
       agents: {
@@ -1625,7 +1625,7 @@ test("syncToOpenCode routes extension subagent to fallback when primary provider
 
   syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   const agent = fs.readFileSync(path.join(projectRoot, ".opencode", "agents", "helper.md"), "utf8");
-  const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-model-routing.json"), "utf8"));
+  const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-model-routing.json"), "utf8"));
 
   assert.match(agent, /model: "anthropic\/claude-haiku-4-5"/);
   assert.match(agent, /reasoningEffort: "high"/);
@@ -1749,7 +1749,7 @@ test("syncToOpenCode warns when a sensitive MCP env reference cannot be material
     },
   }));
   fs.mkdirSync(path.join(homeDir, ".config"), { recursive: true });
-  fs.writeFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge"), "file blocking env store dir\n", "utf8");
+  fs.writeFileSync(path.join(homeDir, ".config", "agentx"), "file blocking env store dir\n", "utf8");
 
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
   const projectConfigText = fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8");
@@ -1847,7 +1847,7 @@ test("syncToOpenCode adds native Superpowers plugin to global JSONC config and s
   try {
     const report = syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
     const configText = fs.readFileSync(path.join(configDir, "opencode.jsonc"), "utf8");
-    const nativeReport = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-native-capabilities.json"), "utf8"));
+    const nativeReport = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-native-capabilities.json"), "utf8"));
 
     assert.match(configText, /keep this comment/);
     assert.match(configText, /superpowers@git\+https:\/\/github\.com\/obra\/superpowers\.git/);
@@ -1868,7 +1868,7 @@ test("syncToOpenCode can wire external quota UI and runtime fallback plugins", (
   fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "study-pack" }));
   fs.writeFileSync(path.join(extensionDir, "agents", "helper.md"), "---\ndescription: Helper.\n---\n# Helper\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     externalPlugins: {
       quotaUi: {
         enabled: true,
@@ -1893,7 +1893,7 @@ test("syncToOpenCode can wire external quota UI and runtime fallback plugins", (
   const report = syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off" });
   const projectConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
   const tuiConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, ...TUI_CONFIG_PATH.split("/")), "utf8"));
-  const ui = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-ui.json"), "utf8"));
+  const ui = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-ui.json"), "utf8"));
   const fallback = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode", "plugins", "fallback.json"), "utf8"));
 
   assert.deepEqual(projectConfig.plugin, ["opencode-auto-fallback", "@slkiser/opencode-quota"]);
@@ -1905,5 +1905,5 @@ test("syncToOpenCode can wire external quota UI and runtime fallback plugins", (
   assert.deepEqual(fallback.agentFallbacks, { helper: ["openai/gpt-5.4-mini"] });
   assert.ok(report.projectedExternalPlugins.includes("opencode-auto-fallback"));
   assert.ok(report.projectedExternalPlugins.includes("@slkiser/opencode-quota"));
-  assert.ok(report.projectedExternalIntegrationFiles.includes(".opencode/generated/ogb-ui.json"));
+  assert.ok(report.projectedExternalIntegrationFiles.includes(".opencode/generated/agentx-ui.json"));
 });

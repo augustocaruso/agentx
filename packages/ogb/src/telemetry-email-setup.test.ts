@@ -129,5 +129,5 @@ test("CLI telemetry setup-email dry-run prepares local worker without printing s
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /ogb-telemetry-email-worker/);
   assert.doesNotMatch(result.stdout, /resend-secret|ingest-secret/);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "telemetry-email-worker", "worker.js")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "telemetry-email-worker", "worker.js")), true);
 });

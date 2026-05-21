@@ -74,10 +74,10 @@ const HOME_SCOPED_SECURITY_PATHS = [
   ".config/opencode/tui.json",
   ".config/opencode/tui.jsonc",
   ".config/opencode/dcp.jsonc",
-  ".config/opencode-gemini-bridge/ogb.config.jsonc",
-  ".config/opencode-gemini-bridge/ogb-trust.jsonc",
-  ".config/opencode-gemini-bridge/generated/GEMINI.expanded.md",
-  ".config/opencode-gemini-bridge/generated/ogb-extension-map.json",
+  ".config/agentx/agentx.config.jsonc",
+  ".config/agentx/agentx-trust.jsonc",
+  ".config/agentx/generated/GEMINI.expanded.md",
+  ".config/agentx/generated/agentx-extension-map.json",
 ];
 
 function listProjectFiles(root: string, homeScoped = false): string[] {

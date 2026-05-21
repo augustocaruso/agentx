@@ -100,7 +100,7 @@ function templateDir(): string {
 }
 
 function stateRoot(homeDir = os.homedir()): string {
-  return path.join(homeDir, ".config", "opencode-gemini-bridge");
+  return path.join(homeDir, ".config", "agentx");
 }
 
 function defaultDefaultsPath(): string {

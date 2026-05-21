@@ -651,7 +651,7 @@ export function ensureGlobalStartupPlugin(options: {
   });
   const startupCommand = startupCommandPlan(adapter, options);
   const pluginPath = adapter.join(root, "plugins", "ogb-startup-sync.js");
-  const configPath = adapter.join(adapter.generatedDir, "ogb-startup-sync.json");
+  const configPath = adapter.join(adapter.generatedDir, "agentx-startup-sync.json");
   const source = ogbStartupPluginSource();
   const plugin = profileWriter.writeText({
     filePath: pluginPath,
@@ -705,12 +705,12 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const dcpConfigPath = adapter.join(root, "dcp.jsonc");
   const fallbackConfigPath = adapter.join(root, "plugins", "fallback.json");
   const globalStartupPluginPath = adapter.join(root, "plugins", "ogb-startup-sync.js");
-  const globalStartupConfigPath = adapter.join(adapter.generatedDir, "ogb-startup-sync.json");
+  const globalStartupConfigPath = adapter.join(adapter.generatedDir, "agentx-startup-sync.json");
   const globalGeneratedDir = adapter.pathApi.dirname(globalStartupConfigPath);
   const ogbConfigPath = projectRoot
     ? projectIsHome
-      ? adapter.join(adapter.bridgeConfigDir, "ogb.config.jsonc")
-      : adapter.join(projectRoot, ".opencode", "ogb.config.jsonc")
+      ? adapter.join(adapter.bridgeConfigDir, "agentx.config.jsonc")
+      : adapter.join(projectRoot, ".opencode", "agentx.config.jsonc")
     : undefined;
   const localRole = readLocalRole({ homeDir, platform: adapter.platform, env: adapter.env });
   const profileWriter = createProfileWriter({
@@ -930,14 +930,14 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     : checkPluginSyntax(globalStartupPluginPath);
   if (!pluginCheck.ok) warnings.push(pluginCheck.message);
   recoverStaleStartupStatus({
-    statusPath: adapter.join(globalGeneratedDir, "ogb-plugin-status.json"),
-    lockPath: adapter.join(globalGeneratedDir, "ogb-startup-sync.lock"),
+    statusPath: adapter.join(globalGeneratedDir, "agentx-plugin-status.json"),
+    lockPath: adapter.join(globalGeneratedDir, "agentx-startup-sync.lock"),
     cwd: homeDir,
     reason: "setup-ux.recovered-stale",
     dryRun: Boolean(options.dryRun),
   });
   clearStaleStartupFailureAfterLauncherRepair({
-    statusPath: adapter.join(globalGeneratedDir, "ogb-plugin-status.json"),
+    statusPath: adapter.join(globalGeneratedDir, "agentx-plugin-status.json"),
     cwd: homeDir,
     startupCommand,
     startupConfigWrite,

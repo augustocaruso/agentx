@@ -370,7 +370,7 @@ test("runValidation fails the legacy relative global startup plugin spec", () =>
       "file:plugins/ogb-startup-sync.js",
     ],
     instructions: [
-      path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md"),
+      path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md"),
     ],
   }, null, 2), "utf8");
 

@@ -194,7 +194,7 @@ function telemetryRootFrom(options: TelemetryOptions = {}): string {
   if (options.root) return path.resolve(options.root);
   if (options.configPath) return path.dirname(path.resolve(options.configPath));
   const homeDir = options.homeDir ?? os.homedir();
-  return path.join(homeDir, ".config", "opencode-gemini-bridge", "telemetry");
+  return path.join(homeDir, ".config", "agentx", "telemetry");
 }
 
 export function telemetryPaths(options: TelemetryOptions = {}): TelemetryPaths {
@@ -376,9 +376,9 @@ function currentAutomationSignals(): string[] {
 
 function looksLikeAutomationProject(label: string): boolean {
   const normalized = label.replace(/\\/g, "/");
-  return /(^|\/)(tmp|T)\/(tmp[._-]|ogb-)/i.test(normalized)
-    || /^tmp\/ogb-/i.test(normalized)
-    || /(^|\/)opencode-gemini-bridge(\/packages\/ogb)?$/i.test(normalized);
+  return /(^|\/)(tmp|T)\/(tmp[._-]|ogb-|agentx-)/i.test(normalized)
+    || /^tmp\/(ogb-|agentx-)/i.test(normalized)
+    || /(^|\/)(opencode-gemini-bridge|agentx)(\/packages\/(ogb|agentx))?$/i.test(normalized);
 }
 
 function isAutomationTelemetryRecord(record: WorkflowRunRecord | Record<string, unknown>): boolean {

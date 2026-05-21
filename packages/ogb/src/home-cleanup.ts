@@ -37,31 +37,31 @@ interface Candidate {
 const GENERATED_FILES = [
   ".opencode/generated/GEMINI.expanded.md",
   ".opencode/generated/opencode.generated.json",
-  ".opencode/generated/ogb-agent-sync-adoption.json",
-  ".opencode/generated/ogb-bidirectional-sync.json",
-  ".opencode/generated/ogb-dashboard.json",
-  ".opencode/generated/ogb-dashboard.md",
-  ".opencode/generated/ogb-doctor.json",
-  ".opencode/generated/ogb-extension-map.json",
-  ".opencode/generated/ogb-inventory.json",
-  ".opencode/generated/ogb-limits.json",
-  ".opencode/generated/ogb-model-routing.json",
-  ".opencode/generated/ogb-pass.json",
-  ".opencode/generated/ogb-plugin-status.json",
-  ".opencode/generated/ogb-quota.json",
-  ".opencode/generated/ogb-security.json",
-  ".opencode/generated/ogb-startup-sync.json",
-  ".opencode/generated/ogb-startup-sync.lock",
-  ".opencode/generated/ogb-sync-state.json",
-  ".opencode/generated/ogb-telemetry-status.json",
-  ".opencode/generated/ogb-ui.json",
-  ".opencode/generated/ogb-update-status.json",
-  ".opencode/generated/ogb-validation.json",
+  ".opencode/generated/agentx-agent-sync-adoption.json",
+  ".opencode/generated/agentx-bidirectional-sync.json",
+  ".opencode/generated/agentx-dashboard.json",
+  ".opencode/generated/agentx-dashboard.md",
+  ".opencode/generated/agentx-doctor.json",
+  ".opencode/generated/agentx-extension-map.json",
+  ".opencode/generated/agentx-inventory.json",
+  ".opencode/generated/agentx-limits.json",
+  ".opencode/generated/agentx-model-routing.json",
+  ".opencode/generated/agentx-pass.json",
+  ".opencode/generated/agentx-plugin-status.json",
+  ".opencode/generated/agentx-quota.json",
+  ".opencode/generated/agentx-security.json",
+  ".opencode/generated/agentx-startup-sync.json",
+  ".opencode/generated/agentx-startup-sync.lock",
+  ".opencode/generated/agentx-sync-state.json",
+  ".opencode/generated/agentx-telemetry-status.json",
+  ".opencode/generated/agentx-ui.json",
+  ".opencode/generated/agentx-update-status.json",
+  ".opencode/generated/agentx-validation.json",
 ];
 
 const PROJECT_FILES = [
-  ".opencode/ogb.config.jsonc",
-  ".opencode/ogb-trust.jsonc",
+  ".opencode/agentx.config.jsonc",
+  ".opencode/agentx-trust.jsonc",
   ".opencode/oh-my-openagent.jsonc",
   ".opencode/plugins/ogb-startup-sync.js",
   ".opencode/tui-plugins/ogb-sidebar.js",
@@ -143,10 +143,14 @@ function homeProjectConfigLooksManaged(filePath: string): boolean {
   if (!parsed || typeof parsed !== "object") return false;
   const instructions = Array.isArray(parsed.instructions) ? parsed.instructions : [];
   if (instructions.includes(".opencode/generated/GEMINI.expanded.md")) return true;
-  if (instructions.some((instruction: unknown) =>
-    typeof instruction === "string"
-    && instruction.replace(/\\/g, "/").includes(".config/opencode-gemini-bridge/generated/GEMINI.expanded.md")
-  )) return true;
+  if (instructions.some((instruction: unknown) => {
+    if (typeof instruction !== "string") return false;
+    const normalized = instruction.replace(/\\/g, "/");
+    return (
+      normalized.includes(".config/agentx/generated/GEMINI.expanded.md")
+      || normalized.includes(".config/opencode-gemini-bridge/generated/GEMINI.expanded.md")
+    );
+  })) return true;
   const plugins = Array.isArray(parsed.plugin) ? parsed.plugin : [];
   return plugins.some((plugin: unknown) => typeof plugin === "string" && plugin.includes("ogb-startup-sync"));
 }
@@ -166,7 +170,7 @@ function nestedGlobalOpenCodeConfigLooksManaged(dirPath: string): boolean {
 }
 
 function managedPathsFromOldState(homeDir: string, warnings: string[]): string[] {
-  const statePath = path.join(homeDir, ".opencode", "generated", "ogb-sync-state.json");
+  const statePath = path.join(homeDir, ".opencode", "generated", "agentx-sync-state.json");
   const parsed = readJsonc(statePath);
   const files = Array.isArray(parsed?.managedFiles) ? parsed.managedFiles : [];
   const out: string[] = [];

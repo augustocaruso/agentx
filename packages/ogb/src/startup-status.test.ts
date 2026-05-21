@@ -16,8 +16,8 @@ function writeJson(filePath: string, value: unknown): void {
 
 test("recoverStaleStartupStatus recovers running status when recorded pid is dead", () => {
   const root = tempRoot();
-  const statusPath = path.join(root, "generated", "ogb-plugin-status.json");
-  const lockPath = path.join(root, "generated", "ogb-startup-sync.lock");
+  const statusPath = path.join(root, "generated", "agentx-plugin-status.json");
+  const lockPath = path.join(root, "generated", "agentx-startup-sync.lock");
   writeJson(statusPath, {
     version: 1,
     state: "running",
@@ -46,8 +46,8 @@ test("recoverStaleStartupStatus recovers running status when recorded pid is dea
 
 test("recoverStaleStartupStatus preserves running status when recorded pid is alive", () => {
   const root = tempRoot();
-  const statusPath = path.join(root, "generated", "ogb-plugin-status.json");
-  const lockPath = path.join(root, "generated", "ogb-startup-sync.lock");
+  const statusPath = path.join(root, "generated", "agentx-plugin-status.json");
+  const lockPath = path.join(root, "generated", "agentx-startup-sync.lock");
   writeJson(statusPath, {
     version: 1,
     state: "running",
@@ -75,8 +75,8 @@ test("recoverStaleStartupStatus preserves running status when recorded pid is al
 
 test("recoverStaleStartupStatus removes stale lock even when status already finished", () => {
   const root = tempRoot();
-  const statusPath = path.join(root, "generated", "ogb-plugin-status.json");
-  const lockPath = path.join(root, "generated", "ogb-startup-sync.lock");
+  const statusPath = path.join(root, "generated", "agentx-plugin-status.json");
+  const lockPath = path.join(root, "generated", "agentx-startup-sync.lock");
   writeJson(statusPath, {
     version: 1,
     state: "pass",

@@ -65,16 +65,16 @@ export function resolveProjectPaths(projectRoot = process.cwd(), homeDir = os.ho
   const root = path.resolve(normalizePathInput(projectRoot));
   const home = path.resolve(normalizePathInput(homeDir));
   const homeMode = isHomeProject(root, home);
-  const bridgeConfigDir = path.join(home, ".config", "opencode-gemini-bridge");
+  const bridgeConfigDir = path.join(home, ".config", "agentx");
   const generatedDir = homeMode
     ? path.join(bridgeConfigDir, "generated")
     : path.join(root, ".opencode", "generated");
   const ogbConfigPath = homeMode
-    ? path.join(bridgeConfigDir, "ogb.config.jsonc")
-    : path.join(root, ".opencode", "ogb.config.jsonc");
+    ? path.join(bridgeConfigDir, "agentx.config.jsonc")
+    : path.join(root, ".opencode", "agentx.config.jsonc");
   const trustPath = homeMode
-    ? path.join(bridgeConfigDir, "ogb-trust.jsonc")
-    : path.join(root, ".opencode", "ogb-trust.jsonc");
+    ? path.join(bridgeConfigDir, "agentx-trust.jsonc")
+    : path.join(root, ".opencode", "agentx-trust.jsonc");
 
   return {
     projectRoot: root,
@@ -82,27 +82,27 @@ export function resolveProjectPaths(projectRoot = process.cwd(), homeDir = os.ho
     homeMode,
     bridgeConfigDir,
     generatedDir,
-    inventoryPath: path.join(generatedDir, "ogb-inventory.json"),
-    doctorPath: path.join(generatedDir, "ogb-doctor.json"),
-    validationPath: path.join(generatedDir, "ogb-validation.json"),
-    securityPath: path.join(generatedDir, "ogb-security.json"),
-    agentSyncAdoptionPath: path.join(generatedDir, "ogb-agent-sync-adoption.json"),
-    bidirectionalSyncPath: path.join(generatedDir, "ogb-bidirectional-sync.json"),
-    extensionMapPath: path.join(generatedDir, "ogb-extension-map.json"),
-    nativeCapabilitiesPath: path.join(generatedDir, "ogb-native-capabilities.json"),
-    modelRoutingPath: path.join(generatedDir, "ogb-model-routing.json"),
-    dashboardPath: path.join(generatedDir, "ogb-dashboard.json"),
-    dashboardMarkdownPath: path.join(generatedDir, "ogb-dashboard.md"),
-    telemetryStatusPath: path.join(generatedDir, "ogb-telemetry-status.json"),
-    passPath: path.join(generatedDir, "ogb-pass.json"),
-    updateStatusPath: path.join(generatedDir, "ogb-update-status.json"),
-    limitsPath: path.join(generatedDir, "ogb-limits.json"),
-    quotaPath: path.join(generatedDir, "ogb-quota.json"),
+    inventoryPath: path.join(generatedDir, "agentx-inventory.json"),
+    doctorPath: path.join(generatedDir, "agentx-doctor.json"),
+    validationPath: path.join(generatedDir, "agentx-validation.json"),
+    securityPath: path.join(generatedDir, "agentx-security.json"),
+    agentSyncAdoptionPath: path.join(generatedDir, "agentx-agent-sync-adoption.json"),
+    bidirectionalSyncPath: path.join(generatedDir, "agentx-bidirectional-sync.json"),
+    extensionMapPath: path.join(generatedDir, "agentx-extension-map.json"),
+    nativeCapabilitiesPath: path.join(generatedDir, "agentx-native-capabilities.json"),
+    modelRoutingPath: path.join(generatedDir, "agentx-model-routing.json"),
+    dashboardPath: path.join(generatedDir, "agentx-dashboard.json"),
+    dashboardMarkdownPath: path.join(generatedDir, "agentx-dashboard.md"),
+    telemetryStatusPath: path.join(generatedDir, "agentx-telemetry-status.json"),
+    passPath: path.join(generatedDir, "agentx-pass.json"),
+    updateStatusPath: path.join(generatedDir, "agentx-update-status.json"),
+    limitsPath: path.join(generatedDir, "agentx-limits.json"),
+    quotaPath: path.join(generatedDir, "agentx-quota.json"),
     ogbConfigPath,
     ohMyOpenAgentConfigPath: path.join(root, ".opencode", "oh-my-openagent.jsonc"),
     trustPath,
-    pluginStatusPath: path.join(generatedDir, "ogb-plugin-status.json"),
-    syncStatePath: path.join(generatedDir, "ogb-sync-state.json"),
+    pluginStatusPath: path.join(generatedDir, "agentx-plugin-status.json"),
+    syncStatePath: path.join(generatedDir, "agentx-sync-state.json"),
     expandedGeminiPath: path.join(generatedDir, "GEMINI.expanded.md"),
     generatedOpenCodeConfigPath: path.join(generatedDir, "opencode.generated.json"),
   };

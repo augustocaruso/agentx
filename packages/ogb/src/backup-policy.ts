@@ -51,7 +51,7 @@ export const DEFAULT_BACKUP_RETENTION_POLICY: BackupRetentionPolicy = {
 };
 
 export function bridgeConfigDirForHome(homeDir: string, pathApi: PathApi = path): string {
-  return pathApi.join(pathApi.resolve(homeDir), ".config", "opencode-gemini-bridge");
+  return pathApi.join(pathApi.resolve(homeDir), ".config", "agentx");
 }
 
 export function safeBackupTimestamp(date = new Date()): string {

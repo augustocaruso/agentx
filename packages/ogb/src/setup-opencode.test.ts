@@ -60,7 +60,7 @@ test("setupOpenCode installs startup plugin, config, and project OpenCode config
   assert.equal(fs.existsSync(projectPath(projectRoot, STARTUP_SYNC_CONFIG_PATH)), true);
   assert.equal(fs.existsSync(projectPath(projectRoot, TUI_SIDEBAR_PLUGIN_PATH)), true);
   assert.equal(fs.existsSync(projectPath(projectRoot, TUI_CONFIG_PATH)), true);
-  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /ogb-plugin-status\.json/);
+  assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /agentx-plugin-status\.json/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /startup-sync/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /REINICIE OPENCODE/);
   assert.match(fs.readFileSync(projectPath(projectRoot, STARTUP_SYNC_PLUGIN_PATH), "utf8"), /ogb dashboard refreshed/);
@@ -96,7 +96,7 @@ test("setupOpenCode skips project files when project root is home", () => {
   assert.equal(report.warnings.length, 0);
   assert.equal(fs.existsSync(path.join(homeDir, "opencode.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "ogb-startup-sync.json")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated", "agentx-startup-sync.json")), false);
 });
 
 test("setupOpenCode refuses to overwrite a manually changed startup plugin without force", () => {
@@ -135,7 +135,7 @@ test("setupOpenCode refuses to overwrite a manually changed startup plugin witho
 
   assert.equal(forced.plugin.status, "updated");
   assert.ok(forced.plugin.backup);
-  assert.ok(forced.plugin.backup.startsWith(path.join(homeDir, ".config", "opencode-gemini-bridge", "backups", "setup-opencode")));
+  assert.ok(forced.plugin.backup.startsWith(path.join(homeDir, ".config", "agentx", "backups", "setup-opencode")));
   assert.match(fs.readFileSync(forced.plugin.backup, "utf8"), /ManualPlugin/);
   assert.match(fs.readFileSync(pluginPath, "utf8"), /OgbStartupSync/);
 });
@@ -197,7 +197,7 @@ test("setupOpenCode preserves existing managed MCP config", () => {
 
 test("setupOpenCode clears stale startup sync status", () => {
   const projectRoot = tempProject();
-  const statusPath = path.join(projectRoot, ".opencode", "generated", "ogb-plugin-status.json");
+  const statusPath = path.join(projectRoot, ".opencode", "generated", "agentx-plugin-status.json");
   fs.mkdirSync(path.dirname(statusPath), { recursive: true });
   fs.writeFileSync(statusPath, JSON.stringify({
     version: 1,
@@ -223,7 +223,7 @@ test("setupOpenCode clears stale startup sync status", () => {
 test("startup plugin uses global generated lock and status when cwd is home", async () => {
   const root = tempProject();
   const homeDir = path.join(root, "home");
-  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const generatedDir = path.join(homeDir, ".config", "agentx", "generated");
   const pluginDir = path.join(root, "plugin");
   const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
   const runnerPath = path.join(root, "runner.mjs");
@@ -232,7 +232,7 @@ test("startup plugin uses global generated lock and status when cwd is home", as
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
   fs.writeFileSync(runnerPath, "console.log('ok')\n", "utf8");
-  fs.writeFileSync(path.join(generatedDir, "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: true,
     autoUpdate: false,
@@ -263,12 +263,12 @@ test("startup plugin uses global generated lock and status when cwd is home", as
     assert.equal(typeof plugin.event, "function");
     await plugin.event({ event: { type: "session.updated" } });
     await plugin.event({ event: { type: "session.idle" } });
-    assert.equal(fs.existsSync(path.join(generatedDir, "ogb-plugin-status.json")), false);
+    assert.equal(fs.existsSync(path.join(generatedDir, "agentx-plugin-status.json")), false);
     await plugin.event({ event: { type: "session.created" } });
 
-    const statusPath = path.join(generatedDir, "ogb-plugin-status.json");
-    const globalLockPath = path.join(generatedDir, "ogb-startup-sync.lock");
-    const oldHomeLockPath = path.join(homeDir, ".opencode", "generated", "ogb-startup-sync.lock");
+    const statusPath = path.join(generatedDir, "agentx-plugin-status.json");
+    const globalLockPath = path.join(generatedDir, "agentx-startup-sync.lock");
+    const oldHomeLockPath = path.join(homeDir, ".opencode", "generated", "agentx-startup-sync.lock");
     await waitFor(() => {
       if (!fs.existsSync(statusPath)) return false;
       const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
@@ -291,7 +291,7 @@ test("startup plugin uses global generated lock and status when cwd is home", as
 test("startup plugin expands runtime home placeholders before spawning", async () => {
   const root = tempProject();
   const homeDir = path.join(root, "home");
-  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const generatedDir = path.join(homeDir, ".config", "agentx", "generated");
   const pluginDir = path.join(root, "plugin");
   const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
   const runnerPath = path.join(homeDir, "runner.mjs");
@@ -300,7 +300,7 @@ test("startup plugin expands runtime home placeholders before spawning", async (
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
   fs.writeFileSync(runnerPath, "console.log('RUNNER_ARGS=' + JSON.stringify(process.argv.slice(2)))\n", "utf8");
-  fs.writeFileSync(path.join(generatedDir, "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: true,
     autoUpdate: false,
@@ -327,7 +327,7 @@ test("startup plugin expands runtime home placeholders before spawning", async (
 
     await plugin.event({ event: { type: "session.created" } });
 
-    const statusPath = path.join(generatedDir, "ogb-plugin-status.json");
+    const statusPath = path.join(generatedDir, "agentx-plugin-status.json");
     await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "pass");
 
     const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
@@ -351,7 +351,7 @@ test("startup plugin sends OGB command output directly to chat", async () => {
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
   fs.writeFileSync(runnerPath, "console.log('RUNNER_ARGS=' + JSON.stringify(process.argv.slice(2)))\n", "utf8");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: true,
     autoUpdate: false,
@@ -419,7 +419,7 @@ test("startup plugin runs global extension hooks from ordinary workspaces with w
   const root = tempProject();
   const homeDir = path.join(root, "home");
   const workspaceDir = path.join(root, "workspace");
-  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const generatedDir = path.join(homeDir, ".config", "agentx", "generated");
   const pluginDir = path.join(root, "plugin");
   const pluginPath = path.join(pluginDir, "ogb-startup-sync.js");
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
@@ -430,7 +430,7 @@ test("startup plugin runs global extension hooks from ordinary workspaces with w
   fs.mkdirSync(path.join(extensionDir, "hooks"), { recursive: true });
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
-  fs.writeFileSync(path.join(generatedDir, "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: false,
     autoUpdate: false,
@@ -438,7 +438,7 @@ test("startup plugin runs global extension hooks from ordinary workspaces with w
     baseArgs: ["--project", homeDir],
     syncArgs: ["startup-sync"],
   }, null, 2) + "\n");
-  fs.writeFileSync(path.join(generatedDir, "ogb-extension-map.json"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-extension-map.json"), JSON.stringify({
     _generated: { tool: "ogb", version: "test", warning: "test" },
     projectRoot: homeDir,
     generatedAt: new Date().toISOString(),
@@ -543,7 +543,7 @@ test("startup plugin runs projected Gemini extension tool hooks automatically", 
   fs.mkdirSync(path.join(extensionDir, "hooks"), { recursive: true });
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: false,
     autoUpdate: false,
@@ -551,7 +551,7 @@ test("startup plugin runs projected Gemini extension tool hooks automatically", 
     baseArgs: [],
     syncArgs: ["startup-sync"],
   }, null, 2) + "\n");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), JSON.stringify({
     _generated: { tool: "ogb", version: "test", warning: "test" },
     projectRoot,
     generatedAt: new Date().toISOString(),
@@ -677,7 +677,7 @@ test("startup plugin runs Gemini settings hooks automatically without trust opt-
   fs.mkdirSync(path.join(pluginDir), { recursive: true });
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: false,
     autoUpdate: false,
@@ -685,7 +685,7 @@ test("startup plugin runs Gemini settings hooks automatically without trust opt-
     baseArgs: [],
     syncArgs: ["startup-sync"],
   }, null, 2) + "\n");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), JSON.stringify({
     _generated: { tool: "ogb", version: "test", warning: "test" },
     projectRoot,
     generatedAt: new Date().toISOString(),
@@ -771,7 +771,7 @@ test("startup plugin projects Gemini BeforeAgent settings hooks onto OpenCode me
   fs.mkdirSync(path.join(pluginDir), { recursive: true });
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: false,
     autoUpdate: false,
@@ -779,7 +779,7 @@ test("startup plugin projects Gemini BeforeAgent settings hooks onto OpenCode me
     baseArgs: [],
     syncArgs: ["startup-sync"],
   }, null, 2) + "\n");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), JSON.stringify({
     _generated: { tool: "ogb", version: "test", warning: "test" },
     projectRoot,
     generatedAt: new Date().toISOString(),
@@ -866,7 +866,7 @@ test("startup plugin runs once for a burst of startup events", async () => {
   fs.writeFileSync(path.join(pluginDir, "package.json"), "{\"type\":\"module\"}\n", "utf8");
   fs.writeFileSync(pluginPath, STARTUP_SYNC_PLUGIN_SOURCE, "utf8");
   fs.writeFileSync(runnerPath, "import fs from 'node:fs'; if (process.argv.slice(2).includes('startup-sync')) fs.appendFileSync(process.env.OGB_COUNTER, 'x'); console.log('ok')\n", "utf8");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: true,
     autoUpdate: false,
@@ -901,7 +901,7 @@ test("startup plugin runs once for a burst of startup events", async () => {
       plugin.event({ event: { type: "session.created" } }),
     ]);
 
-    const statusPath = path.join(projectRoot, ".opencode", "generated", "ogb-plugin-status.json");
+    const statusPath = path.join(projectRoot, ".opencode", "generated", "agentx-plugin-status.json");
     await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "pass");
 
     assert.equal(fs.readFileSync(counterPath, "utf8"), "x");
@@ -936,7 +936,7 @@ test("startup plugin records failure diagnostics and suppresses retries during b
     "if (isStartup) { console.error('startup exploded clearly'); process.exit(1); }",
     "console.log('ok');",
   ].join("\n"), "utf8");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: true,
     autoUpdate: false,
@@ -968,7 +968,7 @@ test("startup plugin records failure diagnostics and suppresses retries during b
       plugin.event({ event: { type: "session.updated" } }),
     ]);
 
-    const statusPath = path.join(projectRoot, ".opencode", "generated", "ogb-plugin-status.json");
+    const statusPath = path.join(projectRoot, ".opencode", "generated", "agentx-plugin-status.json");
     await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "fail");
 
     const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
@@ -1011,7 +1011,7 @@ test("startup plugin downgrades legacy auto-update startup config to check-updat
     "fs.appendFileSync(process.env.OGB_CALLS, JSON.stringify(process.argv.slice(2)) + '\\n');",
     "console.log('ok');",
   ].join("\n"), "utf8");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-startup-sync.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-startup-sync.json"), JSON.stringify({
     version: 1,
     enabled: true,
     autoUpdate: true,
@@ -1040,7 +1040,7 @@ test("startup plugin downgrades legacy auto-update startup config to check-updat
 
     await plugin.event({ event: { type: "session.created" } });
 
-    const statusPath = path.join(projectRoot, ".opencode", "generated", "ogb-plugin-status.json");
+    const statusPath = path.join(projectRoot, ".opencode", "generated", "agentx-plugin-status.json");
     await waitFor(() => fs.existsSync(statusPath) && JSON.parse(fs.readFileSync(statusPath, "utf8")).state === "pass");
     await waitFor(() => fs.existsSync(callsPath) && fs.readFileSync(callsPath, "utf8").split(/\n/).filter(Boolean).length >= 3);
 

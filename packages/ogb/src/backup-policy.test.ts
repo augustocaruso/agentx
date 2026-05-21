@@ -22,7 +22,7 @@ function writeBackupSession(bridgeConfigDir: string, operation: string, date: Da
 
 test("createBackupSession backs up files under named roots", () => {
   const root = tempRoot();
-  const bridgeConfigDir = path.join(root, ".config", "opencode-gemini-bridge");
+  const bridgeConfigDir = path.join(root, ".config", "agentx");
   const projectRoot = path.join(root, "project");
   const target = path.join(projectRoot, ".opencode", "agents", "YOLO.md");
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -341,5 +341,5 @@ test("createBackupSession fails before callers overwrite when backup cannot be c
 
 test("bridgeConfigDirForHome resolves the shared backup root", () => {
   const root = tempRoot();
-  assert.equal(bridgeConfigDirForHome(root), path.join(root, ".config", "opencode-gemini-bridge"));
+  assert.equal(bridgeConfigDirForHome(root), path.join(root, ".config", "agentx"));
 });

@@ -103,9 +103,9 @@ function passReport(overrides: Partial<PassReport> = {}): PassReport {
     security: { outcome: "pass" },
     dashboard: { outcome: "pass" },
     files: {
-      pass: `${projectRoot}/.opencode/generated/ogb-pass.json`,
-      doctor: `${projectRoot}/.opencode/generated/ogb-doctor.json`,
-      dashboard: `${projectRoot}/.opencode/generated/ogb-dashboard.md`,
+      pass: `${projectRoot}/.opencode/generated/agentx-pass.json`,
+      doctor: `${projectRoot}/.opencode/generated/agentx-doctor.json`,
+      dashboard: `${projectRoot}/.opencode/generated/agentx-dashboard.md`,
     },
     ...overrides,
   };
@@ -233,7 +233,7 @@ test("update ritual final report avoids Ink fullscreen clears on short terminals
         "Run `ogb dashboard --plain` for the last persisted bridge state.",
       ],
     },
-    files: [`${projectRoot}/.opencode/generated/ogb-pass.json`, `${projectRoot}/.opencode/generated/ogb-dashboard.md`],
+    files: [`${projectRoot}/.opencode/generated/agentx-pass.json`, `${projectRoot}/.opencode/generated/agentx-dashboard.md`],
   }, { now: 5000 });
 
   stdout.clear();
@@ -583,7 +583,7 @@ test("update final model surfaces post-update check summary without raw progress
         callouts: ["validation: Validation falhou: OpenCode resolved config."],
         next: ["OGB should repair this automatically."],
       },
-      files: ["C:\\Users\\leo\\.config\\opencode-gemini-bridge\\generated\\ogb-pass.json"],
+      files: ["C:\\Users\\leo\\.config\\agentx\\generated\\agentx-pass.json"],
     },
   });
 
@@ -593,7 +593,7 @@ test("update final model surfaces post-update check summary without raw progress
   assert.match(text, /Validation falhou: OpenCode resolved config/);
   assert.doesNotMatch(text, /schemaVersion/);
   assert.match(model.next[0], /repair this automatically/);
-  assert.match(model.files[0], /ogb-pass\.json/);
+  assert.match(model.files[0], /agentx-pass\.json/);
 });
 
 test("update final model compacts noisy bootstrap tails for the rich UI", () => {

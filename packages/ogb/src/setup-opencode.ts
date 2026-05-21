@@ -18,7 +18,7 @@ import { ensureTuiSidebar } from "./tui-sidebar.js";
 import { OGB_VERSION } from "./types.js";
 
 export const STARTUP_SYNC_PLUGIN_PATH = ".opencode/plugins/ogb-startup-sync.js";
-export const STARTUP_SYNC_CONFIG_PATH = ".opencode/generated/ogb-startup-sync.json";
+export const STARTUP_SYNC_CONFIG_PATH = ".opencode/generated/agentx-startup-sync.json";
 
 export const STARTUP_SYNC_PLUGIN_SOURCE = String.raw`import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -33,14 +33,14 @@ const DEFAULT_LOCK_TTL_MS = 10 * 60_000;
 const DEFAULT_FAILURE_BACKOFF_MS = 10 * 60_000;
 const DEFAULT_LIMITS_REFRESH_MS = 60_000;
 const PROJECT_GENERATED_DIR = path.join(".opencode", "generated");
-const GLOBAL_GENERATED_DIR = path.join(os.homedir(), ".config", "opencode-gemini-bridge", "generated");
-const STARTUP_CONFIG_FILE = "ogb-startup-sync.json";
-const STATUS_FILE = "ogb-plugin-status.json";
-const STARTUP_LOCK_FILE = "ogb-startup-sync.lock";
-const UPDATE_STATUS_FILE = "ogb-update-status.json";
-const DASHBOARD_FILE = "ogb-dashboard.md";
-const MCP_ENV_FILE = path.join(os.homedir(), ".config", "opencode-gemini-bridge", "mcp-env.json");
-const EXTENSION_MAP_FILE = "ogb-extension-map.json";
+const GLOBAL_GENERATED_DIR = path.join(os.homedir(), ".config", "agentx", "generated");
+const STARTUP_CONFIG_FILE = "agentx-startup-sync.json";
+const STATUS_FILE = "agentx-plugin-status.json";
+const STARTUP_LOCK_FILE = "agentx-startup-sync.lock";
+const UPDATE_STATUS_FILE = "agentx-update-status.json";
+const DASHBOARD_FILE = "agentx-dashboard.md";
+const MCP_ENV_FILE = path.join(os.homedir(), ".config", "agentx", "mcp-env.json");
+const EXTENSION_MAP_FILE = "agentx-extension-map.json";
 const STARTUP_DELAY_MS = 2500;
 const OGB_DIRECT_COMMANDS = {
   bridge: {
@@ -1993,8 +1993,8 @@ export function checkPluginSyntax(pluginPath?: string, source = STARTUP_SYNC_PLU
 function repairStaleStartupStatus(projectRoot: string, dryRun?: boolean): void {
   const generatedDir = path.join(projectRoot, ".opencode", "generated");
   recoverStaleStartupStatus({
-    statusPath: path.join(generatedDir, "ogb-plugin-status.json"),
-    lockPath: path.join(generatedDir, "ogb-startup-sync.lock"),
+    statusPath: path.join(generatedDir, "agentx-plugin-status.json"),
+    lockPath: path.join(generatedDir, "agentx-startup-sync.lock"),
     cwd: projectRoot,
     reason: "setup-opencode.recovered-stale",
     dryRun: Boolean(dryRun),

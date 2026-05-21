@@ -568,7 +568,9 @@ function globalExpandedInstructionRef(_globalRoot: string, expandedPath: string)
 function isManagedGlobalInstructionRef(value: string): boolean {
   const normalized = value.replace(/\\/g, "/");
   return normalized === "../opencode-gemini-bridge/generated/GEMINI.expanded.md"
+    || normalized === "~/.config/agentx/generated/GEMINI.expanded.md"
     || normalized === "~/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md"
+    || normalized.endsWith("/.config/agentx/generated/GEMINI.expanded.md")
     || normalized.endsWith("/.config/opencode-gemini-bridge/generated/GEMINI.expanded.md");
 }
 
@@ -627,8 +629,8 @@ function mergePluginSpecsByPackage(...groups: Array<string[] | undefined>): stri
 
 function nativeCapabilitiesReportStatePath(paths: ReturnType<typeof resolveProjectPaths>): string {
   return paths.homeMode
-    ? ".config/opencode-gemini-bridge/generated/ogb-native-capabilities.json"
-    : ".opencode/generated/ogb-native-capabilities.json";
+    ? ".config/agentx/generated/agentx-native-capabilities.json"
+    : ".opencode/generated/agentx-native-capabilities.json";
 }
 
 function writeNativeCapabilitiesReport(options: {
@@ -1124,7 +1126,7 @@ function writeGlobalExtensionMap(options: {
     warnings: options.warnings,
   };
   const content = `${JSON.stringify(map, null, 2)}\n`;
-  const reportPath = ".config/opencode-gemini-bridge/generated/ogb-extension-map.json";
+  const reportPath = ".config/agentx/generated/agentx-extension-map.json";
   if (options.dryRun) return { promoted: reportPath };
 
   fs.mkdirSync(path.dirname(options.paths.extensionMapPath), { recursive: true });
@@ -1561,7 +1563,7 @@ function projectGlobalGeminiContext(options: {
     inputs,
     dryRun: options.dryRun,
   });
-  const expandedReportPath = ".config/opencode-gemini-bridge/generated/GEMINI.expanded.md";
+  const expandedReportPath = ".config/agentx/generated/GEMINI.expanded.md";
   if (!options.dryRun) {
     upsertManagedFile(options.state, {
       path: expandedReportPath,
@@ -3786,7 +3788,7 @@ function syncGlobalOpenCode(paths: ReturnType<typeof resolveProjectPaths>, optio
   if (!options.dryRun) {
     writeModelRoutingReport(paths.modelRoutingPath, routing.report);
     upsertManagedFile(state, {
-      path: ".config/opencode-gemini-bridge/generated/ogb-model-routing.json",
+      path: ".config/agentx/generated/agentx-model-routing.json",
       sha256: sha256File(paths.modelRoutingPath),
       source: "ogb",
     });

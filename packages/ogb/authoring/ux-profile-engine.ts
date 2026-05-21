@@ -764,13 +764,13 @@ function addFileCandidates(paths: ResolvedPaths, candidates: UxProfileAuthoringC
   addWholeJsonCandidate({
     candidates,
     excluded,
-    id: "file:ogb.config.jsonc",
-    category: "ogb.config.jsonc",
+    id: "file:agentx.config.jsonc",
+    category: "agentx.config.jsonc",
     scope: "bridge",
-    relPath: "ogb.config.jsonc",
+    relPath: "agentx.config.jsonc",
     target: "projectConfig",
     summary: "Config OGB autoral distribuida como profile",
-    filePath: paths.adapter.join(paths.bridgeConfigDir, "ogb.config.jsonc"),
+    filePath: paths.adapter.join(paths.bridgeConfigDir, "agentx.config.jsonc"),
     presetValue: UX_PROFILE_PRESET.projectConfig,
     jsonKind: "jsonc",
   });
@@ -778,7 +778,7 @@ function addFileCandidates(paths: ResolvedPaths, candidates: UxProfileAuthoringC
 
 function isAllowedRelPath(scope: UxProfileAuthoringScope, relPath: string): boolean {
   const rel = toPosixPath(relPath);
-  if (scope === "bridge") return rel === "ogb.config.jsonc";
+  if (scope === "bridge") return rel === "agentx.config.jsonc";
   return rel === "opencode.json"
     || rel === "opencode.jsonc"
     || rel === "AGENTS.md"
@@ -892,7 +892,7 @@ function readCandidateText(paths: ResolvedPaths, candidate: UxProfileAuthoringCa
 function parsedCandidateValue(paths: ResolvedPaths, candidate: UxProfileAuthoringCandidate): unknown {
   const filePath = candidatePath(paths, candidate);
   if (!filePath) return undefined;
-  if (candidate.id === "file:dcp.jsonc" || candidate.id === "file:ogb.config.jsonc") return readJsoncFile(filePath).value;
+  if (candidate.id === "file:dcp.jsonc" || candidate.id === "file:agentx.config.jsonc") return readJsoncFile(filePath).value;
   if (candidate.id === "file:plugins/fallback.json") return readJsonFile(filePath).value;
   return undefined;
 }
@@ -930,7 +930,7 @@ function applyCandidateToPreset(paths: ResolvedPaths, preset: UxProfilePreset, c
     preset.fallbackConfig = asRecord(parsedCandidateValue(paths, candidate));
     return;
   }
-  if (candidate.id === "file:ogb.config.jsonc") {
+  if (candidate.id === "file:agentx.config.jsonc") {
     preset.projectConfig = asRecord(parsedCandidateValue(paths, candidate));
     return;
   }

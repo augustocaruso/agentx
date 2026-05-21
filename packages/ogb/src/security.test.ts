@@ -24,7 +24,7 @@ permission:
 ---
 `);
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), JSON.stringify({
     extensions: [
       {
         hooks: [{ source: "hooks/hooks.json", projected: false }],
@@ -48,8 +48,8 @@ permission:
   external_directory: allow
 ---
 `);
-  fs.mkdirSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-extension-map.json"), JSON.stringify({
+  fs.mkdirSync(path.join(homeDir, ".config", "agentx", "generated"), { recursive: true });
+  fs.writeFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-extension-map.json"), JSON.stringify({
     extensions: [
       {
         hooks: [{ source: "hooks/hooks.json", projected: false }],
@@ -190,7 +190,7 @@ permission:
   fs.mkdirSync(path.join(extensionDir, "hooks"), { recursive: true });
   fs.writeFileSync(path.join(extensionDir, "hooks", "hooks.json"), "{}\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), JSON.stringify({
     extensions: [
       {
         name: "trusted-ext",
@@ -225,7 +225,7 @@ test("buildTrustReviewReport lists hook commands and trust hash status", () => {
   }));
   fs.mkdirSync(path.join(extensionDir, "scripts"), { recursive: true });
   fs.writeFileSync(path.join(extensionDir, "scripts", "check.js"), "console.log('ok')\n");
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-extension-map.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), JSON.stringify({
     extensions: [
       {
         name: "review-ext",

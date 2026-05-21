@@ -765,7 +765,7 @@ export function runPatchesForPhase(options: RunPatchesOptions): PatchRunReport {
 }
 
 function legacyHomeStartupLockPath(context: PatchContext): string {
-  return context.adapter.join(context.homeDir, ".opencode", "generated", "ogb-startup-sync.lock");
+  return context.adapter.join(context.homeDir, ".opencode", "generated", "agentx-startup-sync.lock");
 }
 
 export function runBeforeGeminiExtensionUpdatePatches(

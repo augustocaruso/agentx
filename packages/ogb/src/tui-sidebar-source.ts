@@ -8,7 +8,7 @@ import { createSignal, onCleanup, onMount } from "solid-js";
 const id = "ogb:sidebar";
 const REFRESH_MS = 5000;
 const PROMPT_REFRESH_MS = 1000;
-const GLOBAL_GENERATED_DIR = path.join(os.homedir(), ".config", "opencode-gemini-bridge", "generated");
+const GLOBAL_GENERATED_DIR = path.join(os.homedir(), ".config", "agentx", "generated");
 const GLOBAL_TUI_PLUGIN_PATH = path.join(os.homedir(), ".config", "opencode", "tui-plugins", "ogb-sidebar.js");
 const PLUGIN_FILE = fileURLToPath(import.meta.url);
 let eventsRegistered = false;
@@ -213,8 +213,8 @@ function limitsReportAt(filePath) {
 
 function newestLimitsReport(root) {
   const candidates = [
-    path.join(generatedDir(root), "ogb-limits.json"),
-    path.join(GLOBAL_GENERATED_DIR, "ogb-limits.json"),
+    path.join(generatedDir(root), "agentx-limits.json"),
+    path.join(GLOBAL_GENERATED_DIR, "agentx-limits.json"),
   ];
   let best;
   for (const filePath of [...new Set(candidates)]) {
@@ -236,7 +236,7 @@ function readLimits(root) {
 }
 
 function readUiPrefs(root) {
-  const prefs = safeReadJson(path.join(generatedDir(root), "ogb-ui.json"));
+  const prefs = safeReadJson(path.join(generatedDir(root), "agentx-ui.json"));
   return prefs && typeof prefs === "object" ? prefs : {};
 }
 
@@ -851,11 +851,11 @@ function quotaUsageColor(theme, percent) {
 
 function readPanel(root) {
   const generated = generatedDir(root);
-  const dashboard = safeReadJson(path.join(generated, "ogb-dashboard.json"));
-  const doctor = safeReadJson(path.join(generated, "ogb-doctor.json"));
-  const inventory = safeReadJson(path.join(generated, "ogb-inventory.json"));
-  const pluginStatus = safeReadJson(path.join(generated, "ogb-plugin-status.json"));
-  const updateStatus = dashboard?.update || safeReadJson(path.join(generated, "ogb-update-status.json")) || {};
+  const dashboard = safeReadJson(path.join(generated, "agentx-dashboard.json"));
+  const doctor = safeReadJson(path.join(generated, "agentx-doctor.json"));
+  const inventory = safeReadJson(path.join(generated, "agentx-inventory.json"));
+  const pluginStatus = safeReadJson(path.join(generated, "agentx-plugin-status.json"));
+  const updateStatus = dashboard?.update || safeReadJson(path.join(generated, "agentx-update-status.json")) || {};
   const limits = readLimits(root);
 
   if (!dashboard && !doctor && !inventory) {

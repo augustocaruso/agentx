@@ -828,7 +828,7 @@ program.command("limits")
   .description("Refresh and show provider usage limits used by the OGB TUI")
   .option("--json", "Print JSON report")
   .option("--cached", "Use a fresh cache entry when available")
-  .option("--no-write", "Do not write .opencode/generated/ogb-limits.json")
+  .option("--no-write", "Do not write .opencode/generated/agentx-limits.json")
   .option("--no-gemini-fallback", "Do not use Gemini Code Assist quota as fallback when OpenUsage has no Gemini provider")
   .option("--strict", "Exit non-zero when no limits are available")
   .action(async (opts) => {
@@ -1323,7 +1323,7 @@ addUpdateOptions(program.command("upgrade-ogb"))
 program.command("check-update")
   .description("Check GitHub Releases for a newer OGB version")
   .option("--repo <owner/repo>", "GitHub repo that publishes OGB releases", "augustocaruso/opencode-gemini-bridge")
-  .option("--no-write", "Do not write .opencode/generated/ogb-update-status.json")
+  .option("--no-write", "Do not write .opencode/generated/agentx-update-status.json")
   .option("--json", "Print JSON report")
   .action(async (opts) => {
     const { project } = commonProjectOptions();
@@ -1346,7 +1346,7 @@ program.command("auto-update")
   .option("--install-opencode", "Allow auto-update to install OpenCode when it is missing", false)
   .option("--force", "Pass force to the bootstrap installer")
   .option("--dry-run", "Check and print the bootstrap command without running it")
-  .option("--no-write", "Do not write .opencode/generated/ogb-update-status.json")
+  .option("--no-write", "Do not write .opencode/generated/agentx-update-status.json")
   .option("--json", "Print JSON report")
   .action(async (opts) => {
     await withWorkflowTelemetry("auto-update", async () => {

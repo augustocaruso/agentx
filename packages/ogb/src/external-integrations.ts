@@ -9,7 +9,7 @@ import { globalOpenCodeConfigDir } from "./opencode-paths.js";
 
 export const OPENCODE_QUOTA_PLUGIN = "@slkiser/opencode-quota";
 export const AUTO_FALLBACK_PLUGIN = "opencode-auto-fallback";
-export const OGB_UI_CONFIG_PATH = ".opencode/generated/ogb-ui.json";
+export const OGB_UI_CONFIG_PATH = ".opencode/generated/agentx-ui.json";
 export const QUOTA_CONFIG_PATH = "opencode-quota/quota-toast.json";
 
 export interface ExternalIntegrationWrite {

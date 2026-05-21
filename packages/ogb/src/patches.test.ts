@@ -599,9 +599,9 @@ test("medical notes pre-update snapshot falls back to OGB telemetry config", { s
     const port = fs.readFileSync(portFile, "utf8").trim();
     const endpoint = `http://127.0.0.1:${port}/v1/telemetry/workflow-runs`;
     fs.mkdirSync(path.join(extensionPath, "scripts"), { recursive: true });
-    fs.mkdirSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "telemetry"), { recursive: true });
+    fs.mkdirSync(path.join(homeDir, ".config", "agentx", "telemetry"), { recursive: true });
     fs.writeFileSync(
-      path.join(homeDir, ".config", "opencode-gemini-bridge", "telemetry", "config.json"),
+      path.join(homeDir, ".config", "agentx", "telemetry", "config.json"),
       JSON.stringify({
         schema: "opencode-gemini-bridge.telemetry-config.v1",
         enabled: true,

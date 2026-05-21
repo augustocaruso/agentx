@@ -16,13 +16,13 @@ function writeFile(filePath: string, content: string): void {
 
 test("cleanupHomeProjectArtifacts backs up and removes old home project files", () => {
   const homeDir = tempHome();
-  const staleBackup = path.join(homeDir, ".config", "opencode-gemini-bridge", "backups", "home-cleanup", "2000-01-01T00-00-00-000Z");
+  const staleBackup = path.join(homeDir, ".config", "agentx", "backups", "home-cleanup", "2000-01-01T00-00-00-000Z");
   fs.mkdirSync(staleBackup, { recursive: true });
   fs.writeFileSync(path.join(staleBackup, "old.txt"), "old backup\n", "utf8");
   writeFile(path.join(homeDir, "opencode.jsonc"), JSON.stringify({
     instructions: [".opencode/generated/GEMINI.expanded.md"],
   }, null, 2));
-  writeFile(path.join(homeDir, ".opencode", "generated", "ogb-sync-state.json"), JSON.stringify({
+  writeFile(path.join(homeDir, ".opencode", "generated", "agentx-sync-state.json"), JSON.stringify({
     managedFiles: [
       { path: ".opencode/commands/custom.md", sha256: "old", source: "ogb" },
       { path: ".opencode/skills/project-skill/SKILL.md", sha256: "old", source: "ogb" },
@@ -51,7 +51,7 @@ test("cleanupHomeProjectArtifacts backs up and removes old home project files", 
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "bin", "opencode")), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "notes.txt")), true);
   assert.ok(report.backupDir);
-  assert.ok(report.backupDir.startsWith(path.join(homeDir, ".config", "opencode-gemini-bridge", "backups", "home-cleanup")));
+  assert.ok(report.backupDir.startsWith(path.join(homeDir, ".config", "agentx", "backups", "home-cleanup")));
   assert.ok(report.backups.length > 0);
   assert.equal(fs.existsSync(path.join(report.backupDir!, "opencode.jsonc")), true);
   assert.equal(fs.existsSync(path.join(report.backupDir!, ".opencode", "commands", "custom.md")), true);
@@ -62,7 +62,7 @@ test("cleanupHomeProjectArtifacts removes nested global OpenCode config left by 
   const homeDir = tempHome();
   const nestedRoot = path.join(homeDir, ".config", "opencode", "opencode");
   writeFile(path.join(nestedRoot, "opencode.json"), JSON.stringify({
-    instructions: [path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "GEMINI.expanded.md")],
+    instructions: [path.join(homeDir, ".config", "agentx", "generated", "GEMINI.expanded.md")],
   }, null, 2));
   writeFile(path.join(nestedRoot, "skills", "obsidian-ops", "SKILL.md"), "# Obsidian ops\n");
 

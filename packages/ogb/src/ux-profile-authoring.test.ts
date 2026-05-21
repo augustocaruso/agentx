@@ -21,7 +21,7 @@ test("authoring engine inventories allowed UX profile candidates and excludes un
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const opencodeDir = path.join(homeDir, ".config", "opencode");
-  const bridgeDir = path.join(homeDir, ".config", "opencode-gemini-bridge");
+  const bridgeDir = path.join(homeDir, ".config", "agentx");
   writeText(path.join(opencodeDir, "opencode.json"), JSON.stringify({
     plugin: ["opencode-gemini-auth@9.9.9", "file:///tmp/local.js"],
     default_agent: "YOLO",
@@ -36,7 +36,7 @@ test("authoring engine inventories allowed UX profile candidates and excludes un
   writeText(path.join(opencodeDir, "plugins", "fallback.json"), JSON.stringify({ enabled: false }, null, 2));
   writeText(path.join(opencodeDir, "plugins", "ogb-startup-sync.js"), "console.log('startup');\n");
   writeText(path.join(opencodeDir, "tui-plugins", "ogb-sidebar.js"), "console.log('sidebar');\n");
-  writeText(path.join(bridgeDir, "ogb.config.jsonc"), "{ \"openCode\": { \"defaultAgent\": \"YOLO\" } }\n");
+  writeText(path.join(bridgeDir, "agentx.config.jsonc"), "{ \"openCode\": { \"defaultAgent\": \"YOLO\" } }\n");
   writeText(path.join(bridgeDir, "local-role.json"), "{}\n");
   writeText(path.join(bridgeDir, "generated", "telemetry.json"), "{}\n");
 
@@ -50,7 +50,7 @@ test("authoring engine inventories allowed UX profile candidates and excludes un
   assert.equal(ids.has("file:plugins/fallback.json"), true);
   assert.equal(ids.has("file:plugins/ogb-startup-sync.js"), false);
   assert.equal(ids.has("file:tui-plugins/ogb-sidebar.js"), false);
-  assert.equal(ids.has("file:ogb.config.jsonc"), true);
+  assert.equal(ids.has("file:agentx.config.jsonc"), true);
 
   const plugin = inventory.candidates.find((candidate) => candidate.id === "opencode:plugin");
   assert.deepEqual(plugin?.value, ["opencode-gemini-auth@9.9.9"]);
@@ -67,7 +67,7 @@ test("authoring engine excludes global OpenCode files managed by OGB sync", () =
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const opencodeDir = path.join(homeDir, ".config", "opencode");
-  const statePath = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-sync-state.json");
+  const statePath = path.join(homeDir, ".config", "agentx", "generated", "agentx-sync-state.json");
   writeText(path.join(opencodeDir, "agents", "generated-agent.md"), "generated agent\n");
   writeText(path.join(opencodeDir, "commands", "generated-command.md"), "<!-- SOURCE_KIND: gemini-global-command -->\n");
   writeText(path.join(opencodeDir, "skills", "generated-skill", "SKILL.md"), "# generated\n");
@@ -222,5 +222,5 @@ test("authoring engine resolves Windows profile paths through PlatformAdapter", 
     env: { APPDATA: "C:\\Users\\Ada\\AppData\\Roaming" },
   });
   assert.equal(inventory.globalConfigRelPath, "~/.config/opencode");
-  assert.equal(inventory.bridgeConfigRelPath, "~/.config/opencode-gemini-bridge");
+  assert.equal(inventory.bridgeConfigRelPath, "~/.config/agentx");
 });

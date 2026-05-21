@@ -78,7 +78,7 @@ test("runDoctor honors the OpenCode model lookup timeout environment", () => {
   const homeDir = tempRoot();
   const binDir = path.join(tempRoot(), "bin");
   fs.mkdirSync(path.join(projectRoot, ".opencode", "generated"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "ogb-model-routing.json"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-model-routing.json"), JSON.stringify({
     decisions: [
       {
         chain: [
@@ -115,7 +115,7 @@ test("runDoctor matches OpenCode plugins by package name across versions", () =>
   const projectRoot = tempRoot();
   const homeDir = tempRoot();
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
-  fs.writeFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), JSON.stringify({
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     externalPlugins: {
       autoFallback: {
         enabled: true,
@@ -298,9 +298,9 @@ test("runDoctor marks preserved setup projections stale when the native setup so
 
 test("runDoctor recovers stale global startup sync status when project root is home", () => {
   const homeDir = tempRoot();
-  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const generatedDir = path.join(homeDir, ".config", "agentx", "generated");
   fs.mkdirSync(generatedDir, { recursive: true });
-  fs.writeFileSync(path.join(generatedDir, "ogb-plugin-status.json"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-plugin-status.json"), JSON.stringify({
     version: 1,
     state: "running",
     reason: "plugin.init",
@@ -309,17 +309,17 @@ test("runDoctor recovers stale global startup sync status when project root is h
     command: "ogb",
     args: ["--project", homeDir, "sync"],
   }, null, 2) + "\n", "utf8");
-  fs.writeFileSync(path.join(generatedDir, "ogb-startup-sync.lock"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-startup-sync.lock"), JSON.stringify({
     pid: 99999999,
     startedAt: "2026-05-06T12:00:00.000Z",
   }) + "\n", "utf8");
 
   runDoctor({ projectRoot: homeDir, homeDir, silent: true });
 
-  const status = JSON.parse(fs.readFileSync(path.join(generatedDir, "ogb-plugin-status.json"), "utf8"));
+  const status = JSON.parse(fs.readFileSync(path.join(generatedDir, "agentx-plugin-status.json"), "utf8"));
   assert.equal(status.state, "pass");
   assert.equal(status.reason, "doctor.recovered-stale");
-  assert.equal(fs.existsSync(path.join(generatedDir, "ogb-startup-sync.lock")), false);
+  assert.equal(fs.existsSync(path.join(generatedDir, "agentx-startup-sync.lock")), false);
 });
 
 test("runDoctor warns when global TUI plugin runtime dependencies are missing", () => {

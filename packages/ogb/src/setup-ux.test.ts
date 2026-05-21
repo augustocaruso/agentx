@@ -77,7 +77,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(report.writes.some((write) => write.path.endsWith("opencode.json") && write.status === "created"), true);
   assert.equal(report.writes.some((write) => pathEndsWith(write.path, "agents/YOLO.md") && write.status === "created"), true);
   assert.equal(report.writes.some((write) => pathEndsWith(write.path, "agents/YOLO-worker.md") && write.status === "created"), true);
-  assert.equal(report.writes.some((write) => pathEndsWith(write.path, ".opencode/ogb.config.jsonc") && write.status === "created"), true);
+  assert.equal(report.writes.some((write) => pathEndsWith(write.path, ".opencode/agentx.config.jsonc") && write.status === "created"), true);
   assert.ok(report.writes.some((write) =>
     pathEndsWith(write.path, "agents/YOLO.md")
     && write.kind === "agent"
@@ -166,7 +166,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fallback.agentFallbacks["med-chat-triager"][0].model, "openai/gpt-5.4-mini");
   assert.equal(fallback.agentFallbacks["med-chat-triager"][0].reasoningEffort, "medium");
 
-  const projectConfig = parseJsonc(fs.readFileSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc"), "utf8"));
+  const projectConfig = parseJsonc(fs.readFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), "utf8"));
   assert.equal(projectConfig.openCode.defaultAgent, "YOLO");
   assert.equal(projectConfig.externalPlugins.autoFallback.plugin, "opencode-auto-fallback@0.4.3");
   assert.equal(projectConfig.externalPlugins.autoFallback.installProjectPlugin, false);
@@ -190,7 +190,7 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.match(fs.readFileSync(path.join(configDir, "tui-plugins", "ogb-sidebar.js"), "utf8"), /GLOBAL_GENERATED_DIR/);
   const globalTuiConfig = readJson(path.join(configDir, "tui.json"));
   assert.deepEqual(globalTuiConfig.plugin, [TUI_SIDEBAR_PLUGIN_SPEC]);
-  const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
+  const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
   assert.equal(typeof startupConfig.command, "string");
   assert.deepEqual(startupConfig.baseArgs, ["--project", process.platform === "win32" ? "{OGB_HOME}" : homeDir]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
@@ -272,7 +272,7 @@ test("setupUx writes runtime-expanded Windows ogb shim path for startup sync", (
     installPlugins: false,
   });
 
-  const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
+  const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
   assert.equal(startupConfig.command.replace(/\\/g, "/"), "{OGB_APPDATA}/npm/ogb.cmd");
   assert.deepEqual(startupConfig.baseArgs, ["--project", "{OGB_HOME}"]);
   assert.deepEqual(startupConfig.syncArgs, ["startup-sync"]);
@@ -299,7 +299,7 @@ test("setupUx prefers the installed ogb command for POSIX startup sync", { skip:
     installPlugins: false,
   });
 
-  const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
+  const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
   assert.equal(startupConfig.command, ogbBin);
   assert.deepEqual(startupConfig.baseArgs, ["--project", homeDir]);
 });
@@ -356,7 +356,7 @@ test("setupUx protects differing OpenCode profile files when maintainer mode is 
   assert.equal(report.writes.some((write) => write.path === agentsPath && write.status === "protected"), true);
   assert.equal(report.writes.some((write) => write.path === retiredCommandPath && write.status === "protected"), true);
   assert.equal(report.writes.some((write) => Boolean(write.backup)), false);
-  assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode-gemini-bridge", "backups")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".config", "agentx", "backups")), false);
   assert.equal(report.warnings.some((warning) => warning.includes("modo mantenedor local")), true);
 });
 
@@ -364,10 +364,10 @@ test("setupUx still repairs startup runtime files when maintainer mode is enable
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const configDir = path.join(root, "config", "opencode");
-  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const generatedDir = path.join(homeDir, ".config", "agentx", "generated");
   const projectRoot = path.join(root, "project");
-  const startupConfigPath = path.join(generatedDir, "ogb-startup-sync.json");
-  const startupStatusPath = path.join(generatedDir, "ogb-plugin-status.json");
+  const startupConfigPath = path.join(generatedDir, "agentx-startup-sync.json");
+  const startupStatusPath = path.join(generatedDir, "agentx-plugin-status.json");
   fs.mkdirSync(projectRoot, { recursive: true });
   fs.mkdirSync(generatedDir, { recursive: true });
   fs.writeFileSync(startupConfigPath, JSON.stringify({
@@ -537,13 +537,13 @@ test("setupUx treats the home directory as global-only and writes the global OGB
     installPlugins: false,
   });
 
-  const globalProfilePath = path.join(homeDir, ".config", "opencode-gemini-bridge", "ogb.config.jsonc");
+  const globalProfilePath = path.join(homeDir, ".config", "agentx", "agentx.config.jsonc");
   const globalProfile = parseJsonc(fs.readFileSync(globalProfilePath, "utf8"));
 
   assert.equal(report.ogbConfigPath, globalProfilePath);
   assert.equal(globalProfile.openCode.defaultAgent, "YOLO");
   assert.equal(globalProfile.modelFallbacks.agents["med-chat-triager"].model.id, "google/gemini-3-flash-preview");
-  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "ogb.config.jsonc")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agentx.config.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
   assert.equal(fs.existsSync(path.join(configDir, "opencode.json")), true);
   assert.equal(fs.existsSync(path.join(configDir, "plugins", "ogb-startup-sync.js")), true);
@@ -563,12 +563,12 @@ test("setupUx treats an accidentally quoted home path as global-only", () => {
     installOpenCode: false,
     installPlugins: false,
   });
-  const startupConfig = readJson(path.join(homeDir, ".config", "opencode-gemini-bridge", "generated", "ogb-startup-sync.json"));
+  const startupConfig = readJson(path.join(homeDir, ".config", "agentx", "generated", "agentx-startup-sync.json"));
 
-  assert.equal(report.ogbConfigPath, path.join(homeDir, ".config", "opencode-gemini-bridge", "ogb.config.jsonc"));
+  assert.equal(report.ogbConfigPath, path.join(homeDir, ".config", "agentx", "agentx.config.jsonc"));
   assert.equal(report.projectRoot, path.resolve(homeDir));
   assert.deepEqual(startupConfig.baseArgs, ["--project", process.platform === "win32" ? "{OGB_HOME}" : path.resolve(homeDir)]);
-  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "ogb.config.jsonc")), false);
+  assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agentx.config.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "generated")), false);
 });
 
@@ -672,7 +672,7 @@ test("setupUx dry-run previews without writing files", () => {
 
   assert.equal(report.writes.every((write) => write.status === "preview"), true);
   assert.equal(fs.existsSync(configDir), false);
-  assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc")), false);
+  assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc")), false);
 });
 
 test("setupUx removes stale websearch_cited provider option without dropping user provider config", () => {
@@ -786,11 +786,11 @@ test("setupUx recovers stale global startup sync status", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");
   const configDir = path.join(root, "config", "opencode");
-  const generatedDir = path.join(homeDir, ".config", "opencode-gemini-bridge", "generated");
+  const generatedDir = path.join(homeDir, ".config", "agentx", "generated");
   const projectRoot = path.join(root, "project");
   fs.mkdirSync(generatedDir, { recursive: true });
   fs.mkdirSync(projectRoot, { recursive: true });
-  fs.writeFileSync(path.join(generatedDir, "ogb-plugin-status.json"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-plugin-status.json"), JSON.stringify({
     version: 1,
     state: "running",
     reason: "plugin.init",
@@ -799,7 +799,7 @@ test("setupUx recovers stale global startup sync status", () => {
     command: "ogb",
     args: ["--project", homeDir, "sync"],
   }, null, 2) + "\n");
-  fs.writeFileSync(path.join(generatedDir, "ogb-startup-sync.lock"), JSON.stringify({
+  fs.writeFileSync(path.join(generatedDir, "agentx-startup-sync.lock"), JSON.stringify({
     pid: 99999999,
     startedAt: "2026-05-06T12:00:00.000Z",
   }) + "\n");
@@ -813,10 +813,10 @@ test("setupUx recovers stale global startup sync status", () => {
     installPlugins: false,
   });
 
-  const status = readJson(path.join(generatedDir, "ogb-plugin-status.json"));
+  const status = readJson(path.join(generatedDir, "agentx-plugin-status.json"));
   assert.equal(status.state, "pass");
   assert.equal(status.reason, "setup-ux.recovered-stale");
-  assert.equal(fs.existsSync(path.join(generatedDir, "ogb-startup-sync.lock")), false);
+  assert.equal(fs.existsSync(path.join(generatedDir, "agentx-startup-sync.lock")), false);
 });
 
 test("setupUx keeps websearch-cited disabled even after OpenAI and Google auth exist", () => {
@@ -916,7 +916,7 @@ test("setupUx overwrites existing project profile with backup by default", () =>
   const root = tempRoot();
   const configDir = path.join(root, "config", "opencode");
   const projectRoot = path.join(root, "project");
-  const profilePath = path.join(projectRoot, ".opencode", "ogb.config.jsonc");
+  const profilePath = path.join(projectRoot, ".opencode", "agentx.config.jsonc");
   fs.mkdirSync(path.dirname(profilePath), { recursive: true });
   fs.writeFileSync(profilePath, "{ \"custom\": true }\n", "utf8");
 

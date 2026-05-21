@@ -85,7 +85,7 @@ test("runInstall previews setup without running the final check", () => {
   assert.deepEqual(report.plan.steps.map((step) => step.id), ["cleanup-home-artifacts", "apply-global-ux-profile", "run-check"]);
   assert.equal(report.check, undefined);
   assert.ok(report.setup.writes.some((write) => write.status === "preview"));
-  assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc")), false);
+  assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc")), false);
 });
 
 test("runInstall emits top-level ritual progress", () => {
@@ -200,7 +200,7 @@ test("runInstall applies the current install flow and finishes with check", () =
   assert.ok(report.check);
   assert.ok(report.check.automated.includes("setup-opencode"));
   assert.ok(report.check.automated.includes("sync"));
-  assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "ogb.config.jsonc")), true);
+  assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc")), true);
   assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "commands", "bridge.md")), true);
   const state = readStateRecord("install", { projectRoot, homeDir });
   assert.equal(state.exists, true);
