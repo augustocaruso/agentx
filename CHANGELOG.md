@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.7 - Cleanup pós-rebrand e bootstrap limpo
+
+- Remove vazamentos públicos de `OGB`/`OpenCode Gemini Bridge` e mensagens PT-BR nas superfícies de UI, diagnóstico, telemetria e arquivos gerados.
+- Faz o setup reconhecer plugins legados gerados como gerenciados, permitindo reescrever `ogb-startup-sync.js` e `ogb-sidebar.js` sem `--force` quando o conteúdo tem marker conhecido.
+- Faz os bootstraps macOS/Linux/Windows removerem instalação legada `ogb` antes de instalar `agentx`, sem recriar o alias legado por padrão.
+- Adiciona regressões de contrato para bloquear novos vazamentos públicos de marca antiga e remediação PT-BR.
+
 ## 0.2.6 - UI do instalador usa agentX
 
 - Troca os titulos e mensagens publicas dos rituais `install`/`update` de `OGB`/`OpenCode Gemini Bridge` para `agentX`, incluindo plain output, rich UI, progress details e help dessas rotas.
