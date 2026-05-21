@@ -1,4 +1,5 @@
 import { cleanupHomeProjectArtifacts, type HomeCleanupReport } from "./home-cleanup.js";
+import { DISPLAY } from "./brand.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { runPass, type PassReport } from "./pass.js";
 import { resolveProjectPaths } from "./paths.js";
@@ -146,7 +147,7 @@ export function runInstall(options: InstallOptions = {}): InstallReport {
       emitRitualProgress(options.onProgress, {
         stepId: "profile",
         label: "Apply the OpenCode profile.",
-        detail: options.resetGlobal ? "Overwrites global config from OGB defaults." : "Merges managed global settings and writes the project/global profile.",
+        detail: options.resetGlobal ? `Overwrites global config from ${DISPLAY} defaults.` : "Merges managed global settings and writes the project/global profile.",
         status: "running",
       });
       try {
@@ -174,7 +175,7 @@ export function runInstall(options: InstallOptions = {}): InstallReport {
         emitRitualProgress(options.onProgress, {
           stepId: "profile",
           label: "Apply the OpenCode profile.",
-          detail: options.resetGlobal ? "Overwrites global config from OGB defaults." : "Merges managed global settings and writes the project/global profile.",
+          detail: options.resetGlobal ? `Overwrites global config from ${DISPLAY} defaults.` : "Merges managed global settings and writes the project/global profile.",
           status: profileStatus,
           message: [
             `${changedWrites} write(s) checked.`,
@@ -191,14 +192,14 @@ export function runInstall(options: InstallOptions = {}): InstallReport {
         emitRitualProgress(options.onProgress, {
           stepId: "plugins",
           label: "Install global OpenCode plugins.",
-          detail: "Covers auth, fallback, sidebar, and OGB startup sync integrations.",
+          detail: `Covers auth, fallback, sidebar, and ${DISPLAY} startup sync integrations.`,
           status: options.installPlugins === false ? "skipped" : pluginStatus,
           message: options.installPlugins === false ? "Skipped by --no-plugins." : `${activePluginCommands} setup command(s) checked.`,
         });
         emitRitualProgress(options.onProgress, {
           stepId: "project-profile",
           label: "Write the project or global profile.",
-          detail: "Home uses global files; projects get the managed OGB profile.",
+          detail: `Home uses global files; projects get the managed ${DISPLAY} profile.`,
           status: options.writeProjectProfile === false ? "skipped" : projectProfileStatus,
           message: paths.homeMode ? "Home/global profile was used." : "Project profile was checked.",
         });
@@ -209,7 +210,7 @@ export function runInstall(options: InstallOptions = {}): InstallReport {
           emitRitualProgress(options.onProgress, {
             stepId,
             label: stepId === "opencode" ? "Verify OpenCode is available." : stepId === "plugins" ? "Install global OpenCode plugins." : stepId === "project-profile" ? "Write the project or global profile." : "Apply the OpenCode profile.",
-            detail: stepId === "opencode" ? "Installs or updates OpenCode when the platform flow allows it." : stepId === "plugins" ? "Covers auth, fallback, sidebar, and OGB startup sync integrations." : stepId === "project-profile" ? "Home uses global files; projects get the managed OGB profile." : "Merges managed global settings and writes the project/global profile.",
+            detail: stepId === "opencode" ? "Installs or updates OpenCode when the platform flow allows it." : stepId === "plugins" ? `Covers auth, fallback, sidebar, and ${DISPLAY} startup sync integrations.` : stepId === "project-profile" ? `Home uses global files; projects get the managed ${DISPLAY} profile.` : "Merges managed global settings and writes the project/global profile.",
             status: "fail",
             message,
           });
@@ -317,8 +318,8 @@ export function printInstallReport(report: InstallReport, json = false): void {
   }
 
   const title = report.outcome === "preview"
-    ? "OpenCode Gemini Bridge install preview"
-    : "OpenCode Gemini Bridge install complete";
+    ? `${DISPLAY} install preview`
+    : `${DISPLAY} install complete`;
   console.log(title);
   console.log(`Project: ${report.projectRoot}`);
   console.log(`Mode: ${report.homeMode ? "home/global" : "project"}`);
@@ -328,10 +329,10 @@ export function printInstallReport(report: InstallReport, json = false): void {
   if (report.setup) {
     const writes = report.setup.writes.filter((write) => write.status !== "unchanged").length;
     const commands = report.setup.commands.filter((command) => command.status !== "skipped").length;
-    console.log(`Global UX: ${writes} changed/previewed write(s), ${commands} command(s)`);
+    console.log(`${DISPLAY} UX: ${writes} changed/previewed write(s), ${commands} command(s)`);
     for (const notice of report.setup.notices) console.log(`Notice: ${notice}`);
   } else {
-    console.log("Global UX: skipped");
+    console.log(`${DISPLAY} UX: skipped`);
   }
   if (report.check) {
     console.log(`Check: ${outcomeLabel(report.check.outcome)}`);

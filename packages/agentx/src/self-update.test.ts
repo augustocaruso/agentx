@@ -3,10 +3,25 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildPostUpdateRitualCommand, buildSelfUpdateCommand, checkOgbUpdate, runAutoUpdate, runSelfUpdate, writeSelfUpdateSuccessStatus } from "./self-update.js";
+import { BINARY, DISPLAY } from "./brand.js";
+import { buildPostUpdateRitualCommand, buildSelfUpdateCommand, checkOgbUpdate, printSelfUpdateReport, runAutoUpdate, runSelfUpdate, writeSelfUpdateSuccessStatus } from "./self-update.js";
 import { resolveProjectPaths } from "./paths.js";
 import { RITUAL_PROGRESS_SCHEMA_VERSION, type RitualProgressEvent } from "./ritual-progress.js";
 import { AGENTX_VERSION } from "./types.js";
+
+function captureConsoleLog(callback: () => void): string {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.join(" "));
+  };
+  try {
+    callback();
+  } finally {
+    console.log = original;
+  }
+  return lines.join("\n");
+}
 
 test("buildSelfUpdateCommand uses GitHub bootstrap on POSIX platforms", () => {
   const command = buildSelfUpdateCommand({
@@ -109,6 +124,17 @@ test("runSelfUpdate dry-run does not execute the bootstrap", () => {
   assert.equal(report.plan.intent, "update");
   assert.equal(report.command[0], process.platform === "win32" ? "powershell.exe" : "bash");
   assert.match(report.message, /Would download/);
+});
+
+test("plain self-update report uses the current product brand", () => {
+  const report = runSelfUpdate({ dryRun: true, projectRoot: "/tmp/ogb" });
+  const output = captureConsoleLog(() => printSelfUpdateReport(report));
+
+  assert.equal(output.split("\n")[0], `${DISPLAY} update: preview`);
+  assert.match(report.message, new RegExp(`selected ${DISPLAY} release`));
+  assert.match(output, new RegExp(`selected ${DISPLAY} release`));
+  assert.match(output, new RegExp(`${BINARY} .* check --force --no-extension-update`));
+  assert.doesNotMatch(output, /OGB update|selected OGB|OpenCode Gemini Bridge/);
 });
 
 test("runSelfUpdate dry-run emits update ritual progress", () => {

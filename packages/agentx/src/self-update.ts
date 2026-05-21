@@ -5,7 +5,7 @@ import { runNativeCommand, type NativeCommandResult, type NativeCommandSpec } fr
 import { createPlatformAdapter } from "./platform-adapter.js";
 import { normalizePathInput, resolveProjectPaths } from "./paths.js";
 import { emitRitualProgress, progressStatusFromOutcome, RITUAL_PROGRESS_SCHEMA_VERSION, type RitualProgressJsonEvent, type RitualProgressSink, type RitualProgressStatus, type RitualProgressSummary } from "./ritual-progress.js";
-import { BINARY, BOOTSTRAP_TEMP_PREFIX, GITHUB_REPO, LEGACY_BINARY } from "./brand.js";
+import { BINARY, BOOTSTRAP_TEMP_PREFIX, DISPLAY, GITHUB_REPO, LEGACY_BINARY } from "./brand.js";
 import { writeStateRecord } from "./state-store.js";
 import { AGENTX_VERSION } from "./types.js";
 import type { RulesyncMode } from "./rulesync.js";
@@ -165,8 +165,8 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
     latestTag,
     checkedAt,
     message: latestTag
-      ? `OGB update completed for ${latestTag}.`
-      : "OGB update completed from the latest release.",
+      ? `${DISPLAY} update completed for ${latestTag}.`
+      : `${DISPLAY} update completed from the latest release.`,
   };
   const report: AutoUpdateReport = {
     status: "updated",
@@ -177,8 +177,8 @@ export function writeSelfUpdateSuccessStatus(options: SelfUpdateOptions = {}, no
     finishedAt: checkedAt,
     restartRequired: true,
     message: latestTag
-      ? `OGB update completed for ${latestTag}. Running the full bridge check and then restart OpenCode.`
-      : "OGB update completed. Running the full bridge check and then restart OpenCode.",
+      ? `${DISPLAY} update completed for ${latestTag}. Running the full bridge check and then restart OpenCode.`
+      : `${DISPLAY} update completed. Running the full bridge check and then restart OpenCode.`,
     check,
     plan: buildUpdatePlan(options),
   };
@@ -566,7 +566,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     emitRitualProgress(options.onProgress, {
       stepId: "install",
       label: "Apply the installer.",
-      detail: "Replaces the OGB CLI and managed profile files.",
+      detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
       status: "skipped",
       message: "Dry-run preview; install skipped.",
     });
@@ -582,7 +582,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       status: "preview",
       command,
       plan,
-      message: "Would download the selected OGB release and rerun the official bootstrap installer.",
+      message: `Would download the selected ${DISPLAY} release and rerun the official bootstrap installer.`,
       postUpdate,
     };
   }
@@ -597,7 +597,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
   emitRitualProgress(options.onProgress, {
     stepId: "install",
     label: "Apply the installer.",
-    detail: "Replaces the OGB CLI and managed profile files.",
+    detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
     status: "running",
     message: "Waiting for bootstrap to finish.",
   });
@@ -620,7 +620,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     emitRitualProgress(options.onProgress, {
       stepId: "install",
       label: "Apply the installer.",
-      detail: "Replaces the OGB CLI and managed profile files.",
+      detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
       status: "fail",
       message: result.error,
     });
@@ -628,7 +628,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
       status: "error",
       command,
       plan,
-      message: `Could not start the OGB bootstrap command: ${result.error}`,
+      message: `Could not start the ${DISPLAY} bootstrap command: ${result.error}`,
       stdoutTail: outputTail(result.stdout),
       stderrTail: outputTail(result.stderr),
     });
@@ -647,7 +647,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     emitRitualProgress(options.onProgress, {
       stepId: "install",
       label: "Apply the installer.",
-      detail: "Replaces the OGB CLI and managed profile files.",
+      detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
       status: "fail",
       message: stderrTail ?? stdoutTail ?? message,
     });
@@ -663,7 +663,7 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
   emitRitualProgress(options.onProgress, {
     stepId: "install",
     label: "Apply the installer.",
-    detail: "Replaces the OGB CLI and managed profile files.",
+    detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
     status: "pass",
     message: "Installer completed.",
   });
@@ -712,12 +712,12 @@ export function runSelfUpdate(options: SelfUpdateOptions = {}): SelfUpdateReport
     plan,
     postUpdate,
     message: postUpdate?.status === "fail" || postUpdate?.status === "error"
-      ? `OGB bootstrap completed. Post-update check needs attention: ${postUpdate.message}`
+      ? `${DISPLAY} bootstrap completed. Post-update check needs attention: ${postUpdate.message}`
       : postUpdate?.status === "warn"
-      ? "OGB bootstrap completed. Full bridge check ran with warnings; see agentx check/dashboard for details."
+      ? `${DISPLAY} bootstrap completed. Full bridge check ran with warnings; see ${BINARY} check/dashboard for details.`
       : postUpdate?.status === "skipped"
-        ? "OGB bootstrap completed. Post-update check was skipped because setup was disabled."
-        : "OGB bootstrap completed. Full bridge check was refreshed.",
+        ? `${DISPLAY} bootstrap completed. Post-update check was skipped because setup was disabled.`
+        : `${DISPLAY} bootstrap completed. Full bridge check was refreshed.`,
   };
 }
 
@@ -741,8 +741,8 @@ export async function checkOgbUpdate(options: UpdateCheckOptions = {}): Promise<
       releaseUrl: release.url,
       checkedAt,
       message: available
-        ? `OGB ${release.tag} is available; current version is ${currentVersion}.`
-        : `OGB is current at ${currentVersion}.`,
+        ? `${DISPLAY} ${release.tag} is available; current version is ${currentVersion}.`
+        : `${DISPLAY} is current at ${currentVersion}.`,
     };
     if (options.write !== false) writeUpdateReport(options.projectRoot, report);
     return report;
@@ -751,7 +751,7 @@ export async function checkOgbUpdate(options: UpdateCheckOptions = {}): Promise<
       status: "unknown",
       currentVersion,
       checkedAt,
-      message: `Could not check OGB updates: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Could not check ${DISPLAY} updates: ${error instanceof Error ? error.message : String(error)}`,
     };
     if (options.write !== false) writeUpdateReport(options.projectRoot, report);
     return report;
@@ -811,10 +811,10 @@ export async function runAutoUpdate(options: AutoUpdateOptions = {}): Promise<Au
     finishedAt: new Date().toISOString(),
     restartRequired: updated,
     message: options.dryRun
-      ? `Would update OGB from ${check.currentVersion} to ${check.latestTag ?? check.latestVersion}.`
+      ? `Would update ${DISPLAY} from ${check.currentVersion} to ${check.latestTag ?? check.latestVersion}.`
       : updated
-        ? `OGB updated to ${check.latestTag ?? check.latestVersion}. Running the full bridge check and then restart OpenCode.`
-        : `OGB auto-update failed: ${selfUpdate.message}`,
+        ? `${DISPLAY} updated to ${check.latestTag ?? check.latestVersion}. Running the full bridge check and then restart OpenCode.`
+        : `${DISPLAY} auto-update failed: ${selfUpdate.message}`,
     check,
     plan: buildUpdatePlan(selfUpdateOptions),
     selfUpdate,
@@ -825,7 +825,7 @@ export async function runAutoUpdate(options: AutoUpdateOptions = {}): Promise<Au
     report.postUpdate = postUpdate;
     report.selfUpdate = { ...selfUpdate, postUpdate };
     if (postUpdate.status === "fail" || postUpdate.status === "error") {
-      report.message = `OGB updated. Post-update check needs attention: ${postUpdate.message}`;
+      report.message = `${DISPLAY} updated. Post-update check needs attention: ${postUpdate.message}`;
     }
     if (options.write !== false) writeUpdateReport(options.projectRoot, report);
   }
@@ -837,7 +837,7 @@ export function printSelfUpdateReport(report: SelfUpdateReport, json = false): v
     console.log(JSON.stringify(report, null, 2));
     return;
   }
-  console.log(`OGB update: ${report.status}`);
+  console.log(`${DISPLAY} update: ${report.status}`);
   console.log(report.message);
   console.log(formatCommand(report.command));
   if (report.postUpdate) {
@@ -853,7 +853,7 @@ export function printUpdateCheckReport(report: UpdateCheckReport, json = false):
     console.log(JSON.stringify(report, null, 2));
     return;
   }
-  console.log(`OGB update check: ${report.status}`);
+  console.log(`${DISPLAY} update check: ${report.status}`);
   console.log(report.message);
   if (report.releaseUrl) console.log(report.releaseUrl);
 }
@@ -863,7 +863,7 @@ export function printAutoUpdateReport(report: AutoUpdateReport, json = false): v
     console.log(JSON.stringify(report, null, 2));
     return;
   }
-  console.log(`OGB auto-update: ${report.status}`);
+  console.log(`${DISPLAY} auto-update: ${report.status}`);
   console.log(report.message);
   if (report.selfUpdate) console.log(formatCommand(report.selfUpdate.command));
   if (report.postUpdate) {

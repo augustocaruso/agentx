@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS } from "./built-ins.js";
+import { BINARY, DISPLAY } from "./brand.js";
 import { commandExists, resolveCommand } from "./command-resolution.js";
 import { readEnvAgentx } from "./env.js";
 import { buildInventory } from "./inventory.js";
@@ -618,24 +619,24 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
   if (!paths.homeMode && !rulesyncCommand) warnings.push("Rulesync is unavailable; agentx sync will use bridge-native projection only.");
   if (state?.lastRulesync?.conflicts?.length) warnings.push(`Rulesync has unresolved conflicts: ${state.lastRulesync.conflicts.join(", ")}`);
   else if (state?.lastRulesync?.status === "error") warnings.push("Last Rulesync run failed. Run agentx sync --rulesync require --dry-run for details.");
-  if (paths.homeMode && startupSync.globalPlugin && !globalStartupPluginConfigured) warnings.push("Global OGB startup plugin exists but is not listed in the OpenCode global plugin config. Run ogb setup-ux --reset-global.");
-  if (legacyGlobalStartupPluginConfig.length > 0) warnings.push(`Global OpenCode config still references legacy OGB startup plugin spec(s): ${legacyGlobalStartupPluginConfig.join(", ")}. Run ogb setup-ux --force to replace them with the absolute local plugin URL, then restart OpenCode.`);
+  if (paths.homeMode && startupSync.globalPlugin && !globalStartupPluginConfigured) warnings.push(`Global ${DISPLAY} startup plugin exists but is not listed in the OpenCode global plugin config. Run ${BINARY} setup-ux --reset-global.`);
+  if (legacyGlobalStartupPluginConfig.length > 0) warnings.push(`Global OpenCode config still references legacy startup plugin spec(s): ${legacyGlobalStartupPluginConfig.join(", ")}. Run ${BINARY} setup-ux --force to replace them with the absolute local plugin URL, then restart OpenCode.`);
   if (globalStartupPluginConfigured) {
     if (!startupSync.globalPlugin) {
-      warnings.push("Global OGB startup plugin is missing. Run agentx check to repair it automatically, then restart OpenCode.");
+      warnings.push(`Global ${DISPLAY} startup plugin is missing. Run ${BINARY} check to repair it automatically, then restart OpenCode.`);
     } else if (sha256File(globalStartupPluginPath) !== sha256Text(STARTUP_SYNC_PLUGIN_SOURCE)) {
-      warnings.push("Global OGB startup plugin is stale. Run agentx check to repair it automatically, then restart OpenCode.");
+      warnings.push(`Global ${DISPLAY} startup plugin is stale. Run ${BINARY} check to repair it automatically, then restart OpenCode.`);
     }
   }
   const globalTuiConfig = globalTuiConfigPath(paths.homeDir);
   if (configHasPluginSpec(globalTuiConfig, TUI_SIDEBAR_PLUGIN_SPEC)) {
     const missingTuiRuntime = missingGlobalTuiRuntimeDependencies(globalOpenCodeConfigDir({ homeDir: paths.homeDir }));
-    if (missingTuiRuntime.length > 0) warnings.push(`Global OGB TUI runtime dependencies are missing: ${missingTuiRuntime.join(", ")}. Run ogb setup-ux.`);
+    if (missingTuiRuntime.length > 0) warnings.push(`Global ${DISPLAY} TUI runtime dependencies are missing: ${missingTuiRuntime.join(", ")}. Run ${BINARY} setup-ux.`);
     const globalTuiPlugin = globalTuiPluginPath(paths.homeDir);
     if (!fs.existsSync(globalTuiPlugin)) {
-      warnings.push("Global OGB TUI sidebar plugin is missing. Run agentx check to repair it automatically, then restart OpenCode.");
+      warnings.push(`Global ${DISPLAY} TUI sidebar plugin is missing. Run ${BINARY} check to repair it automatically, then restart OpenCode.`);
     } else if (sha256File(globalTuiPlugin) !== sha256Text(TUI_SIDEBAR_PLUGIN_SOURCE)) {
-      warnings.push("Global OGB TUI sidebar plugin is stale. Run agentx check to repair it automatically, then restart OpenCode.");
+      warnings.push(`Global ${DISPLAY} TUI sidebar plugin is stale. Run ${BINARY} check to repair it automatically, then restart OpenCode.`);
     }
   }
   if (startupSync.lastState === "fail") warnings.push("Last OpenCode startup sync failed. Run agentx dashboard for details.");

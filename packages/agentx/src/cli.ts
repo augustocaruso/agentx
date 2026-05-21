@@ -508,12 +508,12 @@ type UpdateCliOptions = {
 
 function addUpdateOptions(command: Command): Command {
   return command
-    .description("Update OGB from the GitHub release pack and run the full post-update check")
+    .description(`Update ${DISPLAY} from the GitHub release pack and run the full post-update check`)
     .option("--repo <owner/repo>", "GitHub repo that publishes agentX releases", GITHUB_REPO)
     .option("--release <tag>", "Release tag to install; defaults to latest", "latest")
     .option("--prefix <path>", "Install prefix passed to the installer")
     .option("--rulesync <mode>", "Rulesync mode passed to first-run setup", "auto")
-    .option("--no-setup", "Update ogb/profile only; skip import/setup/doctor validation")
+    .option("--no-setup", `Update ${BINARY}/profile only; skip import/setup/doctor validation`)
     .option("--no-ux", "Do not reapply the global OpenCode UX profile")
     .option("--no-install-opencode", "Do not install OpenCode when it is missing")
     .option("--force", "Pass force to the bootstrap installer")
@@ -849,7 +849,7 @@ program.command("limits")
   });
 
 const telemetry = program.command("telemetry")
-  .description("Manage local-first OGB workflow telemetry");
+  .description(`Manage local-first ${DISPLAY} workflow telemetry`);
 
 telemetry.command("setup-email")
   .description("Configure Cloudflare Worker + Resend email telemetry using Wrangler")
@@ -1128,17 +1128,17 @@ program.command("launch")
   });
 
 program.command("install")
-  .description("Install or reinstall the OGB OpenCode profile and run the full check")
+  .description(`Install or reinstall the ${DISPLAY} OpenCode profile and run the full check`)
   .option("--dry-run", "Preview install actions without writing")
-  .option("--force", "Overwrite OGB-managed files previously changed outside ogb management")
+  .option("--force", `${DISPLAY}-managed files previously changed outside ${BINARY} management`)
   .option("--rulesync <mode>", "Rulesync mode used by the final check", "auto")
   .option("--no-rulesync", "Disable Rulesync during the final check")
   .option("--no-ux", "Do not reapply the global OpenCode UX profile")
-  .option("--reset-global", "Replace the global OpenCode config from OGB defaults instead of merging existing fields")
+  .option("--reset-global", `Replace the global OpenCode config from ${DISPLAY} defaults instead of merging existing fields`)
   .option("--no-install-opencode", "Do not install OpenCode when it is missing")
   .option("--no-plugins", "Do not run global OpenCode plugin installers")
-  .option("--no-project-profile", "Do not write the project OGB fallback/profile config")
-  .option("--no-cleanup-home", "Do not clean old OGB project artifacts from the home directory")
+  .option("--no-project-profile", `Do not write the project ${DISPLAY} fallback/profile config`)
+  .option("--no-cleanup-home", `Do not clean old ${DISPLAY} project artifacts from the home directory`)
   .option("--no-check", "Skip the final agentx check")
   .option("--accept-hooks", "Legacy: record unsupported Gemini hook events as reviewed during the final check")
   .option("--windows", "Include Windows installer/static checks during the final check")
@@ -1212,13 +1212,13 @@ program.command("setup-opencode")
   });
 
 program.command("setup-ux")
-  .description("Install the global OpenCode UX profile used by OGB")
+  .description(`Install the global OpenCode UX profile used by ${DISPLAY}`)
   .option("--dry-run", "Preview files and plugin installs without writing")
   .option("--force", "Replace an existing project .opencode/ogb.config.jsonc profile")
-  .option("--reset-global", "Replace the global OpenCode config from OGB defaults instead of merging existing fields")
+  .option("--reset-global", `Replace the global OpenCode config from ${DISPLAY} defaults instead of merging existing fields`)
   .option("--no-install-opencode", "Do not install OpenCode when it is missing")
   .option("--no-plugins", "Do not run global OpenCode plugin installers")
-  .option("--no-project-profile", "Do not write the project OGB fallback/profile config")
+  .option("--no-project-profile", `Do not write the project ${DISPLAY} fallback/profile config`)
   .option("--strict", "Exit non-zero when setup has warnings")
   .option("--json", "Print JSON report")
   .action((opts) => {
@@ -1325,7 +1325,7 @@ addUpdateOptions(program.command("upgrade-ogb"))
   });
 
 program.command("check-update")
-  .description("Check GitHub Releases for a newer OGB version")
+  .description(`Check GitHub Releases for a newer ${DISPLAY} version`)
   .option("--repo <owner/repo>", "GitHub repo that publishes agentX releases", GITHUB_REPO)
   .option("--no-write", "Do not write .opencode/generated/agentx-update-status.json")
   .option("--json", "Print JSON report")
@@ -1341,11 +1341,11 @@ program.command("check-update")
   });
 
 program.command("auto-update")
-  .description("Update OGB automatically when a newer GitHub release exists")
+  .description(`Update ${DISPLAY} automatically when a newer GitHub release exists`)
   .option("--repo <owner/repo>", "GitHub repo that publishes agentX releases", GITHUB_REPO)
   .option("--prefix <path>", "Install prefix passed to the installer")
   .option("--rulesync <mode>", "Rulesync mode passed to first-run setup", "auto")
-  .option("--no-setup", "Update ogb/profile only; skip import/setup/doctor validation")
+  .option("--no-setup", `Update ${BINARY}/profile only; skip import/setup/doctor validation`)
   .option("--no-ux", "Do not reapply the global OpenCode UX profile")
   .option("--install-opencode", "Allow auto-update to install OpenCode when it is missing", false)
   .option("--force", "Pass force to the bootstrap installer")

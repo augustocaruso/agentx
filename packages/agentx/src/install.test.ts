@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { BINARY } from "./brand.js";
-import { runInstall } from "./install.js";
+import { BINARY, DISPLAY } from "./brand.js";
+import { printInstallReport, runInstall } from "./install.js";
 import { enableMaintainerRole } from "./local-role.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
 import { globalStartupPluginSpec, OGB_UX_SAFE_PLUGINS } from "./setup-ux.js";
@@ -13,6 +13,20 @@ import { TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar.js";
 
 function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ogb-install-"));
+}
+
+function captureConsoleLog(callback: () => void): string {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.join(" "));
+  };
+  try {
+    callback();
+  } finally {
+    console.log = original;
+  }
+  return lines.join("\n");
 }
 
 function writeFakeOpenCode(binDir: string, expectedPlugins: string[]): string {
@@ -87,6 +101,25 @@ test("runInstall previews setup without running the final check", () => {
   assert.equal(report.check, undefined);
   assert.ok(report.setup.writes.some((write) => write.status === "preview"));
   assert.equal(fs.existsSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc")), false);
+});
+
+test("plain installer report title uses the current product brand", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const projectRoot = path.join(root, "project");
+  fs.mkdirSync(projectRoot, { recursive: true });
+
+  const report = runInstall({
+    projectRoot,
+    homeDir,
+    dryRun: true,
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+  });
+  const output = captureConsoleLog(() => printInstallReport(report));
+
+  assert.equal(output.split("\n")[0], `${DISPLAY} install preview`);
 });
 
 test("runInstall emits top-level ritual progress", () => {

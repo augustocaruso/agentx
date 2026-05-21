@@ -7,6 +7,7 @@ import { buildInstallerPlan } from "./installer-planner.js";
 import { updateProgressSteps } from "./ritual-progress.js";
 import { applyRitualProgressEvent, createLiveRitualModel, failLiveRitualModel, finishLiveRitualModel, finishLiveRitualModelFromProgressEvent, ritualViewModel, shouldAnimateRitualUi, shouldUseRitualUi } from "./ritual-view-model.js";
 import { cleanInkFrame, RitualPanel } from "./ui/ink/ritual-ui.js";
+import { DISPLAY } from "./brand.js";
 import type { InstallReport } from "./install.js";
 import type { PassReport } from "./pass.js";
 import type { ResetReport } from "./reset.js";
@@ -59,7 +60,7 @@ function SpinnerBenchmarkPanel(props: { frame: number }): React.ReactElement {
   return React.createElement(
     Box,
     { borderStyle: "round", flexDirection: "column", width: 80, paddingX: 1 },
-    React.createElement(Text, null, "RUN OGB update                                               running"),
+    React.createElement(Text, null, `RUN ${DISPLAY} update                                            running`),
     ...Array.from({ length: 18 }, (_, index) => React.createElement(
       Text,
       { key: index },
@@ -259,13 +260,19 @@ test("live progress model starts with every todo queued", () => {
     { stepId: "doctor", label: "run doctor" },
   ], { now: 1000 });
 
-  assert.equal(model.title, "OGB check");
+  assert.equal(model.title, `${DISPLAY} check`);
   assert.equal(model.subtitle, projectRoot);
   assert.equal(model.statusLabel, "RUN");
   assert.equal(model.currentStepId, "setup");
   assert.equal(model.final, false);
   assert.deepEqual(model.steps.map((step) => step.label), ["setup OpenCode plugin", "sync bridge assets", "run doctor"]);
   assert.deepEqual(model.steps.map((step) => step.status), ["queued", "queued", "queued"]);
+});
+
+test("terminal ritual titles use the current product brand", () => {
+  assert.equal(createLiveRitualModel("install", projectRoot, [], { now: 1000 }).title, `${DISPLAY} install`);
+  assert.equal(createLiveRitualModel("update", projectRoot, [], { now: 1000 }).title, `${DISPLAY} update`);
+  assert.equal(ritualViewModel("check", passReport()).title, `${DISPLAY} check`);
 });
 
 test("live progress events update the active todo without creating a second report model", () => {
@@ -401,7 +408,7 @@ test("check ritual view model highlights projected bridge assets", () => {
     },
   }));
 
-  assert.equal(model.title, "OGB check");
+  assert.equal(model.title, `${DISPLAY} check`);
   assert.equal(model.statusLabel, "PASS");
   assert.deepEqual(model.metrics.map((metric) => [metric.label, metric.value]), [
     ["automated", "6"],
@@ -479,7 +486,7 @@ test("install, reset and update models expose user-facing next steps", () => {
     status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: "OGB bootstrap completed. Full bridge check was refreshed.",
+    message: `${DISPLAY} bootstrap completed. Full bridge check was refreshed.`,
     postUpdate: {
       status: "pass",
       command: ["ogb", "check"],
@@ -498,7 +505,7 @@ test("update final model shows warning when the post-update check warns", () => 
     status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: "OGB bootstrap completed. Full bridge check ran with warnings; see agentx check/dashboard for details.",
+    message: `${DISPLAY} bootstrap completed. Full bridge check ran with warnings; see agentx check/dashboard for details.`,
     postUpdate: {
       status: "warn",
       command: ["ogb", "check"],
@@ -572,7 +579,7 @@ test("update final model surfaces post-update check summary without raw progress
     status: "applied",
     command: ["ogb", "update"],
     plan: buildInstallerPlan({ intent: "update", projectRoot, homeDir, release: "v0.0.61" }),
-    message: "OGB bootstrap completed. Post-update check needs attention: Post-update check failed.",
+    message: `${DISPLAY} bootstrap completed. Post-update check needs attention: Post-update check failed.`,
     postUpdate: {
       status: "fail",
       command: ["ogb", "check", "--force"],

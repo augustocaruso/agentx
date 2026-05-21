@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { createBackupSession } from "./backup-policy.js";
-import { BINARY, GITHUB_REPO, RELEASE_ASSET } from "./brand.js";
+import { BINARY, DISPLAY, GITHUB_REPO, RELEASE_ASSET } from "./brand.js";
 import { BUILT_IN_AGENTS, BUILT_IN_COMMANDS, REMOVED_BUILT_IN_AGENT_NAMES } from "./built-ins.js";
 import { resolveCommand } from "./command-resolution.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
@@ -319,13 +319,13 @@ function validateHomeGlobalFiles(paths: ReturnType<typeof resolveProjectPaths>, 
 
   const startupPluginState = configOgbStartupPluginState(configPath, paths.homeDir);
   checks.push({
-    name: "Global OGB startup plugin",
+    name: `Global ${DISPLAY} startup plugin`,
     status: startupPluginState.ok && startupPluginState.legacySpecs.length === 0 ? "pass" : "fail",
     message: startupPluginState.legacySpecs.length > 0
-      ? `Global OpenCode config still includes legacy OGB startup plugin spec(s): ${startupPluginState.legacySpecs.join(", ")}. Run ogb setup-ux --force.`
+      ? `Global OpenCode config still includes legacy startup plugin spec(s): ${startupPluginState.legacySpecs.join(", ")}. Run ${BINARY} setup-ux --force.`
       : startupPluginState.ok
-        ? "Global OpenCode config includes the OGB startup plugin."
-        : "Global OpenCode config is missing the OGB startup plugin. Run agentx reset --yes.",
+        ? `Global OpenCode config includes the ${DISPLAY} startup plugin.`
+        : `Global OpenCode config is missing the ${DISPLAY} startup plugin. Run ${BINARY} reset --yes.`,
   });
 
   const agentFiles = listMarkdownFiles(path.join(globalRoot, "agents")).map((filePath) => path.basename(filePath, ".md"));

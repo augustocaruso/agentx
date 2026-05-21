@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { performance } from "node:perf_hooks";
+import { DISPLAY } from "./brand.js";
 import { runDashboard, type DashboardReport } from "./dashboard.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { updateGeminiExtensions, type ExtensionCommandReport } from "./extensions.js";
@@ -190,11 +191,11 @@ function dashboardAction(): string {
 }
 
 function needsGlobalTuiRepair(warnings: readonly string[]): boolean {
-  return warnings.some((warning) => /Global OGB TUI sidebar plugin is (missing|stale)/i.test(warning));
+  return warnings.some((warning) => /Global (?:OGB|agentX) TUI sidebar plugin is (missing|stale)/i.test(warning));
 }
 
 function needsGlobalStartupRepair(warnings: readonly string[]): boolean {
-  return warnings.some((warning) => /Global OGB startup plugin is (missing|stale)/i.test(warning));
+  return warnings.some((warning) => /Global (?:OGB|agentX) startup plugin is (missing|stale)/i.test(warning));
 }
 
 function checkSetupWarnings(report: SetupOpenCodeReport | SetupUxReport): string[] {
@@ -655,8 +656,8 @@ export function runPass(options: PassOptions = {}): PassReport {
 
   for (const error of doctor.errors) blockers.push(blocker("doctor", "fail", error, "Corrija o erro indicado pelo doctor e rode `agentx check` novamente."));
   for (const warning of doctor.warnings) blockers.push(blocker("doctor", "warn", warning, actionForWarning(warning)));
-  if (globalStartupRepaired) blockers.push(blocker("setup", "warn", "Global OGB startup plugin was repaired automatically.", "Reinicie o OpenCode para carregar o refresh automatico do usage."));
-  if (globalTuiRepaired) blockers.push(blocker("setup", "warn", "Global OGB TUI sidebar plugin was repaired automatically.", "Reinicie o OpenCode para carregar a TUI nova."));
+  if (globalStartupRepaired) blockers.push(blocker("setup", "warn", `Global ${DISPLAY} startup plugin was repaired automatically.`, "Reinicie o OpenCode para carregar o refresh automatico do usage."));
+  if (globalTuiRepaired) blockers.push(blocker("setup", "warn", `Global ${DISPLAY} TUI sidebar plugin was repaired automatically.`, "Reinicie o OpenCode para carregar a TUI nova."));
   if (validation?.outcome === "fail") blockers.push(blocker("validation", "fail", `Validation falhou: ${firstValidationIssue(validation, "fail") ?? "um check obrigatorio falhou."}`, validationAction(options)));
   if (validation?.outcome === "warn") blockers.push(blocker("validation", "warn", `Validation passou com avisos: ${firstValidationIssue(validation, "warn") ?? "ha checks que precisam de revisao."}`, validationAction(options)));
   if (security?.outcome === "fail") blockers.push(blocker("security", "fail", `Security-check falhou: ${firstSecurityIssue(security, "fail") ?? "um guardrail obrigatorio falhou."}`, securityAction()));

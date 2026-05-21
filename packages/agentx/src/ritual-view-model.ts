@@ -1,5 +1,6 @@
 import type { InstallReport } from "./install.js";
 import type { PassReport } from "./pass.js";
+import { BINARY, DISPLAY } from "./brand.js";
 import { INK_COLORS, LABELS } from "./presentation/theme.js";
 import type { ResetReport } from "./reset.js";
 import type { RitualFinishedJsonEvent, RitualProgressDefinition, RitualProgressEvent, RitualProgressSink, RitualProgressStatus } from "./ritual-progress.js";
@@ -90,10 +91,10 @@ export interface RenderRitualOptions {
 }
 
 export function titleForKind(kind: RitualKind): string {
-  if (kind === "install") return "OGB install";
-  if (kind === "update") return "OGB update";
-  if (kind === "reset") return "OGB reset";
-  return "OGB check";
+  if (kind === "install") return `${DISPLAY} install`;
+  if (kind === "update") return `${DISPLAY} update`;
+  if (kind === "reset") return `${DISPLAY} reset`;
+  return `${DISPLAY} check`;
 }
 
 function toneFromOutcome(outcome: string | undefined): RitualTone {
@@ -225,7 +226,7 @@ function unexpectedErrorNext(kind: RitualKind, message: string): string[] {
   ];
   if (/ENOENT|not found|command not found|no such file|n.o . reconhecido/i.test(message)) {
     return [
-      "Check whether Node, npm, OpenCode and OGB resolve on PATH in this shell.",
+      `Check whether Node, npm, OpenCode and ${DISPLAY} resolve on PATH in this shell.`,
       `Run \`${command}\` after fixing PATH so the full native command output stays visible.`,
       "On Windows, open PowerShell 7 again after changing PATH or reinstalling shims.",
     ];
@@ -273,8 +274,8 @@ function installModel(report: InstallReport): RitualViewModel {
     next: tone === "fail"
       ? checkNext(report.check, ["Run `agentx dashboard --plain` for the persisted bridge state.", "Run `agentx check --plain` for the classic report."])
       : report.outcome === "preview"
-        ? ["Run agentx install without --dry-run to apply this plan."]
-        : ["OpenCode profile is ready.", "Run agentx check any time you want the full ritual."],
+        ? [`Run ${BINARY} install without --dry-run to apply this plan.`]
+        : ["OpenCode profile is ready.", `Run ${BINARY} check any time you want the full ritual.`],
     files: report.check ? [report.check.files.pass, report.check.files.dashboard] : [],
   };
 }
@@ -338,12 +339,12 @@ function resetModel(report: ResetReport): RitualViewModel {
     steps,
     callouts: checkCallouts(report.check, report.warnings),
     next: report.outcome === "preview"
-      ? ["Run agentx reset --yes without --dry-run to apply this plan."]
+      ? [`Run ${BINARY} reset --yes without --dry-run to apply this plan.`]
       : report.outcome === "cancelled"
         ? ["Nothing was changed."]
         : report.check?.outcome === "fail"
           ? checkNext(report.check, ["Run `agentx check --plain` for the classic report."])
-          : ["Global OpenCode profile was rebuilt.", "Run agentx check if you want another verification pass."],
+          : ["Global OpenCode profile was rebuilt.", `Run ${BINARY} check if you want another verification pass.`],
     files: [report.globalConfigPath, ...(report.check ? [report.check.files.pass, report.check.files.dashboard] : [])],
   };
 }
@@ -377,9 +378,9 @@ function updateModel(report: SelfUpdateReport): RitualViewModel {
     ],
     callouts: report.status === "error" || postUpdateNeedsAttention ? postUpdateCallouts(report) : [],
     next: report.status === "preview"
-      ? ["Run agentx update without --dry-run to apply this release."]
+      ? [`Run ${BINARY} update without --dry-run to apply this release.`]
       : report.status === "applied" && !postUpdateNeedsAttention
-        ? ["Restart OpenCode so the new plugin/sidebar code is loaded.", "Then run agentx check if you want a fresh human-readable pass."]
+        ? ["Restart OpenCode so the new plugin/sidebar code is loaded.", `Then run ${BINARY} check if you want a fresh human-readable pass.`]
         : postUpdateNext(report),
     files: report.postUpdate?.files ?? [],
   };

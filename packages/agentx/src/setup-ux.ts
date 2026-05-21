@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
+import { DISPLAY } from "./brand.js";
 import { resolveCommand } from "./command-resolution.js";
 import { readLocalRole } from "./local-role.js";
 import { normalizeRuntimeOptions, type OgbConfig } from "./ogb-config.js";
@@ -946,7 +947,7 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
     });
   }
   for (const write of writes) {
-    if (write.status === "conflict") warnings.push(`${write.path} exists and differs; re-run setup-ux with --force to replace the OGB profile.`);
+    if (write.status === "conflict") warnings.push(`${write.path} exists and differs; re-run setup-ux with --force to replace the ${DISPLAY} profile.`);
     if (write.status === "protected") warnings.push(`${write.path} protegido pelo modo mantenedor local; arquivo mantido sem alteracao.`);
   }
   warnings.push(...profileWriter.retention.warnings);

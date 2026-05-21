@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DISPLAY } from "./brand.js";
 import { globalStartupPluginSpec, setupUx } from "./setup-ux.js";
 import { syncToOpenCode } from "./sync.js";
 import { runValidation } from "./validation.js";
@@ -335,7 +336,7 @@ test("runValidation validates home/global OpenCode files without project artifac
     assert.deepEqual(failed, []);
     assert.equal(report.checks.find((check) => check.name === "Global expanded Gemini context")?.status, "pass");
     assert.equal(report.checks.find((check) => check.name === "Global OpenCode config")?.status, "pass");
-    assert.equal(report.checks.find((check) => check.name === "Global OGB startup plugin")?.status, "pass");
+    assert.equal(report.checks.find((check) => check.name === `Global ${DISPLAY} startup plugin`)?.status, "pass");
     const releaseCheck = report.checks.find((check) => check.name === "Release bootstrap static check");
     assert.equal(releaseCheck?.status, "pass");
     assert.match(releaseCheck?.message ?? "", /Linux/);
@@ -408,7 +409,7 @@ test("runValidation fails the legacy relative global startup plugin spec", () =>
   process.env.PATH = "";
   try {
     const report = runValidation({ projectRoot: homeDir, homeDir, silent: true });
-    const startupCheck = report.checks.find((check) => check.name === "Global OGB startup plugin");
+    const startupCheck = report.checks.find((check) => check.name === `Global ${DISPLAY} startup plugin`);
 
     assert.equal(startupCheck?.status, "fail");
     assert.match(startupCheck?.message ?? "", /file:plugins\/ogb-startup-sync\.js/);

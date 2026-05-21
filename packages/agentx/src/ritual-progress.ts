@@ -1,3 +1,5 @@
+import { DISPLAY } from "./brand.js";
+
 export type RitualProgressStatus = "queued" | "running" | "pass" | "warn" | "fail" | "skipped";
 export type RitualKind = "install" | "check" | "reset" | "update";
 export type RitualProgressEventType = "ritual.started" | "ritual.step" | "ritual.finished" | "ritual.error";
@@ -180,13 +182,13 @@ export const CHECK_PROGRESS_STEPS = {
   },
   patchPreDoctor: {
     stepId: "patches-pre-doctor",
-    label: "Apply OGB patches before doctor.",
+    label: `Apply ${DISPLAY} patches before doctor.`,
     detail: "Normalizes diagnostics state before inventory checks run.",
     optional: true,
   },
   patchPostCheck: {
     stepId: "patches-post-check",
-    label: "Apply OGB patches after check.",
+    label: `Apply ${DISPLAY} patches after check.`,
     detail: "Records final repair state after validation, security, and dashboard.",
     optional: true,
   },
@@ -211,7 +213,7 @@ export const INSTALL_PROGRESS_STEPS = {
   plugins: {
     stepId: "plugins",
     label: "Install global OpenCode plugins.",
-    detail: "Covers auth, fallback, sidebar, and OGB startup sync integrations.",
+    detail: `Covers auth, fallback, sidebar, and ${DISPLAY} startup sync integrations.`,
   },
   projectProfile: {
     stepId: "project-profile",
@@ -287,7 +289,7 @@ export const UPDATE_PROGRESS_STEPS = {
   install: {
     stepId: "install",
     label: "Apply the installer.",
-    detail: "Replaces the OGB CLI and managed profile files.",
+    detail: `Replaces the ${DISPLAY} CLI and managed profile files.`,
   },
   postCheck: {
     stepId: "post-check",
@@ -340,7 +342,7 @@ export function installProgressSteps(options: InstallProgressOptions = {}): Ritu
       detail: options.ux === false
         ? "Skipped by --no-ux."
         : options.resetGlobal
-          ? "Overwrites global config from OGB defaults."
+          ? `Overwrites global config from ${DISPLAY} defaults.`
           : INSTALL_PROGRESS_STEPS.profile.detail,
     },
     {

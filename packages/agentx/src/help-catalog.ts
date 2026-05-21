@@ -1,3 +1,5 @@
+import { DISPLAY } from "./brand.js";
+
 export interface HelpAction {
   label: string;
   description: string;
@@ -26,7 +28,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     name: "install",
     category: "Core",
     recommended: true,
-    summary: "Install or reinstall the OGB OpenCode profile.",
+    summary: `Install or reinstall the ${DISPLAY} OpenCode profile.`,
     description: "Applies the managed OpenCode profile, global plugins, fallback wiring, startup sync wiring, and then runs the full check unless disabled.",
     usage: "agentx install [--dry-run] [--force] [--reset-global] [--progress-json]",
     examples: ["agentx install", "agentx install --dry-run", "agentx install --reset-global", "agentx install --dry-run --progress-json"],
@@ -36,7 +38,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     aliases: ["self-update", "upgrade-ogb"],
     category: "Core",
     recommended: true,
-    summary: "Update OGB from the release pack and run the post-update ritual.",
+    summary: `Update ${DISPLAY} from the release pack and run the post-update ritual.`,
     description: "Downloads the selected release, runs the platform bootstrap installer, and refreshes the bridge check afterward.",
     usage: "agentx update [--release <tag>] [--dry-run] [--plain] [--progress-json]",
     examples: ["agentx update", "agentx update --release v0.1.3", "agentx update --dry-run", "agentx update --dry-run --progress-json"],
@@ -55,7 +57,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
     name: "reset",
     category: "Core",
     recommended: true,
-    summary: "Rebuild the global OGB/OpenCode profile from home.",
+    summary: `Rebuild the global ${DISPLAY}/OpenCode profile from home.`,
     description: "Only runs in the home directory. Cleans old accidental home-project artifacts, reapplies global config, syncs, and verifies.",
     usage: "agentx reset --yes [--dry-run] [--progress-json]",
     examples: ["cd ~ && agentx reset --yes", "cd ~ && agentx reset --dry-run --yes", "cd ~ && agentx reset --dry-run --yes --progress-json"],
@@ -263,17 +265,17 @@ export const HELP_COMMANDS: HelpCommand[] = [
     actions: [
       {
         label: "Show maintainer status",
-        description: "Prints whether this machine is protected from OGB preset overwrites.",
+        description: `Prints whether this machine is protected from ${DISPLAY} preset overwrites.`,
         args: ["maintainer", "status"],
       },
       {
         label: "Enable maintainer protection",
-        description: "Protects local OpenCode profile files from being overwritten by OGB defaults.",
+        description: `Protects local OpenCode profile files from being overwritten by ${DISPLAY} defaults.`,
         args: ["maintainer", "enable"],
       },
       {
         label: "Disable maintainer protection",
-        description: "Allows OGB preset writes on this machine again.",
+        description: `Allows ${DISPLAY} preset writes on this machine again.`,
         args: ["maintainer", "disable"],
       },
     ],
@@ -333,7 +335,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
   {
     name: "check-update",
     category: "Debug",
-    summary: "Check GitHub Releases for a newer OGB version.",
+    summary: `Check GitHub Releases for a newer ${DISPLAY} version.`,
     description: "Writes update status for dashboard without installing anything.",
     usage: "agentx check-update [--json] [--no-write]",
     examples: ["agentx check-update", "agentx check-update --json"],
@@ -389,7 +391,7 @@ export const HELP_COMMANDS: HelpCommand[] = [
   {
     name: "telemetry",
     category: "Telemetry",
-    summary: "Manage local-first OGB workflow telemetry.",
+    summary: `Manage local-first ${DISPLAY} workflow telemetry.`,
     description: "Parent command for telemetry setup, status, preview, send, enable, and disable.",
     usage: "agentx telemetry <subcommand>",
     examples: ["agentx telemetry status", "agentx telemetry preview"],
@@ -488,12 +490,12 @@ function inferredActionDescription(command: HelpCommand, args: string[] | undefi
   const commandName = args[0];
   const aliasTarget = command.aliases?.includes(commandName) ? command.name : undefined;
   if (aliasTarget) return `Runs ${command.name} through its ${commandName} alias.`;
-  if (example.startsWith("cd ~")) return "Runs from the home directory, which OGB treats as global scope.";
+  if (example.startsWith("cd ~")) return `Runs from the home directory, which ${DISPLAY} treats as global scope.`;
   if (args.includes("--progress-json")) return "Emits versioned NDJSON progress events for automation.";
   if (args.includes("--json")) return "Prints machine-readable JSON instead of the human report.";
   if (args.includes("--plain")) return "Uses the classic plain-text output instead of the interactive UI.";
   if (args.includes("--dry-run")) return "Previews the action without applying file or install changes.";
-  if (args.includes("--force")) return "Allows OGB-managed files to be overwritten after conflict checks.";
+  if (args.includes("--force")) return `Allows ${DISPLAY}-managed files to be overwritten after conflict checks.`;
   if (args.includes("--strict")) return "Exits non-zero when warnings or an unclean state are present.";
   if (args.includes("--windows")) return "Includes Windows-specific validation and installer checks.";
   if (args.includes("--cached")) return "Uses a fresh cached provider-usage result when available.";
@@ -501,10 +503,10 @@ function inferredActionDescription(command: HelpCommand, args: string[] | undefi
   if (args.includes("--write-only")) return "Writes generated reports without printing the human summary.";
   if (args.includes("--no-sync") || args.includes("--skip-sync")) return "Skips the sync/projection part of the flow.";
   if (args.includes("--no-extension-update")) return "Skips the automatic Gemini extension update before sync.";
-  if (args.includes("--no-patches")) return "Skips versioned OGB repair patches during the check.";
+  if (args.includes("--no-patches")) return `Skips versioned ${DISPLAY} repair patches during the check.`;
   if (args.includes("--accept-hooks")) return "Legacy: records unsupported Gemini hook events as reviewed by hash during the check.";
   if (args.includes("--auto-consent") || args.includes("--yes")) return "Runs unattended by answering supported confirmation prompts automatically.";
-  if (args.includes("--reset-global")) return "Rebuilds the global OpenCode profile from OGB defaults.";
+  if (args.includes("--reset-global")) return `Rebuilds the global OpenCode profile from ${DISPLAY} defaults.`;
   return command.summary;
 }
 

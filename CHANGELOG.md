@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.6 - UI do instalador usa agentX
+
+- Troca os titulos e mensagens publicas dos rituais `install`/`update` de `OGB`/`OpenCode Gemini Bridge` para `agentX`, incluindo plain output, rich UI, progress details e help dessas rotas.
+- Mantem `ogb` apenas como alias/compatibilidade legado, sem vazar o nome velho na tela principal do instalador.
+- Adiciona regressoes para garantir que o terminal do instalador/update use o brand atual.
+
 ## 0.2.5 - Ponte de upgrade OGB para agentX
 
 - Publica o release pack novo também como `opencode-gemini-bridge-pack.zip`, para versões antigas de `ogb update` encontrarem o asset legado durante a migração para `agentx-pack.zip`.

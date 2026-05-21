@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { BINARY, DISPLAY } from "./brand.js";
 import { runDoctor } from "./doctor.js";
 import { STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
 import { globalStartupPluginSpec, LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC } from "./setup-ux.js";
@@ -338,7 +339,7 @@ test("runDoctor warns when global TUI plugin runtime dependencies are missing", 
   const report = runDoctor({ projectRoot: homeDir, homeDir, silent: true });
 
   assert.equal(report.warnings.some((warning) =>
-    warning.includes("Global OGB TUI runtime dependencies are missing")
+    warning.includes(`Global ${DISPLAY} TUI runtime dependencies are missing`)
     && warning.includes("@opentui/solid@0.2.2")
     && warning.includes("solid-js@1.9.12")
   ), true);
@@ -357,8 +358,8 @@ test("runDoctor warns when the global TUI sidebar plugin is stale", () => {
   const report = runDoctor({ projectRoot: homeDir, homeDir, silent: true });
 
   assert.equal(report.warnings.some((warning) =>
-    warning.includes("Global OGB TUI sidebar plugin is stale")
-    && warning.includes("agentx check")
+    warning.includes(`Global ${DISPLAY} TUI sidebar plugin is stale`)
+    && warning.includes(`${BINARY} check`)
     && warning.includes("repair it automatically")
     && warning.includes("restart OpenCode")
   ), true);
@@ -377,8 +378,8 @@ test("runDoctor warns when the global startup plugin is stale", () => {
   const report = runDoctor({ projectRoot: homeDir, homeDir, silent: true });
 
   assert.equal(report.warnings.some((warning) =>
-    warning.includes("Global OGB startup plugin is stale")
-    && warning.includes("agentx check")
+    warning.includes(`Global ${DISPLAY} startup plugin is stale`)
+    && warning.includes(`${BINARY} check`)
     && warning.includes("repair it automatically")
     && warning.includes("restart OpenCode")
   ), true);
@@ -400,9 +401,9 @@ test("runDoctor warns when global config still has the legacy relative startup p
   const report = runDoctor({ projectRoot: homeDir, homeDir, silent: true });
 
   assert.equal(report.warnings.some((warning) =>
-    warning.includes("legacy OGB startup plugin")
+    warning.includes("legacy startup plugin")
     && warning.includes(LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC)
-    && warning.includes("ogb setup-ux --force")
+    && warning.includes(`${BINARY} setup-ux --force`)
   ), true);
 });
 

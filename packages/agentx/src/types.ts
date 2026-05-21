@@ -1,4 +1,4 @@
-export const AGENTX_VERSION = "0.2.5";
+export const AGENTX_VERSION = "0.2.6";
 
 export type ResourceStatus = "ok" | "warning" | "error" | "needs_review";
 export type ResourceScope = "project" | "global";

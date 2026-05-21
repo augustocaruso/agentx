@@ -1411,7 +1411,7 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
   await log(client, {
     service: "ogb-startup-sync",
     level: "info",
-    message: "Checking OGB auto-update (" + reason + ")",
+    message: "Checking agentX auto-update (" + reason + ")",
     extra: { cwd, command: plan.command, args: plan.args },
   });
 
@@ -1423,7 +1423,7 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
   await log(client, {
     service: "ogb-startup-sync",
     level: failed ? "warn" : "info",
-    message: updated ? "OGB auto-update applied; restart OpenCode" : failed ? "OGB auto-update failed" : "OGB auto-update check completed",
+    message: updated ? "agentX auto-update applied; restart OpenCode" : failed ? "agentX auto-update failed" : "agentX auto-update check completed",
     extra: {
       cwd,
       command: plan.command,
@@ -1438,7 +1438,7 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
 
   if (updated) {
     await showToast(client, cwd, {
-      title: "OGB ATUALIZADO",
+      title: "agentX atualizado",
       message: "Reinicie o OpenCode para carregar plugin e comandos novos.",
       variant: "warning",
       duration: 9000,
@@ -1448,7 +1448,7 @@ async function runAutoUpdate({ cwd, client, syncPlan, reason }) {
       status: "error",
       checkedAt: new Date().toISOString(),
       restartRequired: false,
-      message: result.error || status.message || "OGB auto-update failed.",
+      message: result.error || status.message || "agentX auto-update failed.",
       command: plan.command,
       args: plan.args,
       exitCode: result.exitCode,
