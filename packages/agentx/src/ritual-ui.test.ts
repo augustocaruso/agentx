@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildInstallerPlan } from "./installer-planner.js";
 import { applyRitualProgressEvent, createLiveRitualModel, failLiveRitualModel, finishLiveRitualModel, ritualViewModel, shouldAnimateRitualUi, shouldUseRitualUi } from "./ritual-view-model.js";
@@ -18,6 +19,15 @@ const noisyBootstrapTail = [
   "npm warn deprecated koa-router@14.0.0: Please use @koa/router instead, starting from v9!",
   "sync: Antigravity skill conflict: .gemini/antigravity/skills/process-medical-chats was edited manually; use --force to overwrite",
 ].join("\n");
+
+test("interactive ritual UI is backed by Ink, with the line printer only as fallback", () => {
+  const source = readFileSync(new URL("./ui/ink/ritual-ui.ts", import.meta.url), "utf8");
+
+  assert.match(source, /from "ink"/);
+  assert.match(source, /\brender\(/);
+  assert.match(source, /function shouldUseLogFallback/);
+  assert.match(source, /new RitualLogPrinter/);
+});
 
 function passReport(overrides: Partial<PassReport> = {}): PassReport {
   return {
