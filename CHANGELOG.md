@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.17 - Stage CLI installs before replacing the running pack
+
+- Build and install the packaged CLI in a temporary staging directory before swapping it into `~/.ai/opencode-pack/agentx-cli`.
+- Avoid running `npm install` inside the same directory that the active `agentx update` process is using.
+- Add a cross-platform install lock so concurrent updates wait instead of mutating the same stable CLI tree.
+
 ## 0.2.16 - Install no longer probes interactive auth
 
 - Stop running `opencode auth login --method __ogb_probe__` during normal install/update, because current OpenCode can keep that probe alive and leave the update waiting.

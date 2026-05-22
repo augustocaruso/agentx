@@ -253,40 +253,84 @@ repair_broken_command_shim() {
   fi
 }
 
-install_stable_cli() {
+copy_stable_cli_payload() {
   local source_dir="$1"
-  local install_dir="$2"
+  local target_dir="$2"
   local cli_target
 
-  rm -rf "$install_dir"
-  mkdir -p "$install_dir"
-
-  cp "$source_dir/package.json" "$install_dir/package.json"
-  cp "$source_dir/package-lock.json" "$install_dir/package-lock.json"
+  mkdir -p "$target_dir"
+  cp "$source_dir/package.json" "$target_dir/package.json"
+  cp "$source_dir/package-lock.json" "$target_dir/package-lock.json"
   if [[ -f "$source_dir/LICENSE" ]]; then
-    cp "$source_dir/LICENSE" "$install_dir/LICENSE"
+    cp "$source_dir/LICENSE" "$target_dir/LICENSE"
   fi
   local telemetry_defaults
   for telemetry_defaults in telemetry.defaults.json telemetry.defaults.example.json; do
     if [[ -f "$source_dir/$telemetry_defaults" ]]; then
-      cp "$source_dir/$telemetry_defaults" "$install_dir/$telemetry_defaults"
+      cp "$source_dir/$telemetry_defaults" "$target_dir/$telemetry_defaults"
     fi
   done
   if [[ -d "$source_dir/telemetry-email-worker" ]]; then
-    cp -R "$source_dir/telemetry-email-worker" "$install_dir/telemetry-email-worker"
+    cp -R "$source_dir/telemetry-email-worker" "$target_dir/telemetry-email-worker"
   fi
   if [[ -d "$source_dir/scripts" ]]; then
-    cp -R "$source_dir/scripts" "$install_dir/scripts"
+    cp -R "$source_dir/scripts" "$target_dir/scripts"
   fi
-  cp -R "$source_dir/dist" "$install_dir/dist"
+  cp -R "$source_dir/dist" "$target_dir/dist"
 
-  npm --prefix "$install_dir" install --omit=dev
-  cli_target="$install_dir/dist/cli.js"
+  npm --prefix "$target_dir" install --omit=dev
+  cli_target="$target_dir/dist/cli.js"
   if [[ ! -f "$cli_target" ]]; then
     echo "Expected built CLI at $cli_target, but it was not found." >&2
     return 1
   fi
   chmod +x "$cli_target" 2>/dev/null || true
+}
+
+install_stable_cli() {
+  local source_dir="$1"
+  local install_dir="$2"
+  local parent_dir
+  local base_name
+  local lock_dir
+  local staging_dir
+  local backup_dir
+  local waited=0
+  local status=0
+
+  parent_dir="$(dirname "$install_dir")"
+  base_name="$(basename "$install_dir")"
+  mkdir -p "$parent_dir"
+  lock_dir="$parent_dir/.$base_name.install.lock"
+
+  until mkdir "$lock_dir" 2>/dev/null; do
+    if [[ "$waited" -ge 120 ]]; then
+      echo "Timed out waiting for another $PRODUCT_NAME install to finish: $lock_dir" >&2
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  staging_dir="$(mktemp -d "$parent_dir/.$base_name.install.XXXXXX")"
+  backup_dir="$parent_dir/.$base_name.previous.$$"
+
+  if ! copy_stable_cli_payload "$source_dir" "$staging_dir"; then
+    status=$?
+  elif [[ -e "$install_dir" || -L "$install_dir" ]] && ! mv "$install_dir" "$backup_dir"; then
+    status=$?
+  elif ! mv "$staging_dir" "$install_dir"; then
+    status=$?
+    if [[ -e "$backup_dir" || -L "$backup_dir" ]]; then
+      mv "$backup_dir" "$install_dir" 2>/dev/null || true
+    fi
+  else
+    rm -rf "$backup_dir"
+  fi
+
+  rm -rf "$staging_dir"
+  rmdir "$lock_dir" 2>/dev/null || rm -rf "$lock_dir"
+  return "$status"
 }
 
 write_legacy_binary_alias() {

@@ -331,33 +331,73 @@ function Repair-HomeCommandShim($CliTarget, [bool]$KeepLegacyAlias) {
   }
 }
 
-function Install-StableCli($SourceDir, $InstallDir) {
-  Remove-Item -Recurse -Force $InstallDir -ErrorAction SilentlyContinue
-  New-Item -ItemType Directory -Force $InstallDir | Out-Null
+function Copy-StableCliPayload($SourceDir, $TargetDir) {
+  New-Item -ItemType Directory -Force $TargetDir | Out-Null
 
-  Copy-Item -Path (Join-Path $SourceDir "package.json") -Destination $InstallDir -Force
-  Copy-Item -Path (Join-Path $SourceDir "package-lock.json") -Destination $InstallDir -Force
+  Copy-Item -Path (Join-Path $SourceDir "package.json") -Destination $TargetDir -Force
+  Copy-Item -Path (Join-Path $SourceDir "package-lock.json") -Destination $TargetDir -Force
   if (Test-Path (Join-Path $SourceDir "LICENSE")) {
-    Copy-Item -Path (Join-Path $SourceDir "LICENSE") -Destination $InstallDir -Force
+    Copy-Item -Path (Join-Path $SourceDir "LICENSE") -Destination $TargetDir -Force
   }
   foreach ($TelemetryDefaults in @("telemetry.defaults.json", "telemetry.defaults.example.json")) {
     $TelemetryDefaultsPath = Join-Path $SourceDir $TelemetryDefaults
     if (Test-Path $TelemetryDefaultsPath) {
-      Copy-Item -Path $TelemetryDefaultsPath -Destination $InstallDir -Force
+      Copy-Item -Path $TelemetryDefaultsPath -Destination $TargetDir -Force
     }
   }
   if (Test-Path (Join-Path $SourceDir "telemetry-email-worker")) {
-    Copy-Item -Path (Join-Path $SourceDir "telemetry-email-worker") -Destination (Join-Path $InstallDir "telemetry-email-worker") -Recurse -Force
+    Copy-Item -Path (Join-Path $SourceDir "telemetry-email-worker") -Destination (Join-Path $TargetDir "telemetry-email-worker") -Recurse -Force
   }
   if (Test-Path (Join-Path $SourceDir "scripts")) {
-    Copy-Item -Path (Join-Path $SourceDir "scripts") -Destination (Join-Path $InstallDir "scripts") -Recurse -Force
+    Copy-Item -Path (Join-Path $SourceDir "scripts") -Destination (Join-Path $TargetDir "scripts") -Recurse -Force
   }
-  Copy-Item -Path (Join-Path $SourceDir "dist") -Destination (Join-Path $InstallDir "dist") -Recurse -Force
+  Copy-Item -Path (Join-Path $SourceDir "dist") -Destination (Join-Path $TargetDir "dist") -Recurse -Force
 
-  Invoke-NativeCommand $script:NpmCommand @("--prefix", $InstallDir, "install", "--omit=dev")
-  $ExpectedCliTarget = Join-Path $InstallDir "dist\cli.js"
+  Invoke-NativeCommand $script:NpmCommand @("--prefix", $TargetDir, "install", "--omit=dev")
+  $ExpectedCliTarget = Join-Path $TargetDir "dist\cli.js"
   if (-not (Test-Path $ExpectedCliTarget)) {
     throw "Expected built CLI at $ExpectedCliTarget, but it was not found."
+  }
+}
+
+function Install-StableCli($SourceDir, $InstallDir) {
+  $ParentDir = Split-Path -Parent $InstallDir
+  $BaseName = Split-Path -Leaf $InstallDir
+  New-Item -ItemType Directory -Force $ParentDir | Out-Null
+
+  $LockDir = Join-Path $ParentDir ".$BaseName.install.lock"
+  $Waited = 0
+  while ($true) {
+    try {
+      New-Item -ItemType Directory -Path $LockDir -ErrorAction Stop | Out-Null
+      break
+    } catch {
+      if ($Waited -ge 120) {
+        throw "Timed out waiting for another $ProductName install to finish: $LockDir"
+      }
+      Start-Sleep -Seconds 1
+      $Waited += 1
+    }
+  }
+
+  $StagingDir = Join-Path $ParentDir ".$BaseName.install.$([System.Guid]::NewGuid().ToString("N").Substring(0, 8))"
+  $BackupDir = Join-Path $ParentDir ".$BaseName.previous.$PID"
+
+  try {
+    Copy-StableCliPayload $SourceDir $StagingDir
+    if (Test-Path -LiteralPath $InstallDir) {
+      Move-Item -LiteralPath $InstallDir -Destination $BackupDir -Force
+    }
+    Move-Item -LiteralPath $StagingDir -Destination $InstallDir -Force
+    Remove-Item -Recurse -Force $BackupDir -ErrorAction SilentlyContinue
+  } catch {
+    if ((-not (Test-Path -LiteralPath $InstallDir)) -and (Test-Path -LiteralPath $BackupDir)) {
+      Move-Item -LiteralPath $BackupDir -Destination $InstallDir -Force -ErrorAction SilentlyContinue
+    }
+    throw
+  } finally {
+    Remove-Item -Recurse -Force $StagingDir -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $LockDir -ErrorAction SilentlyContinue
   }
 }
 

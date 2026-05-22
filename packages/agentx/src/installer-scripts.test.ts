@@ -113,8 +113,15 @@ test("posix installer installs agentx into a stable local folder instead of a gl
   assert.match(text, /STABLE_CLI_DIR_NAME="\$\{AGENTX_STABLE_CLI_DIR:-\$PACKAGE_NAME-cli\}"/);
   assert.match(text, /CLI_INSTALL_DIR="\$HOME\/\.ai\/opencode-pack\/\$STABLE_CLI_DIR_NAME"/);
   assert.match(text, /install_stable_cli "\$CLI_DIR" "\$CLI_INSTALL_DIR"/);
-  assert.match(text, /cp -R "\$source_dir\/scripts" "\$install_dir\/scripts"/);
-  assert.match(text, /npm --prefix "\$install_dir" install --omit=dev/);
+  assert.match(text, /copy_stable_cli_payload\(\)/);
+  assert.match(text, /lock_dir="\$parent_dir\/\.\$base_name\.install\.lock"/);
+  assert.match(text, /staging_dir="\$\(mktemp -d "\$parent_dir\/\.\$base_name\.install\.XXXXXX"\)"/);
+  assert.match(text, /copy_stable_cli_payload "\$source_dir" "\$staging_dir"/);
+  assert.match(text, /mv "\$install_dir" "\$backup_dir"/);
+  assert.match(text, /mv "\$staging_dir" "\$install_dir"/);
+  assert.match(text, /rm -rf "\$backup_dir"/);
+  assert.match(text, /cp -R "\$source_dir\/scripts" "\$target_dir\/scripts"/);
+  assert.match(text, /npm --prefix "\$target_dir" install --omit=dev/);
   assert.match(text, /write_primary_binary "\$PRIMARY_BIN" "\$CLI_TARGET"/);
   assert.doesNotMatch(text, /npm pack --pack-destination/);
   assert.doesNotMatch(text, /package_tgz/);
@@ -146,8 +153,14 @@ test("windows installer contract runs managed setup through agentx install", () 
   assert.match(text, /& \$script:NodeCommand \$CliTarget @InstallArgs/);
   assert.match(
     text,
-    /Copy-Item -Path \(Join-Path \$SourceDir "scripts"\) -Destination \(Join-Path \$InstallDir "scripts"\) -Recurse -Force/,
+    /Copy-Item -Path \(Join-Path \$SourceDir "scripts"\) -Destination \(Join-Path \$TargetDir "scripts"\) -Recurse -Force/,
   );
+  assert.match(text, /function Copy-StableCliPayload/);
+  assert.match(text, /\$LockDir = Join-Path \$ParentDir "\.\$BaseName\.install\.lock"/);
+  assert.match(text, /New-Item -ItemType Directory -Path \$LockDir -ErrorAction Stop/);
+  assert.match(text, /Copy-StableCliPayload \$SourceDir \$StagingDir/);
+  assert.match(text, /Move-Item -LiteralPath \$InstallDir -Destination \$BackupDir -Force/);
+  assert.match(text, /Move-Item -LiteralPath \$StagingDir -Destination \$InstallDir -Force/);
   assert.doesNotMatch(text, /& \$PrimaryBin @InstallArgs/);
   assert.match(text, /%USERPROFILE%\\\.ai\\opencode-pack\\\$StableCliDirName\\dist\\cli\.js/);
   assert.match(text, /\$PrimaryBin = Join-Path \$Prefix "\$BinaryName\.cmd"/);
