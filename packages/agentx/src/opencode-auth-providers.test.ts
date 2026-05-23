@@ -132,6 +132,60 @@ test("applyOpenCodeAuthProviderSetup writes closed auth catalogs and migrates au
   });
 });
 
+test("applyOpenCodeAuthProviderSetup migrates stale OpenCode model state away from disabled providers", () => {
+  const homeDir = tempHome();
+  const configDir = path.join(homeDir, ".config", "opencode");
+  const stateDir = path.join(homeDir, ".local", "state", "opencode");
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(path.join(configDir, "opencode.json"), `${JSON.stringify({
+    plugin: ["opencode-gemini-auth@latest", "opencode-antigravity-auth@latest"],
+    provider: {
+      google: { models: { "gemini-3-flash-preview": {} } },
+      anthropic: { models: { "claude-sonnet-4-6": {} } },
+    },
+  }, null, 2)}\n`);
+  fs.writeFileSync(path.join(stateDir, "model.json"), `${JSON.stringify({
+    recent: [
+      { providerID: "google", modelID: "gemini-3-flash-preview" },
+      { providerID: "anthropic", modelID: "claude-sonnet-4-6" },
+      { providerID: "antigravity", modelID: "gemini-3.5-flash" },
+    ],
+    favorite: [
+      { providerID: "google", modelID: "gemini-3.1-pro-preview" },
+      { providerID: "anthropic", modelID: "claude-opus-4-7" },
+    ],
+    variant: {
+      "google/gemini-3.1-pro-preview": "high",
+      "anthropic/claude-opus-4-7": "max",
+      "antigravity/gemini-3.5-flash": "high",
+    },
+  }, null, 2)}\n`);
+
+  applyOpenCodeAuthProviderSetup({
+    homeDir,
+    configDir,
+    forceConfigure: true,
+    managePluginList: true,
+    patchPackages: false,
+  });
+
+  const modelState = readJson(path.join(stateDir, "model.json"));
+  assert.deepEqual(modelState.recent, [
+    { providerID: "gemini-cli", modelID: "gemini-3-flash-preview" },
+    { providerID: "anthropic-auth", modelID: "claude-sonnet-4-6" },
+    { providerID: "antigravity", modelID: "gemini-3.5-flash" },
+  ]);
+  assert.deepEqual(modelState.favorite, [
+    { providerID: "gemini-cli", modelID: "gemini-3.1-pro-preview" },
+    { providerID: "anthropic-auth", modelID: "claude-opus-4-7" },
+  ]);
+  assert.deepEqual(modelState.variant, {
+    "anthropic-auth/claude-opus-4-7": "max",
+    "antigravity/gemini-3.5-flash": "high",
+  });
+});
+
 test("applyOpenCodeAuthProviderSetup upgrades older Antigravity request routing patches", () => {
   const homeDir = tempHome();
   const requestPath = path.join(

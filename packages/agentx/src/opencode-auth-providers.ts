@@ -314,6 +314,81 @@ function migrateAuthV2Json(options: {
   });
 }
 
+function migrateProviderId(providerId: unknown): string | undefined {
+  if (providerId === "google") return "gemini-cli";
+  if (providerId === "anthropic") return "anthropic-auth";
+  return typeof providerId === "string" ? providerId : undefined;
+}
+
+function migrateModelRefList(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  const out: unknown[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const record = asRecord(item);
+    const providerKey = typeof record.providerID === "string" ? "providerID" : typeof record.providerId === "string" ? "providerId" : undefined;
+    const modelID = typeof record.modelID === "string" ? record.modelID : typeof record.modelId === "string" ? record.modelId : undefined;
+    if (!providerKey || !modelID) {
+      out.push(item);
+      continue;
+    }
+    const providerID = migrateProviderId(record[providerKey]) ?? record[providerKey];
+    const key = `${providerID}/${modelID}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ ...record, [providerKey]: providerID });
+  }
+  return out;
+}
+
+function migrateModelVariantMap(value: unknown): unknown {
+  const variant = asRecord(value);
+  if (Object.keys(variant).length === 0) return value;
+  const next: Record<string, unknown> = {};
+  for (const [key, selected] of Object.entries(variant)) {
+    const slash = key.indexOf("/");
+    if (slash <= 0) {
+      next[key] = selected;
+      continue;
+    }
+    const providerID = key.slice(0, slash);
+    const modelID = key.slice(slash + 1);
+    if (providerID === "google") continue;
+    const migratedProviderID = migrateProviderId(providerID) ?? providerID;
+    const migratedKey = `${migratedProviderID}/${modelID}`;
+    if (!(migratedKey in next)) next[migratedKey] = selected;
+  }
+  return next;
+}
+
+function migrateModelStateJson(options: {
+  homeDir: string;
+  dryRun?: boolean;
+  backupSession: BackupSession;
+  changes: OpenCodeAuthProviderSetupChange[];
+}): void {
+  const filePath = path.join(options.homeDir, ".local", "state", "opencode", "model.json");
+  const current = readJsonObject(filePath);
+  if (!current) {
+    options.changes.push({ path: filePath, status: "missing", message: "OpenCode model state not present yet." });
+    return;
+  }
+  const next = {
+    ...current,
+    recent: migrateModelRefList(current.recent),
+    favorite: migrateModelRefList(current.favorite),
+    variant: migrateModelVariantMap(current.variant),
+  };
+  writeJsonIfChanged({
+    filePath,
+    value: next,
+    dryRun: options.dryRun,
+    backupSession: options.backupSession,
+    changes: options.changes,
+    message: "Migrated OpenCode model picker state away from disabled Google/Anthropic provider IDs.",
+  });
+}
+
 function migrateAntigravityJson(options: {
   configDir: string;
   dryRun?: boolean;
@@ -656,6 +731,7 @@ export function applyOpenCodeAuthProviderSetup(options: OpenCodeAuthProviderSetu
     migrateAntigravityJson({ configDir, dryRun: options.dryRun, backupSession, changes });
     migrateAuthJson({ homeDir, dryRun: options.dryRun, backupSession, changes });
     migrateAuthV2Json({ homeDir, dryRun: options.dryRun, backupSession, changes });
+    migrateModelStateJson({ homeDir, dryRun: options.dryRun, backupSession, changes });
   }
   if (options.patchPackages !== false) {
     patchInstalledPackages({ homeDir, dryRun: options.dryRun, backupSession, changes });
