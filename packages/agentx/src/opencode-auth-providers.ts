@@ -19,6 +19,18 @@ const TEXT_ONLY = { input: ["text"], output: ["text"] };
 const GEMINI_LARGE = { context: 1048576, output: 65536 };
 const GEMINI_PRO = { context: 1048576, output: 65535 };
 const ANTHROPIC_STANDARD = { context: 200000, output: 64000 };
+const GEMINI_THINKING_VARIANTS = {
+  high: { thinkingConfig: { thinkingLevel: "high" } },
+  medium: { thinkingConfig: { thinkingLevel: "medium" } },
+};
+const GEMINI_PRO_THINKING_VARIANTS = {
+  high: { thinkingConfig: { thinkingLevel: "high" } },
+  low: { thinkingConfig: { thinkingLevel: "low" } },
+};
+const ANTHROPIC_THINKING_VARIANTS = {
+  high: { thinking: { type: "enabled", budgetTokens: 16000 } },
+  max: { thinking: { type: "enabled", budgetTokens: 32000 } },
+};
 
 export interface OpenCodeAuthProviderSetupOptions {
   homeDir?: string;
@@ -126,19 +138,13 @@ function antigravityModels(): Record<string, unknown> {
       name: "Gemini 3.5 Flash",
       limit: GEMINI_LARGE,
       modalities: TEXT_IMAGE_PDF,
-      variants: {
-        high: { thinkingLevel: "high" },
-        medium: { thinkingLevel: "medium" },
-      },
+      variants: GEMINI_THINKING_VARIANTS,
     },
     "gemini-3.1-pro": {
       name: "Gemini 3.1 Pro",
       limit: GEMINI_PRO,
       modalities: TEXT_IMAGE_PDF,
-      variants: {
-        high: { thinkingLevel: "high" },
-        low: { thinkingLevel: "low" },
-      },
+      variants: GEMINI_PRO_THINKING_VARIANTS,
     },
     "claude-sonnet-4-6": { name: "Claude Sonnet 4.6", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF },
     "claude-opus-4-6": { name: "Claude Opus 4.6", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF },
@@ -153,8 +159,8 @@ function antigravityModels(): Record<string, unknown> {
 
 function anthropicAuthModels(): Record<string, unknown> {
   return {
-    "claude-sonnet-4-6": { name: "Sonnet 4.6", limit: { context: 1000000, output: 64000 }, modalities: TEXT_IMAGE_PDF },
-    "claude-opus-4-7": { name: "Opus 4.7", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF },
+    "claude-sonnet-4-6": { name: "Sonnet 4.6", limit: { context: 1000000, output: 64000 }, modalities: TEXT_IMAGE_PDF, variants: ANTHROPIC_THINKING_VARIANTS },
+    "claude-opus-4-7": { name: "Opus 4.7", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF, variants: ANTHROPIC_THINKING_VARIANTS },
     "claude-haiku-4-5": { name: "Haiku 4.5", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF },
   };
 }
@@ -301,6 +307,25 @@ function migrateAuthV2Json(options: {
     backupSession: options.backupSession,
     changes: options.changes,
     message: "Migrated OpenCode auth-v2 active provider IDs.",
+  });
+}
+
+function migrateAntigravityJson(options: {
+  configDir: string;
+  dryRun?: boolean;
+  backupSession: BackupSession;
+  changes: OpenCodeAuthProviderSetupChange[];
+}): void {
+  const filePath = path.join(options.configDir, "antigravity.json");
+  const current = readJsonObject(filePath) ?? {};
+  const next = { ...current, cli_first: false };
+  writeJsonIfChanged({
+    filePath,
+    value: next,
+    dryRun: options.dryRun,
+    backupSession: options.backupSession,
+    changes: options.changes,
+    message: "Configured Antigravity OAuth to use Antigravity quota before Gemini CLI quota.",
   });
 }
 
@@ -453,6 +478,21 @@ function patchAntigravityUpdater(text: string): string {
 
 function patchAntigravityRequest(text: string): string {
   let next = text;
+  const quotaModelRoutingBlock = `                const modelWithoutQuota = rawModel.replace(/^antigravity-/i, "").toLowerCase();
+                const variantThinkingLevel = typeof variantConfig?.thinkingLevel === "string"
+                    ? variantConfig.thinkingLevel.toLowerCase()
+                    : undefined;
+                if (modelWithoutQuota === "gemini-3.5-flash") {
+                    effectiveModel = "gemini-3-flash-agent";
+                    tierThinkingLevel = variantThinkingLevel === "medium" ? "medium" : "high";
+                    tierThinkingBudget = undefined;
+                }
+                else if (modelWithoutQuota === "gemini-3.1-pro") {
+                    effectiveModel = variantThinkingLevel === "high" ? "gemini-pro-agent" : "gemini-3.1-pro-low";
+                    tierThinkingLevel = variantThinkingLevel === "high" ? "high" : "low";
+                    tierThinkingBudget = undefined;
+                }
+`;
   if (!next.includes("function requestUrlString(input)")) {
     next = next.replace(
       "const STREAM_ACTION = \"streamGenerateContent\";\n",
@@ -524,25 +564,12 @@ function requestUrlString(input) {
                         delete extraBody.thinking;
                     }
                 }
-                const modelWithoutQuota = rawModel.replace(/^antigravity-/i, "").toLowerCase();
-                const variantThinkingLevel = typeof variantConfig?.thinkingLevel === "string"
-                    ? variantConfig.thinkingLevel.toLowerCase()
-                    : undefined;
-                if (modelWithoutQuota === "gemini-3.5-flash") {
-                    effectiveModel = variantThinkingLevel === "high" ? "gemini-3-flash-agent" : "gemini-3.5-flash-low";
-                    if (variantThinkingLevel) {
-                        tierThinkingLevel = variantThinkingLevel;
-                        tierThinkingBudget = undefined;
-                    }
-                }
-                else if (modelWithoutQuota === "gemini-3.1-pro") {
-                    effectiveModel = variantThinkingLevel === "high" ? "gemini-pro-agent" : "gemini-3.1-pro-low";
-                    if (variantThinkingLevel) {
-                        tierThinkingLevel = variantThinkingLevel;
-                        tierThinkingBudget = undefined;
-                    }
-                }
-`,
+${quotaModelRoutingBlock}`,
+    );
+  } else {
+    next = next.replace(
+      /                const modelWithoutQuota = rawModel\.replace\(\/\^antigravity-\/i, ""\)\.toLowerCase\(\);\n                const variantThinkingLevel = typeof variantConfig\?\.thinkingLevel === "string"\n                    \? variantConfig\.thinkingLevel\.toLowerCase\(\)\n                    : undefined;\n                if \(modelWithoutQuota === "gemini-3\.5-flash"\) \{\n(?:                    effectiveModel = variantThinkingLevel === "high" \? "gemini-3-flash-agent" : "gemini-3\.5-flash-low";\n                    if \(variantThinkingLevel\) \{\n                        tierThinkingLevel = variantThinkingLevel;\n                        tierThinkingBudget = undefined;\n                    \}\n|                    effectiveModel = "gemini-3-flash-agent";\n                    tierThinkingLevel = variantThinkingLevel === "medium" \? "medium" : "high";\n                    tierThinkingBudget = undefined;\n)                \}\n                else if \(modelWithoutQuota === "gemini-3\.1-pro"\) \{\n                    effectiveModel = variantThinkingLevel === "high" \? "gemini-pro-agent" : "gemini-3\.1-pro-low";\n(?:                    if \(variantThinkingLevel\) \{\n                        tierThinkingLevel = variantThinkingLevel;\n                        tierThinkingBudget = undefined;\n                    \}\n|                    tierThinkingLevel = variantThinkingLevel === "high" \? "high" : "low";\n                    tierThinkingBudget = undefined;\n)                \}\n/,
+      quotaModelRoutingBlock,
     );
   }
   return next;
@@ -610,6 +637,7 @@ export function applyOpenCodeAuthProviderSetup(options: OpenCodeAuthProviderSetu
     changes,
   });
   if (configured || options.forceConfigure) {
+    migrateAntigravityJson({ configDir, dryRun: options.dryRun, backupSession, changes });
     migrateAuthJson({ homeDir, dryRun: options.dryRun, backupSession, changes });
     migrateAuthV2Json({ homeDir, dryRun: options.dryRun, backupSession, changes });
   }

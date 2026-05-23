@@ -42,6 +42,10 @@ test("applyOpenCodeAuthProviderSetup writes closed auth catalogs and migrates au
       anthropic: { models: { stale: {} } },
     },
   }, null, 2)}\n`);
+  fs.writeFileSync(path.join(configDir, "antigravity.json"), `${JSON.stringify({
+    cli_first: true,
+    account_selection_strategy: "sticky",
+  }, null, 2)}\n`);
   fs.writeFileSync(path.join(authDir, "auth.json"), `${JSON.stringify({
     google: { type: "oauth", refresh: "gemini-refresh" },
     anthropic: { type: "oauth", refresh: "anthropic-refresh" },
@@ -93,6 +97,23 @@ test("applyOpenCodeAuthProviderSetup writes closed auth catalogs and migrates au
     "claude-opus-4-7",
     "claude-haiku-4-5",
   ]);
+  assert.deepEqual(config.provider.antigravity.models["gemini-3.5-flash"].variants, {
+    high: { thinkingConfig: { thinkingLevel: "high" } },
+    medium: { thinkingConfig: { thinkingLevel: "medium" } },
+  });
+  assert.deepEqual(config.provider.antigravity.models["gemini-3.1-pro"].variants, {
+    high: { thinkingConfig: { thinkingLevel: "high" } },
+    low: { thinkingConfig: { thinkingLevel: "low" } },
+  });
+  assert.deepEqual(config.provider["anthropic-auth"].models["claude-sonnet-4-6"].variants, {
+    high: { thinking: { type: "enabled", budgetTokens: 16000 } },
+    max: { thinking: { type: "enabled", budgetTokens: 32000 } },
+  });
+  assert.deepEqual(config.provider["anthropic-auth"].models["claude-opus-4-7"].variants, {
+    high: { thinking: { type: "enabled", budgetTokens: 16000 } },
+    max: { thinking: { type: "enabled", budgetTokens: 32000 } },
+  });
+  assert.equal(config.provider["anthropic-auth"].models["claude-haiku-4-5"].variants, undefined);
 
   const auth = readJson(path.join(authDir, "auth.json"));
   assert.deepEqual(Object.keys(auth).sort(), ["anthropic-auth", "gemini-cli", "openai"]);
@@ -100,4 +121,52 @@ test("applyOpenCodeAuthProviderSetup writes closed auth catalogs and migrates au
   assert.equal(authV2.accounts.a.serviceID, "gemini-cli");
   assert.equal(authV2.accounts.b.serviceID, "anthropic-auth");
   assert.deepEqual(authV2.active, { "gemini-cli": "a", "anthropic-auth": "b" });
+  assert.deepEqual(readJson(path.join(configDir, "antigravity.json")), {
+    cli_first: false,
+    account_selection_strategy: "sticky",
+  });
+});
+
+test("applyOpenCodeAuthProviderSetup upgrades older Antigravity request routing patches", () => {
+  const homeDir = tempHome();
+  const requestPath = path.join(
+    homeDir,
+    ".cache",
+    "opencode",
+    "packages",
+    "opencode-antigravity-auth@1.6.0",
+    "node_modules",
+    "opencode-antigravity-auth",
+    "dist",
+    "src",
+    "plugin",
+    "request.js",
+  );
+  fs.mkdirSync(path.dirname(requestPath), { recursive: true });
+  fs.writeFileSync(requestPath, `                const modelWithoutQuota = rawModel.replace(/^antigravity-/i, "").toLowerCase();
+                const variantThinkingLevel = typeof variantConfig?.thinkingLevel === "string"
+                    ? variantConfig.thinkingLevel.toLowerCase()
+                    : undefined;
+                if (modelWithoutQuota === "gemini-3.5-flash") {
+                    effectiveModel = variantThinkingLevel === "high" ? "gemini-3-flash-agent" : "gemini-3.5-flash-low";
+                    if (variantThinkingLevel) {
+                        tierThinkingLevel = variantThinkingLevel;
+                        tierThinkingBudget = undefined;
+                    }
+                }
+                else if (modelWithoutQuota === "gemini-3.1-pro") {
+                    effectiveModel = variantThinkingLevel === "high" ? "gemini-pro-agent" : "gemini-3.1-pro-low";
+                    if (variantThinkingLevel) {
+                        tierThinkingLevel = variantThinkingLevel;
+                        tierThinkingBudget = undefined;
+                    }
+                }
+`);
+
+  applyOpenCodeAuthProviderSetup({ homeDir, patchPackages: true });
+
+  const patched = fs.readFileSync(requestPath, "utf8");
+  assert.match(patched, /effectiveModel = "gemini-3-flash-agent";/);
+  assert.doesNotMatch(patched, /gemini-3\.5-flash-low/);
+  assert.match(patched, /tierThinkingLevel = variantThinkingLevel === "medium" \? "medium" : "high";/);
 });
