@@ -105,6 +105,11 @@ test("applyOpenCodeAuthProviderSetup writes closed auth catalogs and migrates au
     high: { thinkingConfig: { thinkingLevel: "high" } },
     low: { thinkingConfig: { thinkingLevel: "low" } },
   });
+  assert.equal(config.provider.antigravity.models["claude-sonnet-4-6"].variants, undefined);
+  assert.deepEqual(config.provider.antigravity.models["claude-opus-4-6"].variants, {
+    low: { thinkingConfig: { thinkingBudget: 8192 } },
+    max: { thinkingConfig: { thinkingBudget: 32768 } },
+  });
   assert.deepEqual(config.provider["anthropic-auth"].models["claude-sonnet-4-6"].variants, {
     high: { thinking: { type: "enabled", budgetTokens: 16000 } },
     max: { thinking: { type: "enabled", budgetTokens: 32000 } },
@@ -169,4 +174,35 @@ test("applyOpenCodeAuthProviderSetup upgrades older Antigravity request routing 
   assert.match(patched, /effectiveModel = "gemini-3-flash-agent";/);
   assert.doesNotMatch(patched, /gemini-3\.5-flash-low/);
   assert.match(patched, /tierThinkingLevel = variantThinkingLevel === "medium" \? "medium" : "high";/);
+});
+
+test("applyOpenCodeAuthProviderSetup routes public Antigravity Opus to the thinking backend model", () => {
+  const homeDir = tempHome();
+  const resolverPath = path.join(
+    homeDir,
+    ".cache",
+    "opencode",
+    "packages",
+    "opencode-antigravity-auth@1.6.0",
+    "node_modules",
+    "opencode-antigravity-auth",
+    "dist",
+    "src",
+    "plugin",
+    "transform",
+    "model-resolver.js",
+  );
+  fs.mkdirSync(path.dirname(resolverPath), { recursive: true });
+  fs.writeFileSync(resolverPath, `export const MODEL_ALIASES = {
+    "gemini-claude-opus-4-6-thinking-low": "claude-opus-4-6-thinking",
+    "gemini-claude-opus-4-6-thinking-medium": "claude-opus-4-6-thinking",
+    "gemini-claude-opus-4-6-thinking-high": "claude-opus-4-6-thinking",
+    "gemini-claude-sonnet-4-6": "claude-sonnet-4-6",
+};
+`);
+
+  applyOpenCodeAuthProviderSetup({ homeDir, patchPackages: true });
+
+  const patched = fs.readFileSync(resolverPath, "utf8");
+  assert.match(patched, /"claude-opus-4-6": "claude-opus-4-6-thinking"/);
 });

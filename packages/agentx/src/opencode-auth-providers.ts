@@ -31,6 +31,10 @@ const ANTHROPIC_THINKING_VARIANTS = {
   high: { thinking: { type: "enabled", budgetTokens: 16000 } },
   max: { thinking: { type: "enabled", budgetTokens: 32000 } },
 };
+const ANTIGRAVITY_CLAUDE_THINKING_VARIANTS = {
+  low: { thinkingConfig: { thinkingBudget: 8192 } },
+  max: { thinkingConfig: { thinkingBudget: 32768 } },
+};
 
 export interface OpenCodeAuthProviderSetupOptions {
   homeDir?: string;
@@ -147,7 +151,7 @@ function antigravityModels(): Record<string, unknown> {
       variants: GEMINI_PRO_THINKING_VARIANTS,
     },
     "claude-sonnet-4-6": { name: "Claude Sonnet 4.6", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF },
-    "claude-opus-4-6": { name: "Claude Opus 4.6", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF },
+    "claude-opus-4-6": { name: "Claude Opus 4.6", limit: ANTHROPIC_STANDARD, modalities: TEXT_IMAGE_PDF, variants: ANTIGRAVITY_CLAUDE_THINKING_VARIANTS },
     "gpt-oss-120b": {
       name: "GPT-OSS 120B",
       limit: { context: 131072, output: 32768 },
@@ -476,6 +480,17 @@ function patchAntigravityUpdater(text: string): string {
     .replace(/"opencode-antigravity-auth@latest"/g, '"opencode-antigravity-auth@1.6.0"');
 }
 
+function patchAntigravityModelResolver(text: string): string {
+  let next = text;
+  if (!next.includes('"claude-opus-4-6": "claude-opus-4-6-thinking"')) {
+    next = next.replace(
+      '    "gemini-claude-sonnet-4-6": "claude-sonnet-4-6",\n',
+      '    "gemini-claude-sonnet-4-6": "claude-sonnet-4-6",\n    "claude-opus-4-6": "claude-opus-4-6-thinking",\n',
+    );
+  }
+  return next;
+}
+
 function patchAntigravityRequest(text: string): string {
   let next = text;
   const quotaModelRoutingBlock = `                const modelWithoutQuota = rawModel.replace(/^antigravity-/i, "").toLowerCase();
@@ -589,6 +604,7 @@ function patchInstalledPackages(options: {
     { packageName: "opencode-antigravity-auth", relPath: "dist/src/constants.d.ts", message: "Patched Antigravity provider ID type declaration.", transform: patchAntigravityConstants },
     { packageName: "opencode-antigravity-auth", relPath: "dist/src/plugin/config/updater.js", message: "Patched Antigravity updater to preserve its own provider namespace.", transform: patchAntigravityUpdater },
     { packageName: "opencode-antigravity-auth", relPath: "dist/src/plugin/config/models.js", message: "Patched Antigravity model catalog with native variants.", transform: () => antigravityModelsJs() },
+    { packageName: "opencode-antigravity-auth", relPath: "dist/src/plugin/transform/model-resolver.js", message: "Patched Antigravity Claude Opus public model routing.", transform: patchAntigravityModelResolver },
     { packageName: "opencode-antigravity-auth", relPath: "dist/src/plugin/request.js", message: "Patched Antigravity request routing, variants, and GPT-OSS payload cleanup.", transform: patchAntigravityRequest },
   ];
 
