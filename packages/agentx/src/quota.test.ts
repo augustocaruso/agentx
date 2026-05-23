@@ -140,7 +140,7 @@ test("refreshQuota does not refresh expired Gemini OAuth without configured clie
   try {
     const report = await refreshQuota({ projectRoot, homeDir, force: true });
     assert.equal(report.status, "unavailable");
-    assert.match(report.message ?? "", /Google OAuth client unavailable/);
+    assert.match(report.message ?? "", /Gemini CLI OAuth client unavailable/);
   } finally {
     globalThis.fetch = previousFetch;
   }

@@ -543,7 +543,7 @@ test("setupUx treats the home directory as global-only and writes the global OGB
 
   assert.equal(report.agentxConfigPath, globalProfilePath);
   assert.equal(globalProfile.openCode.defaultAgent, "YOLO");
-  assert.equal(globalProfile.modelFallbacks.agents["med-chat-triager"].model.id, "google/gemini-3-flash-preview");
+  assert.equal(globalProfile.modelFallbacks.agents["med-chat-triager"].model.id, "gemini-cli/gemini-3-flash-preview");
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "agentx.config.jsonc")), false);
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "plugins", "ogb-startup-sync.js")), false);
   assert.equal(fs.existsSync(path.join(configDir, "opencode.json")), true);

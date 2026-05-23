@@ -64,8 +64,12 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.match(plugin, /function displayLimitLines\(provider\)/);
   assert.match(plugin, /lineUsedPercent\(weekly\) \?\? 0\) >= 100/);
   assert.match(plugin, /toLowerCase\(\) !== "session"/);
+  assert.match(plugin, /const label = shortLabel !== "Quota"/);
+  assert.match(plugin, /function fitUsageLabel\(value, width\)/);
+  assert.match(plugin, /const compactPlan = text\.replace/);
   assert.match(plugin, /const barWidth = Math\.max\(10, maxWidth - separator\.length - percentCol\);/);
-  assert.match(plugin, /const timeLine = padRight\(leftText, nameWidth\) \+ separator \+ padLeft\(timeStr, timeWidth\);/);
+  assert.match(plugin, /const fittedName = fitUsageLabel\(leftText, nameWidth\);/);
+  assert.match(plugin, /const timeLine = padRight\(fittedName, nameWidth\) \+ separator \+ padLeft\(timeStr, timeWidth\);/);
   assert.match(plugin, /const barCell = bar\(displayedPercent, barWidth\);/);
   assert.match(plugin, /const filled = Math\.round\(\(clampInt\(safePercent, 0, 100\) \/ 100\) \* width\);/);
   assert.match(plugin, /return "█"\.repeat\(filled\) \+ "░"\.repeat\(empty\);/);

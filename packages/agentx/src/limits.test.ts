@@ -174,7 +174,8 @@ test("refreshLimits uses native Anthropic OAuth fallback when OpenUsage is unava
     assert.equal(report.status, "ok");
     assert.equal(report.sources.openusage.status, "unavailable");
     assert.equal(report.sources.anthropicClaude?.status, "ok");
-    assert.equal(claude?.displayName, "Claude");
+    assert.equal(claude?.displayName, "Anthropic");
+    assert.equal(claude?.plan, "Pro");
     assert.deepEqual(claude?.lines?.map((line) => [line.label, line.used]), [
       ["Session", 30],
       ["Weekly", 21],
@@ -206,7 +207,8 @@ test("refreshLimits keeps last Claude usage when Anthropic refresh is rate limit
     status: "ok",
     providers: [{
       providerId: "anthropic",
-      displayName: "Claude",
+      displayName: "Anthropic",
+      plan: "Pro",
       fetchedAt: "2026-05-04T12:00:00.000Z",
       lines: [
         { label: "Session", type: "progress", used: 88, limit: 100, resetsAt: "2026-05-04T16:00:00.000Z" },
@@ -244,7 +246,8 @@ test("refreshLimits keeps last Claude usage when Anthropic refresh is rate limit
     assert.equal(report.status, "partial");
     assert.equal(report.sources.anthropicClaude?.status, "error");
     assert.equal(report.sources.anthropicClaude?.message, "Anthropic usage HTTP 429");
-    assert.equal(claude?.displayName, "Claude");
+    assert.equal(claude?.displayName, "Anthropic");
+    assert.equal(claude?.plan, "Pro");
     assert.equal(claude?.stale, true);
     assert.equal(claude?.lines?.find((line) => line.label === "Weekly")?.used, 99);
     assert.ok(report.warnings.some((warning) => warning.includes("keeping last successful usage value")));

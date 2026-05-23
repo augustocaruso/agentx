@@ -7,6 +7,7 @@ import { BINARY, DISPLAY } from "./brand.js";
 import { resolveCommand } from "./command-resolution.js";
 import { readLocalRole } from "./local-role.js";
 import { normalizeRuntimeOptions, type OgbConfig } from "./ogb-config.js";
+import { applyOpenCodeAuthProviderSetup, normalizeAuthPluginSpecs } from "./opencode-auth-providers.js";
 import { runNativeCommand } from "./native-runner.js";
 import { createPlatformAdapter, type PlatformAdapter } from "./platform-adapter.js";
 import { isHomeProject } from "./paths.js";
@@ -19,7 +20,7 @@ import { AGENTX_VERSION } from "./types.js";
 import { UX_PROFILE_PRESET } from "./ux-profile.generated.js";
 import { clearWindowsReadOnlyDirectoryAttribute } from "./windows-attributes.js";
 
-export const OGB_UX_SAFE_PLUGINS = [...UX_PROFILE_PRESET.safePlugins];
+export const OGB_UX_SAFE_PLUGINS = normalizeAuthPluginSpecs([...UX_PROFILE_PRESET.safePlugins]);
 export const OGB_UX_DISABLED_PLUGINS = [...UX_PROFILE_PRESET.disabledPlugins];
 export const OGB_UX_PLUGINS = OGB_UX_SAFE_PLUGINS;
 export const OGB_TUI_RUNTIME_DEPENDENCIES = { ...UX_PROFILE_PRESET.tuiRuntimeDependencies };
@@ -93,7 +94,7 @@ export interface SetupUxCommand {
   command: string[];
   status: "skipped" | "ok" | "fail" | "preview";
   message: string;
-  role?: "opencode" | "tui-runtime" | "plugin" | "verify" | "auth";
+  role?: "opencode" | "tui-runtime" | "plugin" | "verify" | "auth" | "auth-provider";
 }
 
 export interface SetupUxReport {
@@ -911,6 +912,23 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
         commands.push(runCommand([opencodeCommand, "plugin", plugin, "--global", "--force"], options.dryRun, commandCwd, "plugin"));
       }
     }
+    const authProviderSetup = applyOpenCodeAuthProviderSetup({
+      homeDir,
+      configDir: root,
+      dryRun: options.dryRun,
+      forceConfigure: true,
+      managePluginList: true,
+      patchPackages: true,
+    });
+    commands.push({
+      command: [BINARY, "setup-auth-providers"],
+      status: options.dryRun ? "preview" : "ok",
+      message: authProviderSetup.changes
+        .map((change) => `${change.status}:${path.relative(homeDir, change.path) || change.path}`)
+        .join(", ") || authProviderSetup.status,
+      role: "auth-provider",
+    });
+    warnings.push(...authProviderSetup.warnings);
     if (opencodeCommand && (!localRole.enabled || options.dryRun)) {
       const verification = runCommand([opencodeCommand, "debug", "info"], options.dryRun, commandCwd, "verify");
       if (verification.status === "ok") {

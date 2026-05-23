@@ -187,6 +187,7 @@ function providerLabel(provider) {
 
 function providerKind(providerID) {
   const id = String(providerID || "").toLowerCase();
+  if (id.includes("antigravity")) return "other";
   if (id.includes("anthropic") || id.includes("claude")) return "anthropic";
   if (id.includes("openai") || id.includes("gpt") || id.includes("codex")) return "openai";
   if (id.includes("google") || id.includes("gemini")) return "gemini";
@@ -288,6 +289,20 @@ function truncateText(value, width) {
   return text.slice(0, width - 1) + "…";
 }
 
+function fitUsageLabel(value, width) {
+  const text = String(value || "");
+  if (text.length <= width) return text;
+  const compactPlan = text.replace(/\(([^)]+)\)/g, "$1").replace(/\s+/g, " ").trim();
+  if (compactPlan.length <= width) return compactPlan;
+  const match = compactPlan.match(/^(.*)\s+(Session|Weekly|Quota|Opus|Sonnet)$/i);
+  if (match) {
+    const suffix = match[2];
+    const prefixWidth = width - suffix.length - 1;
+    if (prefixWidth > 0) return truncateText(match[1], prefixWidth) + " " + suffix;
+  }
+  return truncateText(compactPlan, width);
+}
+
 function padRight(value, width) {
   const text = String(value || "");
   if (text.length >= width) return text.slice(0, width);
@@ -369,8 +384,9 @@ function formatQuotaRows(entries, errors) {
 
     if (isTiny) {
       const tinyNameCol = Math.max(1, maxWidth - separator.length - timeCol - separator.length - percentCol);
+      const fittedName = fitUsageLabel(leftText, tinyNameCol);
       const line = [
-        padRight(leftText, tinyNameCol),
+        padRight(fittedName, tinyNameCol),
         padLeft(timeStr, timeCol),
         padLeft(percentLabel, percentCol),
       ].join(separator);
@@ -380,7 +396,8 @@ function formatQuotaRows(entries, errors) {
 
     const timeWidth = Math.max(timeStr.length, timeCol);
     const nameWidth = Math.max(1, barWidth - separator.length - timeWidth);
-    const timeLine = padRight(leftText, nameWidth) + separator + padLeft(timeStr, timeWidth);
+    const fittedName = fitUsageLabel(leftText, nameWidth);
+    const timeLine = padRight(fittedName, nameWidth) + separator + padLeft(timeStr, timeWidth);
     lines.push(timeLine.slice(0, barWidth));
 
     const barCell = bar(displayedPercent, barWidth);
@@ -413,7 +430,7 @@ function providerQuotaRows(provider) {
       const percent = lineUsedPercent(item);
       if (percent === undefined) return undefined;
       const shortLabel = shortLimitLabel(item.label);
-      const label = effectiveLines.length > 1 && shortLabel !== "Quota"
+      const label = shortLabel !== "Quota"
         ? providerName + " " + shortLabel
         : providerName;
       return {
@@ -425,6 +442,49 @@ function providerQuotaRows(provider) {
     .filter(Boolean);
 }
 
+function usageProviderRank(provider) {
+  const id = String(provider?.providerId || "").toLowerCase();
+  const kind = providerKind((String(provider?.providerId || "") + " " + String(provider?.displayName || "")));
+  if (id === "antigravity-claude") return 2;
+  if (id === "antigravity-gemini") return 3;
+  if (id === "gemini-cli-pro") return 4;
+  if (id === "gemini-cli-flash") return 5;
+  if (id === "gemini-cli") return 4;
+  if (id === "openai" || kind === "openai") return 0;
+  if (id === "anthropic" || kind === "anthropic") return 1;
+  return 99;
+}
+
+function fixedUsageProviders(providers) {
+  const selected = new Map();
+  for (const provider of providers) {
+    const rank = usageProviderRank(provider);
+    if (rank >= 99 || selected.has(rank)) continue;
+    selected.set(rank, provider);
+  }
+  return [...selected.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map((entry) => entry[1]);
+}
+
+function providerSingleQuotaRow(provider) {
+  const primary = providerFooterLine(provider);
+  const percent = lineUsedPercent(primary);
+  if (percent === undefined) return undefined;
+  return {
+    label: providerDisplayName(provider),
+    reset: resetText(primary),
+    percent,
+  };
+}
+
+function fixedProviderQuotaRows(provider) {
+  const rank = usageProviderRank(provider);
+  if (rank === 0 || rank === 1) return providerQuotaRows(provider);
+  const row = providerSingleQuotaRow(provider);
+  return row ? [row] : [];
+}
+
 function unavailableLimitRows(root) {
   void root;
   return [];
@@ -432,9 +492,7 @@ function unavailableLimitRows(root) {
 
 function quotaRows(root) {
   const limits = readLimits(root);
-  const rows = [];
-  for (const provider of limits.providers.slice(0, 4)) rows.push(...providerQuotaRows(provider));
-  return rows;
+  return fixedUsageProviders(limits.providers).flatMap((provider) => fixedProviderQuotaRows(provider));
 }
 
 function providerMatches(provider, providerID) {

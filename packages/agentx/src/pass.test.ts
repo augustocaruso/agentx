@@ -552,7 +552,7 @@ test("runPass repairs global OpenCode projections before project sync", () => {
   const keeperTarget = path.join(homeDir, ".config", "opencode", "agents", "keeper.md");
   fs.writeFileSync(
     keeperTarget,
-    fs.readFileSync(keeperTarget, "utf8").replace("google/gemini-3-flash-preview", "gemini-3-flash-preview"),
+    fs.readFileSync(keeperTarget, "utf8").replace("gemini-cli/gemini-3-flash-preview", "gemini-3-flash-preview"),
     "utf8",
   );
 
@@ -572,7 +572,7 @@ test("runPass repairs global OpenCode projections before project sync", () => {
 
   assert.equal(report.automated.includes("global-sync"), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".config", "opencode", "agents", "stale.md")), false);
-  assert.match(fs.readFileSync(keeperTarget, "utf8"), /model: "google\/gemini-3-flash-preview"/);
+  assert.match(fs.readFileSync(keeperTarget, "utf8"), /model: "gemini-cli\/gemini-3-flash-preview"/);
   process.exitCode = oldExitCode;
 });
 

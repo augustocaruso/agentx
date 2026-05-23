@@ -6,8 +6,9 @@ export const UX_PROFILE_PRESET = {
   "name": "default",
   "description": "Default agentX OpenCode UX profile distributed to users.",
   "safePlugins": [
-    "opencode-gemini-auth@1.4.12",
-    "@ex-machina/opencode-anthropic-auth@1.8.0",
+    "opencode-gemini-auth@1.4.15",
+    "opencode-antigravity-auth@1.6.0",
+    "@ex-machina/opencode-anthropic-auth@1.8.1",
     "opencode-update-notifier@0.1.0",
     "opencode-auto-fallback@0.4.3",
     "opencode-notify",
@@ -199,7 +200,7 @@ export const UX_PROFILE_PRESET = {
     "agentFallbacks": {
       "med-knowledge-architect": [
         {
-          "model": "anthropic/claude-sonnet-4-6",
+          "model": "anthropic-auth/claude-sonnet-4-6",
           "reasoningEffort": "high"
         },
         {
@@ -210,7 +211,7 @@ export const UX_PROFILE_PRESET = {
       ],
       "med-flashcard-maker": [
         {
-          "model": "anthropic/claude-sonnet-4-6",
+          "model": "anthropic-auth/claude-sonnet-4-6",
           "reasoningEffort": "high"
         },
         {
@@ -226,7 +227,7 @@ export const UX_PROFILE_PRESET = {
           "variant": "medium"
         },
         {
-          "model": "anthropic/claude-sonnet-4-6",
+          "model": "anthropic-auth/claude-sonnet-4-6",
           "reasoningEffort": "medium"
         }
       ],
@@ -237,7 +238,7 @@ export const UX_PROFILE_PRESET = {
           "variant": "medium"
         },
         {
-          "model": "anthropic/claude-haiku-4-5",
+          "model": "anthropic-auth/claude-haiku-4-5",
           "reasoningEffort": "high"
         }
       ],
@@ -248,7 +249,7 @@ export const UX_PROFILE_PRESET = {
           "variant": "medium"
         },
         {
-          "model": "anthropic/claude-haiku-4-5",
+          "model": "anthropic-auth/claude-haiku-4-5",
           "reasoningEffort": "high"
         }
       ]
@@ -277,8 +278,8 @@ export const UX_PROFILE_PRESET = {
         "formatStyle": "allWindows",
         "enabledProviders": [
           "openai",
-          "anthropic",
-          "google-gemini-cli"
+          "anthropic-auth",
+          "gemini-cli"
         ],
         "onlyCurrentModel": false,
         "percentDisplayMode": "used"
@@ -296,12 +297,12 @@ export const UX_PROFILE_PRESET = {
       "agents": {
         "med-knowledge-architect": {
           "model": {
-            "id": "google/gemini-3.1-pro-preview",
+            "id": "gemini-cli/gemini-3.1-pro-preview",
             "variant": "high"
           },
           "fallback_models": [
             {
-              "model": "anthropic/claude-sonnet-4-6",
+              "model": "anthropic-auth/claude-sonnet-4-6",
               "effort": "high"
             },
             {
@@ -312,12 +313,12 @@ export const UX_PROFILE_PRESET = {
         },
         "med-flashcard-maker": {
           "model": {
-            "id": "google/gemini-3.1-pro-preview",
+            "id": "gemini-cli/gemini-3.1-pro-preview",
             "variant": "high"
           },
           "fallback_models": [
             {
-              "model": "anthropic/claude-sonnet-4-6",
+              "model": "anthropic-auth/claude-sonnet-4-6",
               "effort": "high"
             },
             {
@@ -328,7 +329,7 @@ export const UX_PROFILE_PRESET = {
         },
         "med-catalog-curator": {
           "model": {
-            "id": "google/gemini-3.1-pro-preview",
+            "id": "gemini-cli/gemini-3.1-pro-preview",
             "variant": "medium"
           },
           "fallback_models": [
@@ -337,14 +338,14 @@ export const UX_PROFILE_PRESET = {
               "variant": "medium"
             },
             {
-              "model": "anthropic/claude-sonnet-4-6",
+              "model": "anthropic-auth/claude-sonnet-4-6",
               "effort": "medium"
             }
           ]
         },
         "med-chat-triager": {
           "model": {
-            "id": "google/gemini-3-flash-preview",
+            "id": "gemini-cli/gemini-3-flash-preview",
             "variant": "high"
           },
           "fallback_models": [
@@ -353,14 +354,14 @@ export const UX_PROFILE_PRESET = {
               "variant": "medium"
             },
             {
-              "model": "anthropic/claude-haiku-4-5",
+              "model": "anthropic-auth/claude-haiku-4-5",
               "effort": "high"
             }
           ]
         },
         "med-publish-guard": {
           "model": {
-            "id": "google/gemini-3-flash-preview",
+            "id": "gemini-cli/gemini-3-flash-preview",
             "variant": "high"
           },
           "fallback_models": [
@@ -369,7 +370,7 @@ export const UX_PROFILE_PRESET = {
               "variant": "medium"
             },
             {
-              "model": "anthropic/claude-haiku-4-5",
+              "model": "anthropic-auth/claude-haiku-4-5",
               "effort": "high"
             }
           ]

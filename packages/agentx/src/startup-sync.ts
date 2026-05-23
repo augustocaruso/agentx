@@ -1,4 +1,5 @@
 import { DISPLAY } from "./brand.js";
+import { applyOpenCodeAuthProviderSetup } from "./opencode-auth-providers.js";
 import { resolveProjectPaths } from "./paths.js";
 import { syncToOpenCode, type SyncReport } from "./sync.js";
 import { AGENTX_VERSION } from "./types.js";
@@ -35,6 +36,14 @@ export function runStartupSync(options: StartupSyncOptions = {}): StartupSyncRep
       rulesyncMode: "off",
     });
     warnings.push(...sync.warnings);
+    const authProviders = applyOpenCodeAuthProviderSetup({
+      homeDir: paths.homeDir,
+      dryRun: options.dryRun,
+      forceConfigure: false,
+      managePluginList: false,
+      patchPackages: true,
+    });
+    warnings.push(...authProviders.warnings);
     return {
       version: AGENTX_VERSION,
       projectRoot: paths.projectRoot,

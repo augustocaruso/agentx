@@ -14,6 +14,7 @@ const GEMINI_CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com";
 const GEMINI_CLI_VERSION = "0.42.0-nightly.20260428.g59b2dea0e";
 const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60_000;
 const DEFAULT_CACHE_TTL_MS = 60_000;
+const GEMINI_AUTH_KEYS = ["gemini-cli", "google"] as const;
 
 export interface QuotaOptions {
   projectRoot?: string;
@@ -63,6 +64,7 @@ export interface QuotaReport {
 }
 
 interface OpenCodeAuthFile {
+  "gemini-cli"?: OAuthAuthRecord;
   google?: OAuthAuthRecord;
   [key: string]: unknown;
 }
@@ -176,6 +178,14 @@ function accessTokenExpired(auth: OAuthAuthRecord): boolean {
   return !auth.access || typeof auth.expires !== "number" || auth.expires <= Date.now() + ACCESS_TOKEN_EXPIRY_BUFFER_MS;
 }
 
+function resolveGeminiAuthEntry(authFile: OpenCodeAuthFile | undefined): { key: string; auth: OAuthAuthRecord } | undefined {
+  for (const key of GEMINI_AUTH_KEYS) {
+    const auth = authFile?.[key];
+    if (auth && typeof auth === "object") return { key, auth: auth as OAuthAuthRecord };
+  }
+  return undefined;
+}
+
 function buildGeminiCliUserAgent(): string {
   return `GeminiCLI/${GEMINI_CLI_VERSION}/gemini-code-assist (${process.platform}; ${process.arch}; terminal)`;
 }
@@ -208,7 +218,10 @@ function geminiAuthPackageDirs(homeDir: string): string[] {
 }
 
 function antigravityAuthPackageDirs(homeDir: string): string[] {
-  return pluginPackageDirs(homeDir, "opencode-google-antigravity-auth");
+  return [
+    ...pluginPackageDirs(homeDir, "opencode-antigravity-auth"),
+    ...pluginPackageDirs(homeDir, "opencode-google-antigravity-auth"),
+  ];
 }
 
 function clientFromConstantsFile(filePath: string, idName: string, secretName: string): OAuthClient | undefined {
@@ -342,13 +355,13 @@ async function requestAccessToken(refreshToken: string, client: OAuthClient): Pr
   return await response.json() as { access_token?: string; expires_in?: number; refresh_token?: string };
 }
 
-async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promise<{ auth?: OAuthAuthRecord; message?: string }> {
+async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string, authKey: string): Promise<{ auth?: OAuthAuthRecord; message?: string }> {
   const parts = parseRefreshParts(auth.refresh);
-  if (!parts.refreshToken) return { message: "Google OAuth sem refresh_token salvo. Refaca opencode auth login." };
+  if (!parts.refreshToken) return { message: "Gemini CLI OAuth sem refresh_token salvo. Refaca opencode auth login." };
 
   const clients = geminiOAuthClients(homeDir);
   if (clients.length === 0) {
-    return { message: "Google OAuth client unavailable in OpenCode plugins. Reinstall or reauthenticate the Google provider." };
+    return { message: "Gemini CLI OAuth client unavailable in OpenCode plugins. Reinstall or reauthenticate the Gemini CLI provider." };
   }
 
   const errors: string[] = [];
@@ -372,7 +385,7 @@ async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promi
         expires: Date.now() + Math.max(1, Number(payload.expires_in ?? 3600)) * 1000,
         refresh: formatRefreshParts(nextParts),
       };
-      writeJson(authPath(homeDir), { ...(authFile ?? {}), google: updated });
+      writeJson(authPath(homeDir), { ...(authFile ?? {}), [authKey]: updated });
       return { auth: updated };
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
@@ -380,12 +393,13 @@ async function refreshAccessToken(auth: OAuthAuthRecord, homeDir: string): Promi
   }
 
   return {
-    message: `Google OAuth refresh failed: ${errors.join("; ")}. Redo opencode auth login to generate a new refresh token.`,
+    message: `Gemini CLI OAuth refresh failed: ${errors.join("; ")}. Redo opencode auth login to generate a new refresh token.`,
   };
 }
 
 function repairStoredGeminiAuth(options: {
   homeDir: string;
+  authKey: string;
   auth: OAuthAuthRecord;
   parts: RefreshParts;
   reason: string;
@@ -403,7 +417,7 @@ function repairStoredGeminiAuth(options: {
   const backup = backupSession.backupExisting(authFilePath);
   writeJson(authFilePath, {
     ...(authFile ?? {}),
-    google: {
+    [options.authKey]: {
       ...options.auth,
       refresh: nextRefresh,
     },
@@ -453,14 +467,15 @@ async function loadManagedProject(accessToken: string, projectId?: string): Prom
 
 async function resolveAuth(options: { homeDir: string; repairAuth?: boolean }): Promise<{ accessToken?: string; projectId?: string; authRepair?: GeminiAuthRepairResult; message?: string }> {
   const authFile = readJson(authPath(options.homeDir)) as OpenCodeAuthFile | undefined;
-  const auth = authFile?.google;
-  if (!auth || auth.type !== "oauth") {
-    return { message: "OpenCode Google OAuth not found. Use /gquota after authenticating." };
+  const authEntry = resolveGeminiAuthEntry(authFile);
+  if (!authEntry || authEntry.auth.type !== "oauth") {
+    return { message: "OpenCode Gemini CLI OAuth not found. Use /gquota after authenticating." };
   }
+  const auth = authEntry.auth;
 
   const initialParts = parseRefreshParts(auth.refresh);
   let authRepair: GeminiAuthRepairResult | undefined;
-  const refreshed = accessTokenExpired(auth) ? await refreshAccessToken(auth, options.homeDir) : { auth };
+  const refreshed = accessTokenExpired(auth) ? await refreshAccessToken(auth, options.homeDir, authEntry.key) : { auth };
   const effectiveAuth = refreshed.auth ?? auth;
   const parts = parseRefreshParts(effectiveAuth.refresh);
   const sanitizedParts = sanitizedRefreshParts(parts);
@@ -473,12 +488,13 @@ async function resolveAuth(options: { homeDir: string; repairAuth?: boolean }): 
     if (options.repairAuth !== false && hasInvalidStoredProject(initialParts)) {
       authRepair = repairStoredGeminiAuth({
         homeDir: options.homeDir,
+        authKey: authEntry.key,
         auth: effectiveAuth,
         parts: sanitizedParts,
         reason: "Removed invalid Gemini project id segment from OpenCode auth.",
       });
     }
-    return { projectId, authRepair, message: refreshed.message ?? "Google token unavailable. Run /gquota or redo opencode auth login." };
+    return { projectId, authRepair, message: refreshed.message ?? "Gemini CLI token unavailable. Run /gquota or redo opencode auth login." };
   }
 
   if (!storedProjectId && !envProjectId) {
@@ -492,6 +508,7 @@ async function resolveAuth(options: { homeDir: string; repairAuth?: boolean }): 
   if (options.repairAuth !== false && (hasInvalidStoredProject(parts) || (!storedProjectId && sanitizedParts.managedProjectId))) {
     authRepair = repairStoredGeminiAuth({
       homeDir: options.homeDir,
+      authKey: authEntry.key,
       auth: effectiveAuth,
       parts: sanitizedParts,
       reason: sanitizedParts.managedProjectId

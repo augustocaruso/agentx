@@ -88,8 +88,10 @@ export function defaultOpenCodeAgent(config: OgbConfig | undefined, fallback = "
 export function normalizeOpenCodeModelId(model: string | undefined): string | undefined {
   const trimmed = model?.trim();
   if (!trimmed) return undefined;
+  if (trimmed.startsWith("google/")) return `gemini-cli/${trimmed.slice("google/".length)}`;
+  if (trimmed.startsWith("anthropic/")) return `anthropic-auth/${trimmed.slice("anthropic/".length)}`;
   if (trimmed.includes("/")) return trimmed;
-  return /^gemini[-.]/i.test(trimmed) ? `google/${trimmed}` : trimmed;
+  return /^gemini[-.]/i.test(trimmed) ? `gemini-cli/${trimmed}` : trimmed;
 }
 
 export interface ResolvedAgentFallback {

@@ -50,6 +50,7 @@ export interface LimitsReport {
     openusage: LimitsSourceStatus;
     openaiChatGPT?: LimitsSourceStatus;
     anthropicClaude?: LimitsSourceStatus;
+    antigravity?: LimitsSourceStatus;
     geminiCodeAssist: LimitsSourceStatus;
   };
   warnings: string[];
@@ -131,7 +132,9 @@ function hasAnthropicProvider(providers: ProviderUsage[]): boolean {
 }
 
 function providerKind(provider: ProviderUsage): "openai" | "anthropic" | "gemini" | undefined {
-  const name = `${provider.providerId ?? ""} ${provider.displayName}`.toLowerCase();
+  const providerId = String(provider.providerId ?? "").toLowerCase();
+  if (providerId.startsWith("antigravity-")) return undefined;
+  const name = `${providerId} ${provider.displayName}`.toLowerCase();
   if (/openai|chatgpt|codex/.test(name)) return "openai";
   if (/anthropic|claude/.test(name)) return "anthropic";
   if (/gemini|google/.test(name)) return "gemini";
@@ -147,6 +150,8 @@ function staleProviderFrom(previous: LimitsReport | undefined, kind: "openai" | 
   if (!provider) return undefined;
   return {
     ...provider,
+    displayName: kind === "anthropic" ? "Anthropic" : provider.displayName,
+    plan: kind === "anthropic" ? provider.plan ?? "Pro" : provider.plan,
     stale: true,
     staleReason: reason,
   };
@@ -163,7 +168,7 @@ function preserveStaleProvider(options: {
   if (hasProviderKind(options.providers, options.kind)) return options.providers;
   const stale = staleProviderFrom(options.previous, options.kind, options.source.message);
   if (!stale) return options.providers;
-  const label = options.kind === "openai" ? "OpenAI" : options.kind === "anthropic" ? "Claude" : "Gemini";
+  const label = options.kind === "openai" ? "OpenAI" : options.kind === "anthropic" ? "Anthropic" : "Gemini";
   options.warnings.push(`${label} limits refresh failed; keeping last successful usage value.`);
   return [...options.providers, stale];
 }
@@ -293,7 +298,7 @@ function anthropicAuthPackageDirs(homeDir: string): string[] {
   return [...dirs];
 }
 
-async function refreshAnthropicOAuth(homeDir: string, auth: any): Promise<any | undefined> {
+async function refreshAnthropicOAuth(homeDir: string, auth: any, authKey: string): Promise<any | undefined> {
   const refresh = typeof auth?.refresh === "string" ? auth.refresh.trim() : "";
   const clientId = anthropicOAuthClientId(homeDir);
   if (!refresh || !clientId) return undefined;
@@ -323,20 +328,20 @@ async function refreshAnthropicOAuth(homeDir: string, auth: any): Promise<any | 
     refresh: payload.refresh_token ?? refresh,
     expires: Date.now() + Math.max(1, Number(payload.expires_in ?? 3600)) * 1000,
   };
-  writeJson(authPath(homeDir), { ...authFile, anthropic: updated });
+  writeJson(authPath(homeDir), { ...authFile, [authKey]: updated });
   return updated;
 }
 
 async function resolveAnthropicOAuth(homeDir: string): Promise<{ accessToken?: string; expires?: number; message?: string }> {
   const auth = readJson(authPath(homeDir));
-  const keys = ["anthropic", "claude"];
+  const keys = ["anthropic-auth", "anthropic", "claude"];
   for (const key of keys) {
     const entry = auth?.[key];
     if (!entry || entry.type !== "oauth") continue;
     let effective = entry;
     const expires = typeof entry.expires === "number" ? entry.expires : undefined;
     if (expires && expires < Date.now()) {
-      effective = await refreshAnthropicOAuth(homeDir, entry);
+      effective = await refreshAnthropicOAuth(homeDir, entry, key);
       if (!effective) return { expires, message: "Anthropic OAuth token expired. Reauthenticate OpenCode." };
     }
     const accessToken = typeof effective.access === "string" ? effective.access.trim() : "";
@@ -356,10 +361,36 @@ function resetIsoFromWindow(window: any): string | undefined {
 
 function planLabel(planType: string | undefined): string | undefined {
   const raw = String(planType || "").toLowerCase();
+  if (raw.includes("max")) return "Max";
   if (raw.includes("pro")) return "Pro";
   if (raw.includes("plus")) return "Plus";
   if (raw.includes("free")) return "Free";
   return planType ? String(planType) : undefined;
+}
+
+function anthropicPlanLabel(data: Record<string, unknown>): string | undefined {
+  const candidates = [
+    data.plan,
+    data.plan_type,
+    data.planType,
+    data.subscription,
+    asRecord(data.subscription)?.plan,
+    asRecord(data.subscription)?.plan_type,
+    asRecord(data.subscription)?.planType,
+    asRecord(data.account)?.plan,
+    asRecord(data.account)?.plan_type,
+    asRecord(data.account)?.planType,
+    asRecord(data.organization)?.plan,
+    data.tier,
+    data.sku,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const label = planLabel(candidate);
+    if (label) return label;
+  }
+  const override = process.env.AGENTX_ANTHROPIC_PLAN_LABEL?.trim();
+  return override || "Pro";
 }
 
 async function fetchOpenAIChatGPTUsage(homeDir: string): Promise<ProviderUsage | undefined> {
@@ -471,7 +502,8 @@ async function fetchAnthropicClaudeUsage(homeDir: string): Promise<ProviderUsage
 
   return {
     providerId: "anthropic",
-    displayName: "Claude",
+    displayName: "Anthropic",
+    plan: anthropicPlanLabel(data),
     fetchedAt: new Date().toISOString(),
     lines,
   };
@@ -480,8 +512,8 @@ async function fetchAnthropicClaudeUsage(homeDir: string): Promise<ProviderUsage
 function quotaReportToProvider(report: QuotaReport): ProviderUsage | undefined {
   if (report.status !== "ok" || report.summary.usedPercent === undefined) return undefined;
   return {
-    providerId: "gemini",
-    displayName: "Gemini",
+    providerId: "gemini-cli",
+    displayName: "Gemini CLI",
     plan: "Code Assist",
     fetchedAt: report.generatedAt,
     lines: [
@@ -496,12 +528,320 @@ function quotaReportToProvider(report: QuotaReport): ProviderUsage | undefined {
   };
 }
 
-function statusFrom(openusage: LimitsSourceStatus, openai: LimitsSourceStatus, anthropic: LimitsSourceStatus, gemini: LimitsSourceStatus, providers: ProviderUsage[]): LimitsReport["status"] {
-  if (providers.some((provider) => provider.stale)) return "partial";
-  if (providers.length > 0 && (openusage.status === "ok" || openai.status === "ok" || anthropic.status === "ok" || gemini.status === "ok")) {
-    return openusage.status === "error" || openai.status === "error" || anthropic.status === "error" || gemini.status === "error" ? "partial" : "ok";
+type GeminiCliQuotaGroup = "pro" | "flash";
+
+function geminiCliQuotaGroup(modelId: string | undefined): GeminiCliQuotaGroup | undefined {
+  const id = String(modelId || "").toLowerCase();
+  if (!id) return undefined;
+  if (id.includes("flash") || id.includes("lite")) return "flash";
+  if (id.includes("pro")) return "pro";
+  return undefined;
+}
+
+function quotaBucketsToProvider(report: QuotaReport, group: GeminiCliQuotaGroup): ProviderUsage | undefined {
+  if (report.status !== "ok") return undefined;
+  const buckets = report.buckets.filter((bucket) => geminiCliQuotaGroup(bucket.modelId) === group && bucket.usedPercent !== undefined);
+  if (buckets.length === 0) return undefined;
+  const best = buckets.reduce((selected, bucket) => {
+    const selectedRemaining = selected.remainingPercent ?? -1;
+    const bucketRemaining = bucket.remainingPercent ?? -1;
+    if (bucketRemaining !== selectedRemaining) return bucketRemaining > selectedRemaining ? bucket : selected;
+    return String(bucket.resetTime ?? "").localeCompare(String(selected.resetTime ?? "")) < 0 ? bucket : selected;
+  });
+  return {
+    providerId: group === "pro" ? "gemini-cli-pro" : "gemini-cli-flash",
+    displayName: group === "pro" ? "Gemini CLI Pro" : "Gemini CLI Flash",
+    fetchedAt: report.generatedAt,
+    lines: [
+      {
+        label: "Quota",
+        type: "progress",
+        used: best.usedPercent ?? 0,
+        limit: 100,
+        resetsAt: best.resetTime ?? null,
+      },
+    ],
+  };
+}
+
+function quotaReportToProviders(report: QuotaReport): ProviderUsage[] {
+  const grouped = [quotaBucketsToProvider(report, "pro"), quotaBucketsToProvider(report, "flash")]
+    .filter((provider): provider is ProviderUsage => Boolean(provider));
+  const legacy = quotaReportToProvider(report);
+  return grouped.length > 0 ? grouped : legacy ? [legacy] : [];
+}
+
+interface AntigravityAccountStorage {
+  accounts?: AntigravityAccount[];
+}
+
+interface AntigravityAccount {
+  enabled?: boolean;
+  refreshToken?: unknown;
+  projectId?: unknown;
+  managedProjectId?: unknown;
+}
+
+interface AntigravityQuotaGroup {
+  remainingFraction?: number;
+  resetTime?: string;
+  modelCount?: number;
+}
+
+function antigravityAccountsPath(homeDir: string): string {
+  return path.join(homeDir, ".config", "opencode", "antigravity-accounts.json");
+}
+
+function antigravityAuthPackageDirs(homeDir: string): string[] {
+  const packagesDir = path.join(homeDir, ".cache", "opencode", "packages");
+  const dirs = new Set<string>([
+    path.join(packagesDir, "opencode-antigravity-auth@latest"),
+  ]);
+  try {
+    for (const entry of fs.readdirSync(packagesDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith("opencode-antigravity-auth@")) {
+        dirs.add(path.join(packagesDir, entry.name));
+      }
+    }
+  } catch {
+    // Missing plugin cache means Antigravity usage is unavailable.
   }
-  if (openusage.status === "error" || openai.status === "error" || anthropic.status === "error" || gemini.status === "error") return "error";
+  return [...dirs];
+}
+
+function antigravityConstant(homeDir: string, name: string): string | undefined {
+  const candidates = antigravityAuthPackageDirs(homeDir).flatMap((dir) => [
+    path.join(dir, "node_modules", "opencode-antigravity-auth", "dist", "src", "constants.js"),
+    path.join(dir, "node_modules", "opencode-antigravity-auth", "src", "constants.ts"),
+  ]);
+  for (const filePath of candidates) {
+    const value = extractExportedString(readText(filePath), name);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function antigravityProjectId(homeDir: string, account: AntigravityAccount): string | undefined {
+  const managed = typeof account.managedProjectId === "string" ? account.managedProjectId.trim() : "";
+  if (managed) return managed;
+  const project = typeof account.projectId === "string" ? account.projectId.trim() : "";
+  if (project) return project;
+  return antigravityConstant(homeDir, "ANTIGRAVITY_DEFAULT_PROJECT_ID");
+}
+
+function antigravityEndpoint(homeDir: string): string {
+  return antigravityConstant(homeDir, "ANTIGRAVITY_ENDPOINT_PROD") ?? "https://cloudcode-pa.googleapis.com";
+}
+
+function antigravityUserAgent(homeDir: string): string {
+  const version = antigravityConstant(homeDir, "ANTIGRAVITY_VERSION_FALLBACK") ?? "1.18.3";
+  return `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Antigravity/${version} Chrome/138.0.7204.235 Electron/37.3.1 Safari/537.36`;
+}
+
+async function refreshAntigravityAccessToken(homeDir: string, refreshToken: string): Promise<string> {
+  const clientId = antigravityConstant(homeDir, "ANTIGRAVITY_CLIENT_ID");
+  const clientSecret = antigravityConstant(homeDir, "ANTIGRAVITY_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error("opencode-antigravity-auth OAuth constants not found.");
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const snippet = text.trim().slice(0, 160);
+    throw new Error(`Antigravity token refresh HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`);
+  }
+  const payload = await response.json() as { access_token?: string };
+  if (!payload.access_token) throw new Error("Antigravity token refresh returned no access token.");
+  return payload.access_token;
+}
+
+function normalizeFraction(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(number)) return undefined;
+  return Math.max(0, Math.min(1, number));
+}
+
+function dateTimestamp(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function classifyAntigravityQuotaGroup(modelName: string, displayName: string | undefined): "claude" | "gemini" | undefined {
+  const combined = `${modelName} ${displayName ?? ""}`.toLowerCase();
+  if (combined.includes("claude")) return "claude";
+  if (combined.includes("gemini")) return "gemini";
+  return undefined;
+}
+
+function antigravityQuotaGroupsFromModels(models: unknown): Record<string, AntigravityQuotaGroup> {
+  const groups: Record<string, AntigravityQuotaGroup> = {};
+  const records = asRecord(models);
+  if (!records) return groups;
+
+  for (const [modelName, rawEntry] of Object.entries(records)) {
+    const entry = asRecord(rawEntry);
+    const displayName = typeof entry?.displayName === "string"
+      ? entry.displayName
+      : typeof entry?.modelName === "string"
+        ? entry.modelName
+        : undefined;
+    const group = classifyAntigravityQuotaGroup(modelName, displayName);
+    if (!group) continue;
+
+    const quotaInfo = asRecord(entry?.quotaInfo);
+    const remainingFraction = normalizeFraction(quotaInfo?.remainingFraction);
+    const resetTime = typeof quotaInfo?.resetTime === "string" ? quotaInfo.resetTime : undefined;
+    const existing = groups[group];
+    const nextCount = (existing?.modelCount ?? 0) + 1;
+    const nextRemaining = remainingFraction === undefined
+      ? existing?.remainingFraction
+      : existing?.remainingFraction === undefined
+        ? remainingFraction
+        : Math.min(existing.remainingFraction, remainingFraction);
+
+    let nextResetTime = existing?.resetTime;
+    const resetTimestamp = dateTimestamp(resetTime);
+    if (resetTimestamp !== undefined) {
+      const existingTimestamp = dateTimestamp(existing?.resetTime);
+      if (existingTimestamp === undefined || resetTimestamp < existingTimestamp) nextResetTime = resetTime;
+    }
+
+    groups[group] = {
+      remainingFraction: nextRemaining,
+      resetTime: nextResetTime,
+      modelCount: nextCount,
+    };
+  }
+
+  return groups;
+}
+
+async function fetchAntigravityAccountQuotaGroups(homeDir: string, account: AntigravityAccount): Promise<Record<string, AntigravityQuotaGroup>> {
+  const refreshToken = typeof account.refreshToken === "string" ? account.refreshToken.trim() : "";
+  if (!refreshToken) throw new Error("Antigravity account has no refresh token.");
+  const accessToken = await refreshAntigravityAccessToken(homeDir, refreshToken);
+  const projectId = antigravityProjectId(homeDir, account);
+  const response = await fetch(`${antigravityEndpoint(homeDir)}/v1internal:fetchAvailableModels`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "User-Agent": antigravityUserAgent(homeDir),
+    },
+    body: JSON.stringify(projectId ? { project: projectId } : {}),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    const snippet = text.trim().slice(0, 160);
+    throw new Error(`Antigravity quota HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`);
+  }
+  const payload = await response.json() as { models?: unknown };
+  return antigravityQuotaGroupsFromModels(payload.models);
+}
+
+function antigravityUsageLine(groups: AntigravityQuotaGroup[]): UsageLine | undefined {
+  const usable = groups.filter((group) => typeof group.remainingFraction === "number" && Number.isFinite(group.remainingFraction));
+  if (usable.length === 0) return undefined;
+  const best = usable.reduce((selected, group) => {
+    const selectedRemaining = selected.remainingFraction ?? -1;
+    const groupRemaining = group.remainingFraction ?? -1;
+    if (groupRemaining !== selectedRemaining) return groupRemaining > selectedRemaining ? group : selected;
+    return String(group.resetTime ?? "").localeCompare(String(selected.resetTime ?? "")) < 0 ? group : selected;
+  });
+  const remaining = Math.max(0, Math.min(1, Number(best.remainingFraction ?? 0)));
+  return {
+    label: "Quota",
+    type: "progress",
+    used: Math.round((100 - remaining * 100) * 10) / 10,
+    limit: 100,
+    resetsAt: best.resetTime ?? null,
+  };
+}
+
+async function fetchAntigravityUsage(homeDir: string): Promise<ProviderUsage[]> {
+  const storage = readJson(antigravityAccountsPath(homeDir)) as AntigravityAccountStorage | undefined;
+  const accounts = Array.isArray(storage?.accounts) ? storage.accounts.filter((account) => account?.enabled !== false) : [];
+  if (accounts.length === 0) throw new Error("OpenCode Antigravity account pool not found.");
+
+  const claudeGroups: AntigravityQuotaGroup[] = [];
+  const geminiGroups: AntigravityQuotaGroup[] = [];
+  const errors: string[] = [];
+  for (const account of accounts) {
+    try {
+      const groups = await fetchAntigravityAccountQuotaGroups(homeDir, account);
+      for (const [group, quota] of Object.entries(groups)) {
+        if (group === "claude") claudeGroups.push(quota);
+        if (group.startsWith("gemini")) geminiGroups.push(quota);
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const fetchedAt = new Date().toISOString();
+  const providers: ProviderUsage[] = [];
+  const claudeLine = antigravityUsageLine(claudeGroups);
+  if (claudeLine) providers.push({
+    providerId: "antigravity-claude",
+    displayName: "Antigravity",
+    plan: "Claude",
+    fetchedAt,
+    lines: [claudeLine],
+  });
+  const geminiLine = antigravityUsageLine(geminiGroups);
+  if (geminiLine) providers.push({
+    providerId: "antigravity-gemini",
+    displayName: "Antigravity",
+    plan: "Gemini",
+    fetchedAt,
+    lines: [geminiLine],
+  });
+  if (providers.length === 0) {
+    const detail = errors.length > 0 ? ` ${errors.slice(0, 2).join("; ")}` : "";
+    throw new Error(`Antigravity quota returned no Claude or Gemini groups.${detail}`);
+  }
+  return providers;
+}
+
+function providerOrder(provider: ProviderUsage): number {
+  const id = String(provider.providerId ?? "").toLowerCase();
+  const kind = providerKind(provider);
+  if (id === "antigravity-claude") return 2;
+  if (id === "antigravity-gemini") return 3;
+  if (id === "gemini-cli-pro") return 4;
+  if (id === "gemini-cli-flash") return 5;
+  if (id === "openai" || kind === "openai") return 0;
+  if (id === "anthropic" || kind === "anthropic") return 1;
+  if (kind === "gemini") return 6;
+  return 99;
+}
+
+function orderProviders(providers: ProviderUsage[]): ProviderUsage[] {
+  return [...providers].sort((left, right) => {
+    const byOrder = providerOrder(left) - providerOrder(right);
+    if (byOrder !== 0) return byOrder;
+    return `${left.providerId ?? ""} ${left.displayName}`.localeCompare(`${right.providerId ?? ""} ${right.displayName}`);
+  });
+}
+
+function statusFrom(openusage: LimitsSourceStatus, openai: LimitsSourceStatus, anthropic: LimitsSourceStatus, antigravity: LimitsSourceStatus, gemini: LimitsSourceStatus, providers: ProviderUsage[]): LimitsReport["status"] {
+  const sources = [openusage, openai, anthropic, antigravity, gemini];
+  if (providers.some((provider) => provider.stale)) return "partial";
+  if (providers.length > 0 && sources.some((source) => source.status === "ok")) {
+    return sources.some((source) => source.status === "error") ? "partial" : "ok";
+  }
+  if (sources.some((source) => source.status === "error")) return "error";
   return "unavailable";
 }
 
@@ -521,6 +861,7 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
   let openusage: LimitsSourceStatus = { status: "skipped" };
   let openaiChatGPT: LimitsSourceStatus = { status: "skipped" };
   let anthropicClaude: LimitsSourceStatus = { status: "skipped" };
+  let antigravity: LimitsSourceStatus = { status: "skipped" };
   let geminiCodeAssist: LimitsSourceStatus = { status: "skipped" };
 
   try {
@@ -563,7 +904,18 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
     }
   }
 
-  if (options.includeGeminiFallback !== false && !hasGeminiProvider(providers)) {
+  try {
+    const antigravityProviders = await fetchAntigravityUsage(paths.homeDir);
+    providers = [...providers.filter((provider) => !String(provider.providerId ?? "").startsWith("antigravity-")), ...antigravityProviders];
+    antigravity = { status: "ok", providerCount: antigravityProviders.length };
+  } catch (error) {
+    antigravity = {
+      status: error instanceof Error && /not found|unavailable/i.test(error.message) ? "unavailable" : "error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (options.includeGeminiFallback !== false) {
     const quota = await refreshQuota({
       projectRoot: paths.projectRoot,
       homeDir: paths.homeDir,
@@ -572,10 +924,13 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
       repairAuth: write,
       ttlMs,
     });
-    const geminiProvider = quotaReportToProvider(quota);
-    if (geminiProvider) {
-      providers = [...providers, geminiProvider];
-      geminiCodeAssist = { status: "ok", providerCount: 1, authRepair: quota.authRepair };
+    const geminiProviders = quotaReportToProviders(quota);
+    if (geminiProviders.length > 0) {
+      providers = [
+        ...providers.filter((provider) => !String(provider.providerId ?? "").startsWith("gemini-cli")),
+        ...geminiProviders,
+      ];
+      geminiCodeAssist = { status: "ok", providerCount: geminiProviders.length, authRepair: quota.authRepair };
     } else {
       geminiCodeAssist = {
         status: quota.status === "error" ? "error" : "unavailable",
@@ -609,18 +964,22 @@ export async function refreshLimits(options: LimitsOptions = {}): Promise<Limits
 
   if (openusage.status !== "ok" && openaiChatGPT.status === "ok") warnings.push("OpenUsage offline; OpenAI limits are using native ChatGPT OAuth fallback.");
   if (openusage.status !== "ok" && anthropicClaude.status === "ok") warnings.push("OpenUsage offline; Claude limits are using native Anthropic OAuth fallback.");
+  if (antigravity.status !== "ok") warnings.push("Antigravity quota unavailable; Connect Antigravity to restore Antigravity usage rows.");
   if (geminiCodeAssist.status !== "ok" && !hasGeminiProvider(providers)) warnings.push("Gemini Code Assist quota unavailable; /gquota remains the manual fallback.");
+
+  providers = orderProviders(providers);
 
   const report: LimitsReport = {
     version: AGENTX_VERSION,
     projectRoot: paths.projectRoot,
     generatedAt: new Date().toISOString(),
-    status: statusFrom(openusage, openaiChatGPT, anthropicClaude, geminiCodeAssist, providers),
+    status: statusFrom(openusage, openaiChatGPT, anthropicClaude, antigravity, geminiCodeAssist, providers),
     providers,
     sources: {
       openusage,
       openaiChatGPT,
       anthropicClaude,
+      antigravity,
       geminiCodeAssist,
     },
     warnings,

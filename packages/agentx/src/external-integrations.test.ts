@@ -78,7 +78,7 @@ test("autoFallbackConfigFromProjection converts OGB fallback chains to opencode-
         model: "openai/gpt-5.5",
         fallback_models: [
           { model: "openai/gpt-5.4-mini", variant: "medium", top_p: 0.8 },
-          "anthropic/claude-haiku-4-5",
+          "anthropic-auth/claude-haiku-4-5",
         ],
         source: "agent",
       },
@@ -91,7 +91,7 @@ test("autoFallbackConfigFromProjection converts OGB fallback chains to opencode-
   assert.deepEqual(generated.agentFallbacks, {
     helper: [
       { model: "openai/gpt-5.4-mini", variant: "medium", topP: 0.8 },
-      "anthropic/claude-haiku-4-5",
+      "anthropic-auth/claude-haiku-4-5",
     ],
   });
 });

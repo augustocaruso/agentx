@@ -185,7 +185,7 @@ test("syncToOpenCode treats home as global OpenCode sync", () => {
   assert.equal(fs.existsSync(path.join(homeDir, ".opencode", "commands")), false);
 });
 
-test("syncToOpenCode normalizes bare Gemini model ids when projecting extension agents", () => {
+test("syncToOpenCode normalizes bare Gemini model ids to the Gemini CLI provider when projecting extension agents", () => {
   const projectRoot = tempProject();
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-home-"));
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
@@ -195,12 +195,12 @@ test("syncToOpenCode normalizes bare Gemini model ids when projecting extension 
 
   syncToOpenCode({ projectRoot, homeDir, rulesyncMode: "off", silent: true });
   const projectAgent = fs.readFileSync(path.join(projectRoot, ".opencode", "agents", "gemini-vault-repair.md"), "utf8");
-  assert.match(projectAgent, /model: "google\/gemini-3-flash-preview"/);
+  assert.match(projectAgent, /model: "gemini-cli\/gemini-3-flash-preview"/);
   assert.doesNotMatch(projectAgent, /model: "gemini-3-flash-preview"/);
 
   syncToOpenCode({ projectRoot: homeDir, homeDir, rulesyncMode: "off", silent: true });
   const globalAgent = fs.readFileSync(path.join(homeDir, ".config", "opencode", "agents", "gemini-vault-repair.md"), "utf8");
-  assert.match(globalAgent, /model: "google\/gemini-3-flash-preview"/);
+  assert.match(globalAgent, /model: "gemini-cli\/gemini-3-flash-preview"/);
   assert.doesNotMatch(globalAgent, /model: "gemini-3-flash-preview"/);
 });
 
@@ -343,7 +343,7 @@ test("syncToOpenCode applies global OGB model fallbacks to home extension agents
   const extensionMap = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-extension-map.json"), "utf8"));
   const routing = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "agentx", "generated", "agentx-model-routing.json"), "utf8"));
 
-  assert.match(agent, /model: "google\/gemini-3-flash-preview"/);
+  assert.match(agent, /model: "gemini-cli\/gemini-3-flash-preview"/);
   assert.match(agent, /reasoningEffort: "high"/);
   assert.match(agent, /fallback_models:/);
   assert.match(agent, /model: "openai\/gpt-5\.4-mini"/);
@@ -1504,7 +1504,7 @@ test("syncToOpenCode projects configurable model fallbacks for extension subagen
   const extensionDir = path.join(homeDir, ".gemini", "extensions", "study-pack");
   fs.mkdirSync(path.join(extensionDir, "agents"), { recursive: true });
   fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), JSON.stringify({ name: "study-pack" }));
-  fs.writeFileSync(path.join(extensionDir, "agents", "helper.md"), "---\nmodel: google/gemini-2.5-pro\ndescription: Helper.\n---\n# Helper\n");
+  fs.writeFileSync(path.join(extensionDir, "agents", "helper.md"), "---\nmodel: gemini-cli/gemini-2.5-pro\ndescription: Helper.\n---\n# Helper\n");
   fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
     modelFallbacks: {
@@ -1514,7 +1514,7 @@ test("syncToOpenCode projects configurable model fallbacks for extension subagen
           temperature: 0.1,
           fallback_models: [
             { model: "openai/gpt-5.4-mini", variant: "medium", reason: "cheap fallback" },
-            { model: "anthropic/claude-haiku-4-5", effort: "low", reason: "cheap fallback" },
+            { model: "anthropic-auth/claude-haiku-4-5", effort: "low", reason: "cheap fallback" },
           ],
         },
       },
@@ -1541,7 +1541,7 @@ test("syncToOpenCode projects configurable model fallbacks for extension subagen
   assert.equal(extensionMap.modelFallbacks.length, 1);
   assert.equal(extensionMap.modelFallbacks[0].variant, "xhigh");
   assert.equal(extensionMap.modelFallbacks[0].reasoningEffort, "xhigh");
-  assert.equal(extensionMap.extensions[0].agents[0].modelFallback.importedModel, "google/gemini-2.5-pro");
+  assert.equal(extensionMap.extensions[0].agents[0].modelFallback.importedModel, "gemini-cli/gemini-2.5-pro");
 });
 
 test("syncToOpenCode preserves the Medical Notes three-model fallback chain", () => {
@@ -1556,10 +1556,10 @@ test("syncToOpenCode preserves the Medical Notes three-model fallback chain", ()
     modelFallbacks: {
       agents: {
         "med-chat-triager": {
-          model: { id: "google/gemini-3-flash-preview", variant: "high" },
+          model: { id: "gemini-cli/gemini-3-flash-preview", variant: "high" },
           fallback_models: [
             { model: "openai/gpt-5.4-mini", variant: "medium" },
-            { model: "anthropic/claude-haiku-4-5", effort: "high" },
+            { model: "anthropic-auth/claude-haiku-4-5", effort: "high" },
           ],
         },
       },
@@ -1571,14 +1571,14 @@ test("syncToOpenCode preserves the Medical Notes three-model fallback chain", ()
   const extensionMap = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-extension-map.json"), "utf8"));
   const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-model-routing.json"), "utf8"));
 
-  assert.match(agent, /model: "google\/gemini-3-flash-preview"/);
+  assert.match(agent, /model: "gemini-cli\/gemini-3-flash-preview"/);
   assert.match(agent, /reasoningEffort: "high"/);
   assert.equal(routing.decisions[0].agent, "med-chat-triager");
   assert.equal(routing.decisions[0].chain.length, 3);
   assert.deepEqual(routing.decisions[0].chain.map((item: { model: string }) => item.model), [
-    "google/gemini-3-flash-preview",
+    "gemini-cli/gemini-3-flash-preview",
     "openai/gpt-5.4-mini",
-    "anthropic/claude-haiku-4-5",
+    "anthropic-auth/claude-haiku-4-5",
   ]);
   assert.equal(extensionMap.modelFallbacks[0].extension, "medical-notes-workbench");
   assert.equal(extensionMap.modelFallbacks[0].agent, "med-chat-triager");
@@ -1627,8 +1627,8 @@ test("syncToOpenCode routes extension subagent to fallback when primary provider
         helper: {
           model: { id: "openai/gpt-5.5", variant: "high" },
           fallback_models: [
-            { model: "anthropic/claude-haiku-4-5", effort: "high" },
-            { model: "google/gemini-3-flash-preview", effort: "high" },
+            { model: "anthropic-auth/claude-haiku-4-5", effort: "high" },
+            { model: "gemini-cli/gemini-3-flash-preview", effort: "high" },
           ],
         },
       },
@@ -1639,9 +1639,9 @@ test("syncToOpenCode routes extension subagent to fallback when primary provider
   const agent = fs.readFileSync(path.join(projectRoot, ".opencode", "agents", "helper.md"), "utf8");
   const routing = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-model-routing.json"), "utf8"));
 
-  assert.match(agent, /model: "anthropic\/claude-haiku-4-5"/);
+  assert.match(agent, /model: "anthropic-auth\/claude-haiku-4-5"/);
   assert.match(agent, /reasoningEffort: "high"/);
-  assert.equal(routing.decisions[0].selected.model, "anthropic/claude-haiku-4-5");
+  assert.equal(routing.decisions[0].selected.model, "anthropic-auth/claude-haiku-4-5");
   assert.equal(routing.decisions[0].selected.chainIndex, 1);
   assert.equal(routing.decisions[0].skipped[0].providerId, "openai");
 });
