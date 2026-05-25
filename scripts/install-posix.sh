@@ -293,6 +293,21 @@ copy_stable_cli_payload() {
   chmod +x "$cli_target" 2>/dev/null || true
 }
 
+ensure_cli_dist() {
+  local cli_dir="$1"
+  local cli_target="$cli_dir/dist/cli.js"
+
+  if [[ -f "$cli_target" ]]; then
+    echo "Using prebuilt $PRODUCT_NAME CLI from release pack."
+    chmod +x "$cli_target" 2>/dev/null || true
+    return
+  fi
+
+  echo "Prebuilt $PRODUCT_NAME CLI not found; building locally..."
+  npm --prefix "$cli_dir" install
+  npm --prefix "$cli_dir" run build
+}
+
 install_stable_cli() {
   local source_dir="$1"
   local install_dir="$2"
@@ -453,9 +468,7 @@ mkdir -p "$HOME/.agents/skills"
 mkdir -p "$HOME/.ai/opencode-pack"
 mkdir -p "$PREFIX/bin"
 
-echo "Building $PRODUCT_NAME CLI..."
-npm --prefix "$CLI_DIR" install
-npm --prefix "$CLI_DIR" run build
+ensure_cli_dist "$CLI_DIR"
 
 PRIMARY_BIN="$PREFIX/bin/$BINARY_NAME"
 LEGACY_BIN="$PREFIX/bin/$LEGACY_BINARY_NAME"

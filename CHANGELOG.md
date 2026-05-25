@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 - Instalador reaproveita build do release
+
+- Faz os instaladores POSIX e Windows usarem o `dist/cli.js` já publicado no release pack quando ele existir.
+- Mantém o build local como fallback para checkouts de desenvolvimento sem `dist`, preservando o fluxo de dev.
+- Reduz o tempo de `agentx update` ao remover a recompilação TypeScript desnecessária na máquina do usuário.
+
 ## 0.3.0 - Antigravity plugin gerenciado e TUI sem cortes
 
 - Adiciona atualização gerenciada do plugin nativo Antigravity do Medical Notes Workbench durante `agentx check`/`agentx pass`, antes do sync.

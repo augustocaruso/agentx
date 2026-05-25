@@ -360,6 +360,18 @@ function Copy-StableCliPayload($SourceDir, $TargetDir) {
   }
 }
 
+function Ensure-CliDist($CliDir) {
+  $CliTarget = Join-Path $CliDir "dist\cli.js"
+  if (Test-Path $CliTarget) {
+    Write-Host "Using prebuilt $ProductName CLI from release pack."
+    return
+  }
+
+  Write-Host "Prebuilt $ProductName CLI not found; building locally..."
+  Invoke-NativeCommand $script:NpmCommand @("--prefix", $CliDir, "install")
+  Invoke-NativeCommand $script:NpmCommand @("--prefix", $CliDir, "run", "build")
+}
+
 function Install-StableCli($SourceDir, $InstallDir) {
   $ParentDir = Split-Path -Parent $InstallDir
   $BaseName = Split-Path -Leaf $InstallDir
@@ -467,9 +479,7 @@ New-Item -ItemType Directory -Force (Join-Path $HOME ".agents\skills") | Out-Nul
 New-Item -ItemType Directory -Force (Join-Path $HOME ".ai\opencode-pack") | Out-Null
 New-Item -ItemType Directory -Force $Prefix | Out-Null
 
-Write-Host "Building $ProductName CLI..."
-Invoke-NativeCommand $script:NpmCommand @("--prefix", $CliDir, "install")
-Invoke-NativeCommand $script:NpmCommand @("--prefix", $CliDir, "run", "build")
+Ensure-CliDist $CliDir
 
 Write-Host "Installing $BinaryName into a stable local folder..."
 $CliInstallDir = Join-Path (Join-Path $HOME ".ai\opencode-pack") $StableCliDirName

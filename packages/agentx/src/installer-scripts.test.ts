@@ -132,6 +132,16 @@ test("posix installer installs agentx into a stable local folder instead of a gl
   assert.doesNotMatch(text, /npm install --prefix "\$PREFIX" -g "\$CLI_DIR"/);
 });
 
+test("posix installer reuses prebuilt release dist before falling back to a local build", () => {
+  const text = script("install-posix.sh");
+
+  assert.match(text, /ensure_cli_dist\(\)/);
+  assert.match(text, /\[\[ -f "\$cli_target" \]\]/);
+  assert.match(text, /Using prebuilt \$PRODUCT_NAME CLI from release pack/);
+  assert.match(text, /ensure_cli_dist "\$CLI_DIR"/);
+  assert.ok(text.indexOf('ensure_cli_dist "$CLI_DIR"') < text.indexOf('install_stable_cli "$CLI_DIR" "$CLI_INSTALL_DIR"'));
+});
+
 test("installers fail early when Node is older than 22", () => {
   const posix = script("install-posix.sh");
   const windows = script("install-windows.ps1");
@@ -181,4 +191,14 @@ test("windows installer contract runs managed setup through agentx install", () 
   assert.doesNotMatch(text, /\bsetup-opencode\b/);
   assert.doesNotMatch(text, /\bcleanup-home\b/);
   assert.doesNotMatch(text, /\bInvoke-FinalOgbCheck\b/);
+});
+
+test("windows installer reuses prebuilt release dist before falling back to a local build", () => {
+  const text = script("install-windows.ps1");
+
+  assert.match(text, /function Ensure-CliDist/);
+  assert.match(text, /\$CliTarget = Join-Path \$CliDir "dist\\cli\.js"/);
+  assert.match(text, /Using prebuilt \$ProductName CLI from release pack/);
+  assert.match(text, /Ensure-CliDist \$CliDir/);
+  assert.ok(text.indexOf("Ensure-CliDist $CliDir") < text.indexOf("Install-StableCli $CliDir $CliInstallDir"));
 });
