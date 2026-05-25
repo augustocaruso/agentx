@@ -88,6 +88,13 @@ test("live ritual progress is opt-in to an interactive human terminal", () => {
   assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { OGB_UI: "0" } }), false);
 });
 
+test("installers can force the ritual UI in a human TTY", () => {
+  assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { TERM: "dumb", AGENTX_RITUAL_UI: "ink" } }), true);
+  assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, env: { CODEX_CI: "1", AGENTX_RITUAL_UI: "1" } }), true);
+  assert.equal(shouldUseRitualUi({ stdoutIsTTY: false, env: { AGENTX_RITUAL_UI: "ink" } }), false);
+  assert.equal(shouldUseRitualUi({ stdoutIsTTY: true, plain: true, env: { AGENTX_RITUAL_UI: "ink" } }), false);
+});
+
 test("ritual UI animation is on by default but can be disabled", () => {
   assert.equal(shouldAnimateRitualUi({}), true);
   assert.equal(shouldAnimateRitualUi({ OGB_UI_ANIMATE: "1" }), true);

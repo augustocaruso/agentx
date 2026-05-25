@@ -546,6 +546,10 @@ export function shouldUseRitualUi(options: RitualUiOptions = {}): boolean {
   const env = options.env ?? process.env;
   const term = (env.TERM ?? "").toLowerCase();
   const columns = options.stdoutColumns ?? process.stdout.columns;
+  const mode = String(env.AGENTX_RITUAL_UI || env.OGB_RITUAL_UI || "").toLowerCase();
+  const forceInk = mode === "ink" || mode === "1" || mode === "true";
+  const stdoutIsTTY = options.stdoutIsTTY ?? process.stdout.isTTY ?? false;
+  if (forceInk) return stdoutIsTTY;
   if (
     env.CI
     || env.CODEX_CI
@@ -555,7 +559,7 @@ export function shouldUseRitualUi(options: RitualUiOptions = {}): boolean {
     || env.OGB_UI === "0"
   ) return false;
   if (typeof columns === "number" && columns > 0 && columns < MIN_RITUAL_UI_COLUMNS) return false;
-  return options.stdoutIsTTY ?? process.stdout.isTTY ?? false;
+  return stdoutIsTTY;
 }
 
 export function shouldAnimateRitualUi(env: NodeJS.ProcessEnv = process.env): boolean {

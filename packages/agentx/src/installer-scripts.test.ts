@@ -25,6 +25,9 @@ test("posix installer contract runs managed setup through agentx install", () =>
   assert.match(text, /Configuring \$PRODUCT_NAME for/);
   assert.match(text, /\$PRODUCT_NAME install completed with notes; continuing setup/);
   assert.doesNotMatch(text, /install ritual|continuing bootstrap/);
+  assert.match(text, /enable_installer_tui\(\)/);
+  assert.match(text, /AGENTX_RITUAL_UI=ink/);
+  assert.ok(text.indexOf("enable_installer_tui") < text.indexOf('"$PRIMARY_BIN" "${INSTALL_ARGS[@]}"'));
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-check/);

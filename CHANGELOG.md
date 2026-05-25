@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.23 - TUI de instalação força Ink em TTY humano
+
+- Faz o instalador POSIX ativar `AGENTX_RITUAL_UI=ink` quando está rodando em um terminal humano, mesmo em ambientes que herdam `TERM=dumb` ou variáveis de automação.
+- Mantém `--plain`, `--json`, `--progress-json` e non-TTY no fallback textual/estruturado.
+- Adiciona regressões para o contrato do installer Linux/POSIX e para o gate da TUI.
+
 ## 0.2.17 - Stage CLI installs before replacing the running pack
 
 - Build and install the packaged CLI in a temporary staging directory before swapping it into `~/.ai/opencode-pack/agentx-cli`.

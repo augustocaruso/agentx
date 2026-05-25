@@ -228,6 +228,12 @@ ensure_opencode_exa_env() {
   export OPENCODE_ENABLE_EXA=1
 }
 
+enable_installer_tui() {
+  if [[ -t 1 && -z "${AGENTX_RITUAL_UI:-}" && -z "${OGB_RITUAL_UI:-}" ]]; then
+    export AGENTX_RITUAL_UI=ink
+  fi
+}
+
 write_primary_binary() {
   local shim_path="$1"
   local cli_target="$2"
@@ -497,6 +503,7 @@ if [[ "$RUN_SETUP" -eq 0 && "$RUN_HOME_SYNC" -eq 0 ]]; then
 fi
 
 echo "Configuring $PRODUCT_NAME for $PROJECT_DIR..."
+enable_installer_tui
 set +e
 "$PRIMARY_BIN" "${INSTALL_ARGS[@]}"
 INSTALL_STATUS=$?
