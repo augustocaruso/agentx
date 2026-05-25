@@ -7,6 +7,7 @@ import type { RitualProgressSink } from "./ritual-progress.js";
 
 const DEFAULT_EXTENSION_UPDATE_TIMEOUT_MS = 120_000;
 const AUTO_CONSENT_INPUT = `${"y\n".repeat(25)}`;
+const INSTALL_METADATA_FILENAME = ".gemini-extension-install.json";
 
 export interface ExtensionInstallOptions {
   source: string;
@@ -56,11 +57,21 @@ export interface ExtensionCommandReport {
   stderrTail?: string;
   error?: string;
   timedOut?: boolean;
+  repairedExtensions?: string[];
+  repairCommands?: string[][];
 }
 
 export interface InstalledGeminiExtension extends GeminiExtensionPatchTarget {
   scope: "project" | "global";
 }
+
+type ExtensionInstallMetadata = {
+  source?: unknown;
+  type?: unknown;
+  ref?: unknown;
+  autoUpdate?: unknown;
+  allowPreRelease?: unknown;
+};
 
 function isRemoteSource(source: string): boolean {
   return /^(https?:|git@|ssh:|git:)/.test(source) || source.endsWith(".git");
@@ -88,6 +99,10 @@ function readJson(filePath: string): Record<string, unknown> | undefined {
   } catch {
     return undefined;
   }
+}
+
+function writeJson(filePath: string, value: Record<string, unknown>): void {
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
 function uniquePaths(paths: string[]): string[] {
@@ -282,6 +297,71 @@ function tail(value: string | Buffer | undefined, maxChars = 2000): string | und
   return text.length > maxChars ? text.slice(-maxChars) : text;
 }
 
+function appendTail(...parts: Array<string | undefined>): string | undefined {
+  return tail(parts.filter((part): part is string => Boolean(part?.trim())).join("\n"));
+}
+
+function installMetadataPath(extension: InstalledGeminiExtension): string {
+  return path.join(extension.extensionPath, INSTALL_METADATA_FILENAME);
+}
+
+function readInstallMetadata(extension: InstalledGeminiExtension): ExtensionInstallMetadata | undefined {
+  const metadata = readJson(installMetadataPath(extension));
+  return metadata as ExtensionInstallMetadata | undefined;
+}
+
+function normalizedGithubGitSource(source: string): string | undefined {
+  const match = source.match(/^https:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i);
+  if (!match) return undefined;
+  const [, owner, repo] = match;
+  if (!owner || !repo) return undefined;
+  return `https://github.com/${owner}/${repo}.git`;
+}
+
+function repairGitInstallMetadataForUpdate(extensions: InstalledGeminiExtension[], dryRun = false): string[] {
+  const repaired: string[] = [];
+  for (const extension of extensions) {
+    const metadataPath = installMetadataPath(extension);
+    const metadata = readJson(metadataPath);
+    if (!metadata || metadata.type !== "git" || typeof metadata.source !== "string") continue;
+    const normalizedSource = normalizedGithubGitSource(metadata.source);
+    if (!normalizedSource) continue;
+    const next = { ...metadata };
+    if (next.source !== normalizedSource) next.source = normalizedSource;
+    if (typeof next.ref === "string" && next.ref.trim() && next.autoUpdate !== true) next.autoUpdate = true;
+    if (JSON.stringify(next) === JSON.stringify(metadata)) continue;
+    repaired.push(extension.name);
+    if (!dryRun) writeJson(metadataPath, next);
+  }
+  return repaired;
+}
+
+function repairableGitInstallMetadata(extension: InstalledGeminiExtension): {
+  source: string;
+  ref?: string;
+  autoUpdate: boolean;
+  allowPreRelease: boolean;
+} | undefined {
+  const metadata = readInstallMetadata(extension);
+  if (!metadata || metadata.type !== "git" || typeof metadata.source !== "string") return undefined;
+  const source = normalizedGithubGitSource(metadata.source) ?? metadata.source;
+  return {
+    source,
+    ref: typeof metadata.ref === "string" && metadata.ref.trim() ? metadata.ref : undefined,
+    autoUpdate: metadata.autoUpdate === true,
+    allowPreRelease: metadata.allowPreRelease === true,
+  };
+}
+
+function integrityMismatchNames(report: ExtensionCommandReport): string[] {
+  const text = `${report.stdoutTail ?? ""}\n${report.stderrTail ?? ""}\n${report.error ?? ""}`;
+  const names = new Set<string>();
+  for (const match of text.matchAll(/Integrity mismatch for "([^"]+)"/g)) {
+    if (match[1]) names.add(match[1]);
+  }
+  return [...names];
+}
+
 function runGeminiCaptured(geminiBin: string, args: string[], options: Pick<ExtensionUpdateOptions, "autoConsent" | "timeoutMs" | "cwd">): ExtensionCommandReport {
   const result = spawnCommandSync(geminiBin, args, {
     cwd: options.cwd ?? process.cwd(),
@@ -304,6 +384,83 @@ function runGeminiCaptured(geminiBin: string, args: string[], options: Pick<Exte
     stderrTail: tail(result.stderr),
     error: result.error ? result.error.message : undefined,
     timedOut,
+  };
+}
+
+function reinstallIntegrityMismatchExtensions(
+  report: ExtensionCommandReport,
+  geminiBin: string,
+  extensions: InstalledGeminiExtension[],
+  options: Pick<ExtensionUpdateOptions, "autoConsent" | "timeoutMs" | "cwd">,
+): ExtensionCommandReport {
+  const names = integrityMismatchNames(report);
+  if (names.length === 0) return report;
+
+  const repairedExtensions: string[] = [];
+  const repairCommands: string[][] = [];
+  let stdoutTail = report.stdoutTail;
+  let stderrTail = report.stderrTail;
+
+  for (const name of names) {
+    const extension = extensions.find((candidate) => candidate.name === name || path.basename(candidate.extensionPath) === name);
+    const metadata = extension ? repairableGitInstallMetadata(extension) : undefined;
+    if (!extension || !metadata) {
+      return {
+        ...report,
+        status: "error",
+        error: `Gemini extension ${name} has an integrity mismatch and no repairable git install metadata.`,
+        repairedExtensions,
+        repairCommands,
+      };
+    }
+
+    const uninstallArgs = ["extensions", "uninstall", name];
+    const uninstall = runGeminiCaptured(geminiBin, uninstallArgs, options);
+    repairCommands.push([geminiBin, ...uninstallArgs]);
+    stdoutTail = appendTail(stdoutTail, uninstall.stdoutTail);
+    stderrTail = appendTail(stderrTail, uninstall.stderrTail, uninstall.error);
+    if (uninstall.status !== "applied") {
+      return {
+        ...report,
+        status: "error",
+        stdoutTail,
+        stderrTail,
+        error: `Could not uninstall ${name} before reinstalling it.`,
+        repairedExtensions,
+        repairCommands,
+      };
+    }
+
+    const installArgs = ["extensions", "install", metadata.source];
+    if (metadata.ref) installArgs.push("--ref", metadata.ref);
+    if (metadata.autoUpdate || metadata.ref) installArgs.push("--auto-update");
+    if (metadata.allowPreRelease) installArgs.push("--pre-release");
+    installArgs.push("--consent");
+    const install = runGeminiCaptured(geminiBin, installArgs, { ...options, autoConsent: false });
+    repairCommands.push([geminiBin, ...installArgs]);
+    stdoutTail = appendTail(stdoutTail, install.stdoutTail);
+    stderrTail = appendTail(stderrTail, install.stderrTail, install.error);
+    if (install.status !== "applied") {
+      return {
+        ...report,
+        status: "error",
+        stdoutTail,
+        stderrTail,
+        error: `Could not reinstall ${name} after Gemini reported an integrity mismatch.`,
+        repairedExtensions,
+        repairCommands,
+      };
+    }
+    repairedExtensions.push(name);
+  }
+
+  return {
+    ...report,
+    status: "applied",
+    stdoutTail,
+    stderrTail,
+    repairedExtensions,
+    repairCommands,
   };
 }
 
@@ -347,6 +504,7 @@ export function updateGeminiExtensions(options: ExtensionUpdateOptions = {}): Ex
   }
 
   if (options.dryRun) return { status: "preview", command, beforeExtensions: preUpdate.beforeExtensions, patches: preUpdate.patches };
+  repairGitInstallMetadataForUpdate(preUpdate.beforeExtensions);
   if ((options.projectRoot || options.homeDir) && preUpdate.beforeExtensions.length === 0) {
     return {
       status: "applied",
@@ -358,11 +516,19 @@ export function updateGeminiExtensions(options: ExtensionUpdateOptions = {}): Ex
   }
   if (options.autoConsent) {
     const report = runGeminiCaptured(geminiBin, command.slice(1), options);
+    const repairedReport = reinstallIntegrityMismatchExtensions(report, geminiBin, preUpdate.beforeExtensions, options);
     return {
+      ...repairedReport,
       ...report,
+      status: repairedReport.status,
       beforeExtensions: preUpdate.beforeExtensions,
       afterExtensions: listInstalledGeminiExtensions(options),
       patches: preUpdate.patches,
+      stdoutTail: repairedReport.stdoutTail,
+      stderrTail: repairedReport.stderrTail,
+      error: repairedReport.error,
+      repairedExtensions: repairedReport.repairedExtensions,
+      repairCommands: repairedReport.repairCommands,
     };
   }
   const applied = runGemini(geminiBin, command.slice(1));

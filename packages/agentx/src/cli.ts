@@ -297,10 +297,11 @@ function maybePostExtensionSync(opts: { dryRun?: boolean; skipSync?: boolean; sk
   }
 }
 
-function printExtensionReport(report: { status: string; command: string[]; inspection?: { warnings: string[] }; stdoutTail?: string; stderrTail?: string; error?: string; timedOut?: boolean }) {
+function printExtensionReport(report: { status: string; command: string[]; inspection?: { warnings: string[] }; stdoutTail?: string; stderrTail?: string; error?: string; timedOut?: boolean; repairedExtensions?: string[] }) {
   console.log(`Gemini extension command: ${report.status}`);
   console.log(formatCommand(report.command));
   for (const warning of report.inspection?.warnings ?? []) console.log(`Warning: ${warning}`);
+  if (report.repairedExtensions?.length) console.log(`Repaired: ${report.repairedExtensions.join(", ")}`);
   if (report.status === "error") {
     if (report.timedOut) console.log("Warning: Gemini extension command timed out.");
     if (report.stderrTail) console.log(`stderr: ${report.stderrTail.split(/\r?\n/).slice(-5).join("\n")}`);

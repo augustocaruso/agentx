@@ -205,6 +205,7 @@ function firstDashboardIssue(report: DashboardReport | undefined, severity: "fai
 function extensionUpdateMessage(report: ExtensionCommandReport): string {
   if (report.status === "preview") return "Would run Gemini extension update.";
   if (report.status === "blocked") return report.error ?? "Gemini extension update was blocked before overwriting local extension changes.";
+  if (report.status === "applied" && report.repairedExtensions?.length) return `Repaired Gemini extension update for ${report.repairedExtensions.join(", ")}.`;
   if (report.status === "applied") return report.stdoutTail ?? "Gemini extensions are up to date.";
   const detail = report.stderrTail ?? report.stdoutTail ?? report.error ?? `exit code ${String(report.exitCode ?? "unknown")}`;
   return report.timedOut ? `Gemini extension update timed out: ${detail}` : `Gemini extension update failed: ${detail}`;

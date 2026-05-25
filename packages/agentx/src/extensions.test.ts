@@ -127,6 +127,74 @@ if (!input.includes("y")) process.exit(7);
   assert.match(report.stderrTail ?? "", /stderr ok/);
 });
 
+test("updateGeminiExtensions normalizes stale git install metadata before invoking Gemini", () => {
+  const root = tempDir();
+  const extensionPath = writeInstalledExtension(root, "gemini-md-export");
+  const metadataPath = path.join(extensionPath, ".gemini-extension-install.json");
+  fs.writeFileSync(metadataPath, JSON.stringify({
+    source: "https://github.com/augustocaruso/gemini-md-export",
+    type: "git",
+    ref: "gemini-cli-extension",
+  }), "utf8");
+  const fakeGemini = writeExecutable(root, `
+const fs = require("node:fs");
+const metadata = JSON.parse(fs.readFileSync(${JSON.stringify(metadataPath)}, "utf8"));
+if (metadata.source !== "https://github.com/augustocaruso/gemini-md-export.git") process.exit(17);
+if (metadata.autoUpdate !== true) process.exit(18);
+console.log("No extensions to update.");
+`);
+
+  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, projectRoot: root, homeDir: root });
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+
+  assert.equal(report.status, "applied");
+  assert.equal(metadata.source, "https://github.com/augustocaruso/gemini-md-export.git");
+  assert.equal(metadata.autoUpdate, true);
+});
+
+test("updateGeminiExtensions reinstalls git extensions with integrity mismatches", () => {
+  const root = tempDir();
+  const extensionPath = writeInstalledExtension(root, "gemini-md-export");
+  const logPath = path.join(root, "gemini-log.jsonl");
+  fs.writeFileSync(path.join(extensionPath, ".gemini-extension-install.json"), JSON.stringify({
+    source: "https://github.com/augustocaruso/gemini-md-export.git",
+    type: "git",
+    ref: "gemini-cli-extension",
+    autoUpdate: true,
+  }), "utf8");
+  const fakeGemini = writeExecutable(root, `
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify(args) + "\\n");
+if (args[0] === "extensions" && args[1] === "update") {
+  console.log('Integrity mismatch for "gemini-md-export": Hash mismatch.');
+  console.log("Extension gemini-md-export cannot be updated. Extension integrity cannot be verified. To fix this, reinstall the extension.");
+  process.exit(0);
+}
+if (args.join(" ") === "extensions uninstall gemini-md-export") {
+  console.log('Extension "gemini-md-export" successfully uninstalled.');
+  process.exit(0);
+}
+if (args[0] === "extensions" && args[1] === "install") {
+  if (!args.includes("--consent") || !args.includes("--auto-update")) process.exit(21);
+  console.log('Extension "gemini-md-export" installed successfully and enabled.');
+  process.exit(0);
+}
+process.exit(22);
+`);
+
+  const report = updateGeminiExtensions({ geminiBin: fakeGemini, autoConsent: true, projectRoot: root, homeDir: root });
+  const commands = fs.readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+
+  assert.equal(report.status, "applied");
+  assert.deepEqual(commands, [
+    ["extensions", "update", "--all"],
+    ["extensions", "uninstall", "gemini-md-export"],
+    ["extensions", "install", "https://github.com/augustocaruso/gemini-md-export.git", "--ref", "gemini-cli-extension", "--auto-update", "--consent"],
+  ]);
+  assert.deepEqual(report.repairedExtensions, ["gemini-md-export"]);
+});
+
 test("updateGeminiExtensions skips Gemini when scoped inventory has no extensions", () => {
   const homeDir = tempDir();
   const marker = path.join(homeDir, "gemini-ran.txt");
