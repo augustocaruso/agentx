@@ -30,8 +30,8 @@ export const HELP_COMMANDS: HelpCommand[] = [
     recommended: true,
     summary: `Install or reinstall the ${DISPLAY} OpenCode profile.`,
     description: "Applies the managed OpenCode profile, global plugins, fallback wiring, startup sync wiring, and then runs the full check unless disabled.",
-    usage: "agentx install [--dry-run] [--force] [--reset-global] [--progress-json]",
-    examples: ["agentx install", "agentx install --dry-run", "agentx install --reset-global", "agentx install --dry-run --progress-json"],
+    usage: "agentx install [--dry-run] [--force] [--reset-global] [--no-extension-update] [--progress-json]",
+    examples: ["agentx install", "agentx install --dry-run", "agentx install --reset-global", "agentx install --no-extension-update", "agentx install --dry-run --progress-json"],
   },
   {
     name: "update",

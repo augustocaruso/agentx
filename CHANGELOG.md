@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 - Update sem travar em extensoes Gemini
+
+- Faz o instalador de release chamar `agentx install --no-extension-update`, evitando que `agentx update` fique preso em `gemini extensions update --all`.
+- Expõe `--no-extension-update` também em `agentx install`, para manter o mesmo escape hatch da checagem completa.
+- Mantém o post-update check focado e sem atualização automática de extensões, preservando um caminho suave para Linux/Windows.
+
 ## 0.3.1 - Instalador reaproveita build do release
 
 - Faz os instaladores POSIX e Windows usarem o `dist/cli.js` já publicado no release pack quando ele existir.

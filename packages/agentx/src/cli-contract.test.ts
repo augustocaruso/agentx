@@ -56,6 +56,10 @@ test("check exposes an extension-update escape hatch", () => {
   }
 });
 
+test("install exposes an extension-update escape hatch", () => {
+  assert.ok(command("install").options.some((option) => option.long === "--no-extension-update"));
+});
+
 test("update-extensions exposes unattended consent flags", () => {
   assert.ok(command("update-extensions").options.some((option) => option.long === "--auto-consent"));
   assert.ok(command("update-extensions").options.some((option) => option.long === "--yes"));

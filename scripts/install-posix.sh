@@ -500,6 +500,7 @@ ensure_opencode_exa_env
 
 INSTALL_ARGS=(--project "$PROJECT_DIR" install --rulesync "$RULESYNC_MODE")
 INSTALL_ARGS+=(--force)
+INSTALL_ARGS+=(--no-extension-update)
 if [[ "$RUN_UX" -eq 0 ]]; then
   INSTALL_ARGS+=(--no-ux)
 fi

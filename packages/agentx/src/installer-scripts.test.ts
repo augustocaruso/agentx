@@ -30,6 +30,7 @@ test("posix installer contract runs managed setup through agentx install", () =>
   assert.ok(text.indexOf("enable_installer_tui") < text.indexOf('"$PRIMARY_BIN" "${INSTALL_ARGS[@]}"'));
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
+  assert.match(text, /--no-extension-update/);
   assert.match(text, /--no-check/);
   assert.match(text, /--reset-global/);
   assert.match(text, /INSTALL_STATUS=\$\?/);
@@ -181,6 +182,7 @@ test("windows installer contract runs managed setup through agentx install", () 
   assert.match(text, /if \(\$KeepLegacy -and \$LegacyBinaryName -ne \$BinaryName\)/);
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
+  assert.match(text, /--no-extension-update/);
   assert.match(text, /--no-check/);
   assert.match(text, /--reset-global/);
   assert.match(text, /\$InstallStatus = \$LASTEXITCODE/);

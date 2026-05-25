@@ -532,6 +532,7 @@ Ensure-OpenCodeExaEnvironment
 
 $InstallArgs = @("--project", $Project, "install", "--rulesync", $Rulesync, "--windows")
 $InstallArgs += "--force"
+$InstallArgs += "--no-extension-update"
 if ($NoUx) {
   $InstallArgs += "--no-ux"
 }

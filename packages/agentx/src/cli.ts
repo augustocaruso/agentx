@@ -1143,6 +1143,7 @@ program.command("install")
   .option("--no-project-profile", `Do not write the project ${DISPLAY} fallback/profile config`)
   .option("--no-cleanup-home", `Do not clean old ${DISPLAY} project artifacts from the home directory`)
   .option("--no-check", "Skip the final agentx check")
+  .option("--no-extension-update", "Skip automatic Gemini CLI extension updates during the final check")
   .option("--accept-hooks", "Legacy: record unsupported Gemini hook events as reviewed during the final check")
   .option("--windows", "Include Windows installer/static checks during the final check")
   .option("--json", "Print JSON report")
@@ -1169,6 +1170,7 @@ program.command("install")
         writeProjectProfile: opts.projectProfile,
         cleanupHome: opts.cleanupHome,
         check: opts.check,
+        skipExtensionUpdate: opts.extensionUpdate === false,
         acceptHooks: opts.acceptHooks,
         windows: opts.windows,
         rulesyncMode: normalizeRulesyncMode(opts.rulesync),

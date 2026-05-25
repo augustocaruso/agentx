@@ -241,6 +241,28 @@ test("runInstall applies the current install flow and finishes with check", () =
   assert.equal(state.data?.outcome, report.outcome);
 });
 
+test("runInstall can skip Gemini extension updates during the final check", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const projectRoot = path.join(root, "project");
+  fs.mkdirSync(projectRoot, { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, "GEMINI.md"), "# Project Gemini\n", "utf8");
+
+  const report = runInstall({
+    projectRoot,
+    homeDir,
+    force: true,
+    installOpenCode: false,
+    installPlugins: false,
+    installTuiDependencies: false,
+    skipExtensionUpdate: true,
+  });
+
+  assert.notEqual(report.outcome, "fail");
+  assert.ok(report.check);
+  assert.equal(report.check.automated.includes("update-extensions"), false);
+});
+
 test("runInstall respects maintainer protection even with force", () => {
   const root = tempRoot();
   const homeDir = path.join(root, "home");

@@ -24,6 +24,7 @@ export interface InstallOptions {
   writeProjectProfile?: boolean;
   cleanupHome?: boolean;
   check?: boolean;
+  skipExtensionUpdate?: boolean;
   acceptHooks?: boolean;
   windows?: boolean;
   rulesyncMode?: RulesyncMode;
@@ -252,6 +253,7 @@ export function runInstall(options: InstallOptions = {}): InstallReport {
           force: options.force,
           acceptHooks: options.acceptHooks,
           windows: options.windows,
+          skipExtensionUpdate: options.skipExtensionUpdate,
           silent: true,
           setExitCode: false,
           rulesyncMode: options.rulesyncMode,
