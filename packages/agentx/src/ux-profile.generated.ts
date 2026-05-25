@@ -195,7 +195,7 @@ export const UX_PROFILE_PRESET = {
       "version": "0.0.53",
       "warning": "Generated from the agentX UX profile. Project sync may refine it from local Gemini extension agents."
     },
-    "enabled": false,
+    "enabled": true,
     "defaultFallback": [],
     "agentFallbacks": {
       "med-knowledge-architect": [
@@ -252,6 +252,21 @@ export const UX_PROFILE_PRESET = {
           "model": "anthropic-auth/claude-haiku-4-5",
           "reasoningEffort": "high"
         }
+      ],
+      "compaction": [
+        {
+          "model": "anthropic-auth/claude-haiku-4-5",
+          "reasoningEffort": "high"
+        },
+        {
+          "model": "gemini-cli/gemini-3.1-flash-lite-preview",
+          "reasoningEffort": "medium"
+        },
+        {
+          "model": "antigravity/gemini-3.5-flash",
+          "reasoningEffort": "medium",
+          "variant": "medium"
+        }
       ]
     },
     "cooldownMs": 60000,
@@ -285,7 +300,7 @@ export const UX_PROFILE_PRESET = {
         "percentDisplayMode": "used"
       },
       "autoFallback": {
-        "enabled": false,
+        "enabled": true,
         "plugin": "opencode-auto-fallback@0.4.3",
         "installProjectPlugin": false,
         "cooldownMs": 60000,

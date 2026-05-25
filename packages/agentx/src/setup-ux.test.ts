@@ -161,14 +161,30 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(fs.readFileSync(path.join(configDir, "AGENTS.md"), "utf8"), GLOBAL_AGENTS_MD);
 
   const fallback = readJson(path.join(configDir, "plugins", "fallback.json"));
-  assert.equal(fallback.enabled, false);
+  assert.equal(fallback.enabled, true);
   assert.equal(fallback.cooldownMs, 60_000);
   assert.equal(fallback.maxRetries, 2);
   assert.equal(fallback.agentFallbacks["med-chat-triager"][0].model, "openai/gpt-5.4-mini");
   assert.equal(fallback.agentFallbacks["med-chat-triager"][0].reasoningEffort, "medium");
+  assert.deepEqual(fallback.agentFallbacks.compaction, [
+    {
+      model: "anthropic-auth/claude-haiku-4-5",
+      reasoningEffort: "high",
+    },
+    {
+      model: "gemini-cli/gemini-3.1-flash-lite-preview",
+      reasoningEffort: "medium",
+    },
+    {
+      model: "antigravity/gemini-3.5-flash",
+      reasoningEffort: "medium",
+      variant: "medium",
+    },
+  ]);
 
   const projectConfig = parseJsonc(fs.readFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), "utf8"));
   assert.equal(projectConfig.openCode.defaultAgent, "YOLO");
+  assert.equal(projectConfig.externalPlugins.autoFallback.enabled, true);
   assert.equal(projectConfig.externalPlugins.autoFallback.plugin, "opencode-auto-fallback@0.4.3");
   assert.equal(projectConfig.externalPlugins.autoFallback.installProjectPlugin, false);
   assert.equal(projectConfig.modelFallbacks.agents["med-knowledge-architect"].model.variant, "high");
