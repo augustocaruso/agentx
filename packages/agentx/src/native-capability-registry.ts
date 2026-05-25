@@ -4,6 +4,7 @@ export type NativeCapabilityEntityId =
   | "context7-mcp"
   | "google-workspace-mcp"
   | "honcho"
+  | "medical-notes-workbench"
   | "notion-mcp"
   | "playwright-mcp"
   | "superpowers";
@@ -27,7 +28,14 @@ export interface OpenCodeMcpNativeInstall {
   packageNames: string[];
 }
 
-export type NativeInstallSpec = OpenCodePluginNativeInstall | OpenCodeMcpNativeInstall;
+export interface AntigravityPluginNativeInstall {
+  kind: "antigravity-plugin";
+  pluginName: string;
+  source: string;
+  ref: string;
+}
+
+export type NativeInstallSpec = OpenCodePluginNativeInstall | OpenCodeMcpNativeInstall | AntigravityPluginNativeInstall;
 
 export interface NativeSetupSurface {
   kind: NativeSetupSurfaceKind;
@@ -282,6 +290,30 @@ export const NATIVE_CAPABILITY_REGISTRY: readonly NativeCapabilityEntry[] = [
     ],
     docs: ["https://docs.honcho.dev/v3/guides/integrations/mcp"],
     notes: ["Use MCP metadata first; prompt, command, and hook projection require explicit adapter tests."],
+  },
+  {
+    entityId: "medical-notes-workbench",
+    displayName: "Medical Notes Workbench",
+    target: "antigravity-cli",
+    nativeStatus: "available",
+    nativeInstall: {
+      kind: "antigravity-plugin",
+      pluginName: "medical-notes-workbench",
+      source: "https://github.com/augustocaruso/medical-notes-workbench.git",
+      ref: "antigravity-plugin",
+    },
+    portableSurfaces: ["agents", "commands", "config", "hooks", "mcp", "prompts", "skills"],
+    surfacesNeedingReview: [],
+    managedPortPrefixes: [
+      ".gemini/config/plugins/medical-notes-workbench",
+      ".gemini/antigravity-cli/plugins/medical-notes-workbench",
+    ],
+    extensionAliases: ["medical-notes-workbench", "mednotes", "medcal-notes-workbench"],
+    skillAliases: ["medical-notes-workbench", "mednotes"],
+    mcpAliases: ["medical-notes-workbench", "mednotes"],
+    pluginAliases: ["medical-notes-workbench"],
+    docs: ["https://github.com/augustocaruso/medical-notes-workbench/tree/antigravity-plugin"],
+    notes: ["Antigravity CLI plugins do not self-update; agentX manages this native plugin from the dedicated branch."],
   },
   {
     entityId: "honcho",

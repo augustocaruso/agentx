@@ -2153,7 +2153,7 @@ export const OGB_PATCHES: readonly OgbPatch[] = [
     category: "cleanup",
     reason: "Repair legacy home/global startup lock state left by the Windows quoted-path and home-project bugs.",
     introducedIn: "0.1.8",
-    retireAfter: "0.3.0",
+    retireAfter: "0.4.0",
     removalCondition: "Remove after two stable releases show no telemetry/status hits for the legacy ~/.opencode/generated lock.",
     phase: "pre-extension-update",
     platforms: ["all"],

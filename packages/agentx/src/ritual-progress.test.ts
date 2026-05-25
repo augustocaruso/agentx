@@ -18,6 +18,7 @@ test("check progress declares patch phases in the same order runPass emits them"
     "patches-pre-extension-update",
     "extension-update",
     "patches-post-extension-update",
+    "antigravity-plugin-update",
     "patches-pre-sync",
     "sync",
     "patches-post-sync",
@@ -37,6 +38,7 @@ test("check progress removes patch phases when patches are disabled", () => {
     dashboard: false,
   })), [
     "extension-update",
+    "antigravity-plugin-update",
     "sync",
     "doctor",
   ]);
@@ -52,6 +54,7 @@ test("update progress nests the post-update check steps after the updater phases
     "patches-pre-extension-update",
     "extension-update",
     "patches-post-extension-update",
+    "antigravity-plugin-update",
     "patches-pre-sync",
     "sync",
     "patches-post-sync",

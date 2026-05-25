@@ -49,6 +49,7 @@ test("user-facing ritual verbs expose versioned progress NDJSON", () => {
 test("check exposes an extension-update escape hatch", () => {
   for (const name of ["check", "pass"]) {
     assert.ok(command(name).options.some((option) => option.long === "--no-extension-update"), `expected ogb ${name} to support --no-extension-update`);
+    assert.ok(command(name).options.some((option) => option.long === "--no-antigravity-plugin-update"), `expected ogb ${name} to support --no-antigravity-plugin-update`);
     assert.ok(command(name).options.some((option) => option.long === "--no-patches"), `expected ogb ${name} to support --no-patches`);
     assert.ok(command(name).options.some((option) => option.long === "--rulesync"), `expected ogb ${name} to support --rulesync`);
     assert.ok(command(name).options.some((option) => option.long === "--no-rulesync"), `expected ogb ${name} to support --no-rulesync`);
@@ -151,6 +152,7 @@ test("check --progress-json includes extension-update before sync unless skipped
     "patches-pre-extension-update",
     "extension-update",
     "patches-post-extension-update",
+    "antigravity-plugin-update",
     "patches-pre-sync",
     "sync",
     "patches-post-sync",
@@ -162,6 +164,7 @@ test("check --progress-json includes extension-update before sync unless skipped
     withUpdateEvents.filter((event) => event.type === "ritual.step" && event.status === "running").map((event) => event.stepId),
     [
       "extension-update",
+      "antigravity-plugin-update",
       "sync",
       "doctor",
     ],
@@ -171,6 +174,7 @@ test("check --progress-json includes extension-update before sync unless skipped
   assert.ok(skipped.status === 0 || skipped.status === 1, skipped.stderr);
   const skippedEvents = parseNdjson(skipped.stdout);
   assert.deepEqual(skippedEvents[0].steps.map((step: any) => step.stepId), [
+    "antigravity-plugin-update",
     "patches-pre-sync",
     "sync",
     "patches-post-sync",

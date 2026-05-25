@@ -80,6 +80,7 @@ export interface CheckProgressOptions {
   setup?: boolean;
   sync?: boolean;
   extensionUpdate?: boolean;
+  antigravityPluginUpdate?: boolean;
   patches?: boolean;
   acceptHooks?: boolean;
   validation?: boolean;
@@ -130,6 +131,11 @@ export const CHECK_PROGRESS_STEPS = {
     stepId: "extension-update",
     label: "Update Gemini extensions.",
     detail: "Runs Gemini CLI extension updates before projecting resources into OpenCode.",
+  },
+  antigravityPluginUpdate: {
+    stepId: "antigravity-plugin-update",
+    label: "Update managed Antigravity plugins.",
+    detail: "Installs or refreshes native Agy plugins that do not self-update.",
   },
   doctor: {
     stepId: "doctor",
@@ -301,6 +307,7 @@ export const UPDATE_PROGRESS_STEPS = {
 export function checkProgressSteps(options: CheckProgressOptions = {}): RitualProgressDefinition[] {
   const syncEnabled = options.sync !== false;
   const extensionUpdateEnabled = syncEnabled && options.extensionUpdate !== false;
+  const antigravityPluginUpdateEnabled = syncEnabled && options.antigravityPluginUpdate !== false;
   const patchesEnabled = options.patches !== false;
   return [
     ...(options.setup === false ? [] : [CHECK_PROGRESS_STEPS.setup]),
@@ -311,6 +318,7 @@ export function checkProgressSteps(options: CheckProgressOptions = {}): RitualPr
         ...(patchesEnabled ? [CHECK_PROGRESS_STEPS.patchPostExtensionUpdate] : []),
       ]
       : []),
+    ...(antigravityPluginUpdateEnabled ? [CHECK_PROGRESS_STEPS.antigravityPluginUpdate] : []),
     ...(syncEnabled
       ? [
         ...(patchesEnabled ? [CHECK_PROGRESS_STEPS.patchPreSync] : []),

@@ -170,7 +170,7 @@ function compactDisplayLine(item: string | undefined, maxChars = MAX_DISPLAY_LIN
   return truncateDisplayLine(text, maxChars);
 }
 
-function uniqueLines(items: Array<string | undefined>, limit = 5): string[] {
+function uniqueLines(items: Array<string | undefined>, limit = Number.POSITIVE_INFINITY): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of items) {
@@ -194,7 +194,16 @@ function checkNext(report: PassReport | undefined, fallback: string[]): string[]
   return uniqueLines([
     ...(report?.blockers.map((item) => item.action) ?? []),
     ...fallback,
-  ], 4);
+  ]);
+}
+
+function antigravityPluginCallouts(report: PassReport): string[] {
+  return report.antigravityPlugins?.plugins.map((plugin) => {
+    const detail = plugin.error ?? plugin.reason;
+    return detail
+      ? `Antigravity plugin ${plugin.displayName}: ${plugin.status} - ${detail}`
+      : `Antigravity plugin ${plugin.displayName}: ${plugin.status}`;
+  }) ?? [];
 }
 
 function postUpdateCallouts(report: SelfUpdateReport): string[] {
@@ -283,9 +292,13 @@ function installModel(report: InstallReport): RitualViewModel {
 function checkModel(report: PassReport): RitualViewModel {
   const tone = toneFromOutcome(report.outcome);
   const syncNotes = report.sync?.notes ?? [];
+  const antigravityPlugins = report.antigravityPlugins;
   const timingMetrics: RitualMetric[] = [];
   if (report.timing) timingMetrics.push({ label: "duration", value: formatDurationMs(report.timing.durationMs) });
   if (report.sync?.rulesyncDurationMs !== undefined) timingMetrics.push({ label: "rulesync", value: formatDurationMs(report.sync.rulesyncDurationMs) });
+  const antigravityPluginMetric = antigravityPlugins
+    ? [{ label: "agy plugins", value: `${antigravityPlugins.active}/${antigravityPlugins.plugins.length}` }]
+    : [];
   return {
     title: titleForKind("check"),
     subtitle: report.projectRoot,
@@ -297,6 +310,7 @@ function checkModel(report: PassReport): RitualViewModel {
       { label: "skills", value: String(report.sync?.skills ?? 0) },
       { label: "commands", value: String((report.sync?.builtInCommands ?? 0) + (report.sync?.extensionCommands ?? 0)) },
       { label: "agents", value: String((report.sync?.builtInAgents ?? 0) + (report.sync?.extensionAgents ?? 0)) },
+      ...antigravityPluginMetric,
       { label: "blockers", value: String(report.blockers.length), tone: report.blockers.some((item) => item.severity === "fail") ? "fail" : report.blockers.length > 0 ? "warn" : "pass" },
     ],
     steps: report.steps.map((step) => ({
@@ -305,11 +319,12 @@ function checkModel(report: PassReport): RitualViewModel {
       detail: step.detail,
     })),
     callouts: [
-      ...report.blockers.slice(0, 5).map((item) => `${item.source}: ${item.message}`),
-      ...syncNotes.slice(0, Math.max(0, 5 - report.blockers.length)),
+      ...report.blockers.map((item) => `${item.source}: ${item.message}`),
+      ...antigravityPluginCallouts(report),
+      ...syncNotes,
     ],
     next: report.blockers.length > 0
-      ? report.blockers.slice(0, 3).map((item) => item.action)
+      ? uniqueLines(report.blockers.map((item) => item.action))
       : ["Bridge is clean.", "OpenCode can start with the current global/project profile."],
     files: [report.files.pass, report.files.dashboard],
   };

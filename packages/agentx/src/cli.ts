@@ -425,6 +425,7 @@ type CheckCliOptions = {
   setup?: boolean;
   sync?: boolean;
   extensionUpdate?: boolean;
+  antigravityPluginUpdate?: boolean;
   patches?: boolean;
   validation?: boolean;
   security?: boolean;
@@ -443,6 +444,7 @@ function addCheckOptions(command: Command): Command {
     .option("--windows", "Include Windows installer/static checks during validation")
     .option("--no-setup", "Skip setup-opencode")
     .option("--no-extension-update", "Skip automatic Gemini CLI extension updates before sync")
+    .option("--no-antigravity-plugin-update", "Skip managed Antigravity plugin updates before sync")
     .option("--no-patches", `Skip ${DISPLAY} versioned patches during check`)
     .option("--no-sync", "Skip sync")
     .option("--rulesync <mode>", "Rulesync mode used by sync during check", "auto")
@@ -477,6 +479,7 @@ async function runCheckCli(opts: CheckCliOptions, workflow: "check" | "pass", le
       skipSetup: opts.setup === false,
       skipSync: opts.sync === false,
       skipExtensionUpdate: opts.extensionUpdate === false,
+      skipAntigravityPluginUpdate: opts.antigravityPluginUpdate === false,
       skipPatches: opts.patches === false,
       skipValidation: opts.validation === false,
       skipSecurity: opts.security === false,

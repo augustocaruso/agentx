@@ -187,9 +187,9 @@ function providerLabel(provider) {
 
 function providerKind(providerID) {
   const id = String(providerID || "").toLowerCase();
-  if (id.includes("antigravity")) return "other";
-  if (id.includes("anthropic") || id.includes("claude")) return "anthropic";
-  if (id.includes("openai") || id.includes("gpt") || id.includes("codex")) return "openai";
+  if (id === "antigravity" || id === "google-antigravity") return "other";
+  if (id.includes("anthropic") || id.includes("claude") || id.includes("sonnet") || id.includes("opus") || id.includes("haiku")) return "anthropic";
+  if (id.includes("openai") || id.includes("gpt") || id.includes("codex") || /\bo[1345](?:\b|-)/.test(id)) return "openai";
   if (id.includes("google") || id.includes("gemini")) return "gemini";
   return id ? "other" : "unknown";
 }
@@ -498,10 +498,35 @@ function quotaRows(root) {
 function providerMatches(provider, providerID) {
   const name = (String(provider?.providerId || "") + " " + String(provider?.displayName || "")).toLowerCase();
   const id = String(providerID || "").toLowerCase();
+  if (id === "antigravity" || id === "google-antigravity") return false;
   if (id.includes("anthropic") || id.includes("claude")) return name.includes("anthropic") || name.includes("claude");
   if (id.includes("openai") || id.includes("gpt") || id.includes("codex")) return name.includes("openai") || name.includes("chatgpt") || name.includes("codex");
   if (id.includes("google") || id.includes("gemini")) return name.includes("google") || name.includes("gemini");
   return id && name.includes(id);
+}
+
+function concreteProviderID(value) {
+  const raw = String(value || "");
+  const kind = providerKind(raw);
+  if (kind === "openai" || kind === "anthropic" || kind === "gemini") return kind;
+  if (!raw || raw.toLowerCase() === "antigravity" || raw.toLowerCase() === "google-antigravity") return "";
+  return raw;
+}
+
+function quotaProviderID(usage, selectedModel) {
+  const modelCandidates = [selectedModel?.modelID, usage?.modelID];
+  for (const modelID of modelCandidates) {
+    const concrete = concreteProviderID(modelID);
+    if (concrete) return concrete;
+  }
+
+  const providerCandidates = [selectedModel?.providerID, usage?.providerID];
+  for (const providerID of providerCandidates) {
+    const concrete = concreteProviderID(providerID);
+    if (concrete) return concrete;
+  }
+
+  return "";
 }
 
 function limitForProvider(root, providerID) {
@@ -881,7 +906,7 @@ function quotaFromSession(api, sessionId) {
 }
 
 function quotaForUi(api, sessionId, root, usage, selectedModel) {
-  const providerID = selectedModel?.providerID || usage?.providerID || "";
+  const providerID = quotaProviderID(usage, selectedModel);
   if (!providerID) {
     return {
       available: false,
@@ -1147,9 +1172,7 @@ function PromptRight(props) {
   return box({ flexDirection: "row", gap: 0, flexShrink: 0 },
     line({ fg: theme().textMuted, wrapMode: "none" }, () => elapsed()),
     line({ fg: theme().textMuted, wrapMode: "none" }, () => hasQuota() ? (elapsed() ? " · " : "") + "quota " : ""),
-    line({ fg: theme().text, wrapMode: "none" }, () => hasQuota()
-      ? el("span", { style: { fg: quotaUsageColor(theme(), quota().usedPercent) } }, quota().promptLabel)
-      : ""),
+    line(() => ({ style: { fg: quotaUsageColor(theme(), quota().usedPercent) }, wrapMode: "none" }), () => hasQuota() ? quota().promptLabel : ""),
     line({ fg: theme().textMuted, wrapMode: "none" }, () => hasReset() ? " · reset " + compactDurationLabel(quota().resetIn) : ""),
   );
 }

@@ -82,6 +82,9 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.match(plugin, /if \(\(lineUsedPercent\(weekly\) \?\? 0\) >= 100\) return weekly;/);
   assert.match(plugin, /if \(\(lineUsedPercent\(session\) \?\? 0\) >= 100\) return session;/);
   assert.match(plugin, /return session \|\| quota \|\| weekly/);
+  assert.match(plugin, /function quotaProviderID\(usage, selectedModel\)/);
+  assert.match(plugin, /const modelCandidates = \[selectedModel\?\.modelID, usage\?\.modelID\];/);
+  assert.match(plugin, /if \(id === "antigravity" \|\| id === "google-antigravity"\) return false;/);
   assert.match(plugin, /limits unavailable/);
   assert.match(plugin, /function unavailableLimitRows\(root\) \{[\s\S]*return \[\];[\s\S]*\}/);
   assert.doesNotMatch(plugin, /Anthropic", message: "unavailable"/);
@@ -95,6 +98,8 @@ test("ensureTuiSidebar installs a TUI plugin and tui config entry", () => {
   assert.match(plugin, /if \(value >= 100\) return theme\.error;/);
   assert.match(plugin, /if \(value >= 85\) return theme\.warning;/);
   assert.match(plugin, /\+ "quota " : ""/);
+  assert.match(plugin, /line\(\(\) => \(\{ style: \{ fg: quotaUsageColor\(theme\(\), quota\(\)\.usedPercent\) \}, wrapMode: "none" \}\), \(\) => hasQuota\(\) \? quota\(\)\.promptLabel : ""\)/);
+  assert.doesNotMatch(plugin, /el\("span", \{ style: \{ fg: quotaUsageColor\(theme\(\), quota\(\)\.usedPercent\) \} \}, quota\(\)\.promptLabel\)/);
   assert.match(plugin, /status !== "busy"/);
   assert.match(plugin, /latestAssistantCompleted/);
   assert.match(plugin, /startedWallMs/);

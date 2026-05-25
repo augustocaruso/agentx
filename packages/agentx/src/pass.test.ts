@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { runDoctor } from "./doctor.js";
 import { buildInstallerPlan } from "./installer-planner.js";
+import type { ManagedAntigravityPluginSpec } from "./managed-antigravity-plugins.js";
 import { runPass, type PassReport } from "./pass.js";
 import { formatPassReport } from "./presentation/pass.js";
 import type { OgbPatch } from "./patches.js";
@@ -38,6 +39,24 @@ function writeHookSettings(projectRoot: string): void {
       UserPromptSubmit: [{ command: "echo ok" }],
     },
   }, null, 2), "utf8");
+}
+
+function writeAntigravityPluginSource(root: string): string {
+  const sourceDir = path.join(root, "antigravity-plugin-source");
+  fs.mkdirSync(sourceDir, { recursive: true });
+  fs.writeFileSync(path.join(sourceDir, "plugin.json"), `${JSON.stringify({ name: "medical-notes-workbench" })}\n`, "utf8");
+  fs.writeFileSync(path.join(sourceDir, "README.md"), "MedNotes plugin\n", "utf8");
+  return sourceDir;
+}
+
+function mednotesManagedPluginSpec(source = "https://github.com/augustocaruso/medical-notes-workbench.git"): ManagedAntigravityPluginSpec {
+  return {
+    entityId: "medical-notes-workbench",
+    displayName: "Medical Notes Workbench",
+    pluginName: "medical-notes-workbench",
+    source,
+    ref: "antigravity-plugin",
+  };
 }
 
 test("runPass can accept reviewed Gemini hooks and produce a clean doctor", () => {
@@ -139,6 +158,7 @@ test("runPass emits real progress events in ritual order", () => {
   assert.deepEqual(runningOrder, [
     "setup",
     "extension-update",
+    "antigravity-plugin-update",
     "sync",
     "doctor",
     "validate",
@@ -147,6 +167,44 @@ test("runPass emits real progress events in ritual order", () => {
   ]);
   assert.equal(events.at(-1)?.stepId, "dashboard");
   assert.notEqual(events.at(-1)?.status, "running");
+  process.exitCode = oldExitCode;
+});
+
+test("runPass updates managed Antigravity plugins before sync even when Gemini extension update is skipped", () => {
+  const root = tempRoot();
+  const homeDir = path.join(root, "home");
+  const projectRoot = path.join(root, "project");
+  const extensionDir = path.join(homeDir, ".gemini", "extensions", "medical-notes-workbench");
+  const sourceDir = writeAntigravityPluginSource(root);
+  const oldExitCode = process.exitCode;
+  const events: RitualProgressEvent[] = [];
+  fs.mkdirSync(extensionDir, { recursive: true });
+  fs.writeFileSync(path.join(extensionDir, "gemini-extension.json"), `${JSON.stringify({ name: "medical-notes-workbench" })}\n`, "utf8");
+
+  const report = runPass({
+    projectRoot,
+    homeDir,
+    skipSetup: true,
+    skipExtensionUpdate: true,
+    skipValidation: true,
+    skipSecurity: true,
+    skipDashboard: true,
+    silent: true,
+    setExitCode: false,
+    managedAntigravityPluginSpecs: [mednotesManagedPluginSpec()],
+    detectManagedAntigravityCli: () => true,
+    fetchManagedAntigravityPluginSource: () => ({ sourceDir, revision: "test-revision" }),
+    onProgress: (event) => events.push(event),
+  });
+
+  assert.equal(report.outcome, "pass");
+  assert.equal(report.automated.includes("update-antigravity-plugins"), true);
+  assert.equal(report.steps.findIndex((step) => step.name === "update-antigravity-plugins") < report.steps.findIndex((step) => step.name === "sync"), true);
+  assert.deepEqual(
+    events.filter((event) => event.status === "running").map((event) => event.stepId),
+    ["antigravity-plugin-update", "sync", "doctor"],
+  );
+  assert.equal(fs.existsSync(path.join(homeDir, ".gemini", "config", "plugins", "medical-notes-workbench", "plugin.json")), true);
   process.exitCode = oldExitCode;
 });
 
@@ -526,7 +584,9 @@ process.exit(9);
     assert.deepEqual(report.automated.slice(0, 3), ["update-extensions", "sync", "doctor"]);
     assert.equal(report.steps[0]?.name, "update-extensions");
     assert.equal(report.steps[0]?.status, "warn");
-    assert.equal(report.steps[1]?.name, "sync");
+    assert.equal(report.steps[1]?.name, "update-antigravity-plugins");
+    assert.equal(report.steps[1]?.detail, "no active plugins");
+    assert.equal(report.steps[2]?.name, "sync");
     assert.equal(report.blockers.some((item) => item.source === "extension-update" && item.severity === "warn"), true);
     assert.equal(events.some((event) => event.stepId === "extension-update" && event.status === "warn"), true);
     assert.equal(events.some((event) => event.stepId === "sync" && event.status === "running"), true);

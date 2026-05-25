@@ -308,6 +308,45 @@ test("check ritual view model surfaces non-blocking sync notes", () => {
   assert.match(model.callouts.join("\n"), /Antigravity skill skipped: defuddle/);
 });
 
+test("check ritual view model keeps complete communication details", () => {
+  const blockers = Array.from({ length: 6 }, (_, index) => ({
+    severity: "warn" as const,
+    source: "doctor" as const,
+    message: `warning ${index + 1}`,
+    action: `fix ${index + 1}`,
+  }));
+  const model = ritualViewModel("check", passReport({
+    outcome: "warn",
+    blockers,
+    antigravityPlugins: {
+      outcome: "pass",
+      active: 0,
+      installed: 0,
+      updated: 0,
+      current: 0,
+      skipped: 1,
+      errors: 0,
+      warnings: [],
+      plugins: [{
+        displayName: "Medical Notes Workbench",
+        pluginName: "medical-notes-workbench",
+        status: "skipped",
+        reason: "Antigravity CLI is not installed.",
+      }],
+    },
+  }));
+
+  assert.match(model.callouts.join("\n"), /warning 6/);
+  assert.match(model.callouts.join("\n"), /Medical Notes Workbench.*skipped.*Antigravity CLI is not installed/);
+  assert.deepEqual(model.next, ["fix 1", "fix 2", "fix 3", "fix 4", "fix 5", "fix 6"]);
+});
+
+test("interactive ritual renderer does not cap final bullet sections at five items", () => {
+  const source = readFileSync(new URL("./ui/ink/ritual-ui.ts", import.meta.url), "utf8");
+
+  assert.doesNotMatch(source, /props\.items\.slice\(0,\s*5\)/);
+});
+
 test("install, reset and update models expose user-facing next steps", () => {
   const install: InstallReport = {
     version: "0.0.61",

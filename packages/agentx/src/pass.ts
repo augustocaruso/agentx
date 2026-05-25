@@ -6,6 +6,13 @@ import { runDoctor, type DoctorReport } from "./doctor.js";
 import { updateGeminiExtensions, type ExtensionCommandReport } from "./extensions.js";
 import { buildInstallerPlan, type InstallerPlan } from "./installer-planner.js";
 import { buildInventory } from "./inventory.js";
+import {
+  updateManagedAntigravityPlugins,
+  type DetectAntigravityCli,
+  type FetchManagedAntigravityPluginSource,
+  type ManagedAntigravityPluginSpec,
+  type ManagedAntigravityPluginUpdateReport,
+} from "./managed-antigravity-plugins.js";
 import { runPatchesForPhase, summarizePatchReport, type OgbPatch, type PatchPhase, type PatchRunReport } from "./patches.js";
 import { globalOpenCodeConfigDir } from "./opencode-paths.js";
 import { resolveProjectPaths } from "./paths.js";
@@ -32,6 +39,7 @@ export interface PassOptions {
   skipSetup?: boolean;
   skipSync?: boolean;
   skipExtensionUpdate?: boolean;
+  skipAntigravityPluginUpdate?: boolean;
   skipPatches?: boolean;
   skipValidation?: boolean;
   skipSecurity?: boolean;
@@ -40,12 +48,16 @@ export interface PassOptions {
   setExitCode?: boolean;
   rulesyncMode?: RulesyncMode;
   patchRegistry?: readonly OgbPatch[];
+  managedAntigravityPluginSpecs?: readonly ManagedAntigravityPluginSpec[];
+  managedAntigravityAgyBin?: string;
+  detectManagedAntigravityCli?: DetectAntigravityCli;
+  fetchManagedAntigravityPluginSource?: FetchManagedAntigravityPluginSource;
   onProgress?: RitualProgressSink;
 }
 
 export interface PassBlocker {
   severity: "warn" | "fail";
-  source: "doctor" | "validation" | "security" | "setup" | "extension-update" | "sync" | "dashboard" | "patch";
+  source: "doctor" | "validation" | "security" | "setup" | "extension-update" | "antigravity-plugin-update" | "sync" | "dashboard" | "patch";
   message: string;
   action: string;
 }
@@ -85,6 +97,30 @@ export interface PassPatchSummary {
   }>;
 }
 
+export interface PassAntigravityPluginItem {
+  displayName: string;
+  pluginName: string;
+  status: ManagedAntigravityPluginUpdateReport["plugins"][number]["status"];
+  reason?: string;
+  revision?: string;
+  error?: string;
+  source?: string;
+  ref?: string;
+  destinations?: ManagedAntigravityPluginUpdateReport["plugins"][number]["destinations"];
+}
+
+export interface PassAntigravityPluginSummary {
+  outcome: ManagedAntigravityPluginUpdateReport["outcome"];
+  active: number;
+  installed: number;
+  updated: number;
+  current: number;
+  skipped: number;
+  errors: number;
+  warnings: string[];
+  plugins: PassAntigravityPluginItem[];
+}
+
 export interface PassReport {
   version: string;
   projectRoot: string;
@@ -106,6 +142,7 @@ export interface PassReport {
     outcome: SecurityReport["outcome"];
   };
   patches?: PassPatchSummary;
+  antigravityPlugins?: PassAntigravityPluginSummary;
   dashboard?: {
     outcome: DashboardReport["outcome"];
   };
@@ -175,6 +212,26 @@ function extensionUpdateMessage(report: ExtensionCommandReport): string {
 
 function extensionUpdateAction(): string {
   return "Run `agentx update-extensions --auto-consent` to see the Gemini CLI error, then run `agentx check` again.";
+}
+
+function antigravityPluginUpdateMessage(report: ManagedAntigravityPluginUpdateReport): string {
+  const active = report.plugins.filter((plugin) => plugin.status !== "skipped");
+  if (report.outcome === "preview") return active.length > 0 ? `Would update ${active.length} managed Antigravity plugin(s).` : "No managed Antigravity plugins are active.";
+  if (report.warnings.length > 0) return report.warnings[0] ?? "Managed Antigravity plugin update warning.";
+  if (active.length === 0) return "No managed Antigravity plugins are active.";
+  const installed = active.filter((plugin) => plugin.status === "installed").length;
+  const updated = active.filter((plugin) => plugin.status === "updated").length;
+  const current = active.filter((plugin) => plugin.status === "current").length;
+  const parts = [
+    installed > 0 ? `${installed} installed` : undefined,
+    updated > 0 ? `${updated} updated` : undefined,
+    current > 0 ? `${current} current` : undefined,
+  ].filter(Boolean);
+  return parts.length > 0 ? `Managed Antigravity plugins: ${parts.join(", ")}.` : "Managed Antigravity plugins checked.";
+}
+
+function antigravityPluginUpdateAction(): string {
+  return "Run `agentx check --plain` to see the managed Antigravity plugin update error, then rerun after fixing Git/network access or the configured plugin branch.";
 }
 
 function validationAction(options: PassOptions): string {
@@ -290,6 +347,31 @@ function buildPatchSummary(reports: readonly PatchRunReport[]): PassPatchSummary
   };
 }
 
+function buildAntigravityPluginSummary(report: ManagedAntigravityPluginUpdateReport | undefined): PassAntigravityPluginSummary | undefined {
+  if (!report) return undefined;
+  return {
+    outcome: report.outcome,
+    active: report.plugins.filter((plugin) => plugin.status !== "skipped").length,
+    installed: report.plugins.filter((plugin) => plugin.status === "installed").length,
+    updated: report.plugins.filter((plugin) => plugin.status === "updated").length,
+    current: report.plugins.filter((plugin) => plugin.status === "current").length,
+    skipped: report.plugins.filter((plugin) => plugin.status === "skipped").length,
+    errors: report.plugins.filter((plugin) => plugin.status === "error").length,
+    warnings: report.warnings,
+    plugins: report.plugins.map((plugin) => ({
+      displayName: plugin.displayName,
+      pluginName: plugin.pluginName,
+      status: plugin.status,
+      reason: plugin.reason,
+      revision: plugin.revision,
+      error: plugin.error,
+      source: plugin.source,
+      ref: plugin.ref,
+      destinations: plugin.destinations,
+    })),
+  };
+}
+
 function patchReportStepStatus(report: PatchRunReport): PassStep["status"] {
   if (report.errors.length > 0) return "fail";
   if (report.warnings.length > 0) return "warn";
@@ -326,6 +408,7 @@ export function runPass(options: PassOptions = {}): PassReport {
   let globalSetup: SetupUxReport | undefined;
   let setupWarnings: string[] = [];
   let extensionUpdate: ExtensionCommandReport | undefined;
+  let antigravityPluginUpdate: ManagedAntigravityPluginUpdateReport | undefined;
   let globalSync: SyncReport | undefined;
   let sync: SyncReport | undefined;
   const patchReports: PatchRunReport[] = [];
@@ -450,6 +533,32 @@ export function runPass(options: PassOptions = {}): PassReport {
     }
     recordTiming("extension-update", extensionUpdateStartedAt);
     runPatchPhase("post-extension-update");
+  }
+
+  if (!options.skipSync && !options.skipAntigravityPluginUpdate) {
+    const antigravityPluginUpdateStartedAt = performance.now();
+    emitCheckProgress(options.onProgress, "antigravityPluginUpdate", "running");
+    antigravityPluginUpdate = updateManagedAntigravityPlugins({
+      projectRoot: paths.projectRoot,
+      homeDir: paths.homeDir,
+      dryRun: options.dryRun,
+      specs: options.managedAntigravityPluginSpecs,
+      agyBin: options.managedAntigravityAgyBin,
+      detectAntigravityCli: options.detectManagedAntigravityCli,
+      fetchPluginSource: options.fetchManagedAntigravityPluginSource,
+    });
+    const message = antigravityPluginUpdateMessage(antigravityPluginUpdate);
+    emitCheckProgress(
+      options.onProgress,
+      "antigravityPluginUpdate",
+      progressStatusFromOutcome(antigravityPluginUpdate.outcome),
+      message,
+    );
+    if (antigravityPluginUpdate.plugins.some((plugin) => plugin.status !== "skipped")) automated.push("update-antigravity-plugins");
+    for (const warning of antigravityPluginUpdate.warnings) {
+      blockers.push(blocker("antigravity-plugin-update", "warn", warning, antigravityPluginUpdateAction()));
+    }
+    recordTiming("antigravity-plugin-update", antigravityPluginUpdateStartedAt);
   }
 
   if (!options.skipSync) {
@@ -707,6 +816,17 @@ export function runPass(options: PassOptions = {}): PassReport {
     });
   }
   appendPatchStep("post-extension-update");
+  if (antigravityPluginUpdate) {
+    steps.push({
+      name: "update-antigravity-plugins",
+      status: antigravityPluginUpdate.outcome === "warn" ? "warn" : "pass",
+      detail: antigravityPluginUpdate.outcome === "preview"
+        ? "preview"
+        : antigravityPluginUpdate.plugins.every((plugin) => plugin.status === "skipped")
+          ? "no active plugins"
+          : antigravityPluginUpdateMessage(antigravityPluginUpdate).replace(/\.$/, ""),
+    });
+  }
   appendPatchStep("pre-sync");
   if (sync) {
     const syncWarnings = [...(globalSync?.warnings ?? []), ...sync.warnings];
@@ -757,6 +877,7 @@ export function runPass(options: PassOptions = {}): PassReport {
     validation: validation ? { outcome: validation.outcome } : undefined,
     security: security ? { outcome: security.outcome } : undefined,
     patches: buildPatchSummary(patchReports),
+    antigravityPlugins: buildAntigravityPluginSummary(antigravityPluginUpdate),
     dashboard: dashboard ? { outcome: dashboard.outcome } : undefined,
     timing: {
       durationMs: durationMsSince(passStartedAt),

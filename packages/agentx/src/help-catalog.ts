@@ -49,9 +49,9 @@ export const HELP_COMMANDS: HelpCommand[] = [
     category: "Core",
     recommended: true,
     summary: "Run the complete bridge health check.",
-    description: "Runs setup, Gemini extension update, sync, doctor, validation, security-check, and dashboard in one user-facing flow.",
-    usage: "agentx check [--force] [--no-extension-update] [--no-patches] [--plain] [--json] [--progress-json]",
-    examples: ["agentx check", "agentx check --force", "agentx check --no-extension-update", "agentx check --no-patches", "agentx check --plain", "agentx check --progress-json"],
+    description: "Runs setup, Gemini extension update, managed Antigravity plugin update, sync, doctor, validation, security-check, and dashboard in one user-facing flow.",
+    usage: "agentx check [--force] [--no-extension-update] [--no-antigravity-plugin-update] [--no-patches] [--plain] [--json] [--progress-json]",
+    examples: ["agentx check", "agentx check --force", "agentx check --no-extension-update", "agentx check --no-antigravity-plugin-update", "agentx check --no-patches", "agentx check --plain", "agentx check --progress-json"],
   },
   {
     name: "reset",
@@ -503,6 +503,7 @@ function inferredActionDescription(command: HelpCommand, args: string[] | undefi
   if (args.includes("--write-only")) return "Writes generated reports without printing the human summary.";
   if (args.includes("--no-sync") || args.includes("--skip-sync")) return "Skips the sync/projection part of the flow.";
   if (args.includes("--no-extension-update")) return "Skips the automatic Gemini extension update before sync.";
+  if (args.includes("--no-antigravity-plugin-update")) return "Skips managed Antigravity plugin updates before sync.";
   if (args.includes("--no-patches")) return `Skips versioned ${DISPLAY} repair patches during the check.`;
   if (args.includes("--accept-hooks")) return "Legacy: records unsupported Gemini hook events as reviewed by hash during the check.";
   if (args.includes("--auto-consent") || args.includes("--yes")) return "Runs unattended by answering supported confirmation prompts automatically.";

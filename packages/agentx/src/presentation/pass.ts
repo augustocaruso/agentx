@@ -4,10 +4,18 @@ import type { PassBlocker, PassReport, PassStep, PassSyncSummary } from "../pass
 import { formatDuration, kvRow, sectionHeader, statusRow } from "./format.js";
 import { ICONS, INDENT, type Tone } from "./theme.js";
 
+type AntigravityPluginReportItem = NonNullable<PassReport["antigravityPlugins"]>["plugins"][number];
+
 function toneFromStep(status: PassStep["status"] | PassReport["outcome"] | PassBlocker["severity"]): Tone {
   if (status === "pass") return "pass";
   if (status === "fail") return "fail";
   return "warn";
+}
+
+function toneFromAntigravityPluginStatus(status: AntigravityPluginReportItem["status"]): Tone {
+  if (status === "error") return "fail";
+  if (status === "skipped" || status === "preview") return "preview";
+  return "pass";
 }
 
 function stepDetail(step: PassStep): string | undefined {
@@ -47,6 +55,12 @@ function syncSummaryLine(sync: PassSyncSummary): string {
   return parts.length > 0 ? parts.join(", ") : "no projected artifacts";
 }
 
+function antigravityPluginDetail(plugin: AntigravityPluginReportItem): string | undefined {
+  const detail = plugin.error ?? plugin.reason;
+  const revision = plugin.revision ? `rev ${plugin.revision.slice(0, 12)}` : undefined;
+  return [plugin.status, detail, revision].filter(Boolean).join("; ");
+}
+
 function friendlyBlockerMessage(item: PassBlocker): string {
   if (/opencode-auto-fallback.*plugin is not active/i.test(item.message)) {
     return "Auto fallback is enabled but the external plugin did not load.";
@@ -78,6 +92,13 @@ export function formatPassReport(report: PassReport): string {
   if ((report.sync?.notes.length ?? 0) > 0) {
     lines.push(sectionHeader("Notes"));
     for (const note of report.sync!.notes) lines.push(`${INDENT}${ICONS.neutral} ${note}`);
+  }
+
+  if ((report.antigravityPlugins?.plugins.length ?? 0) > 0) {
+    lines.push(sectionHeader("Antigravity Plugins"));
+    for (const plugin of report.antigravityPlugins!.plugins) {
+      lines.push(statusRow(toneFromAntigravityPluginStatus(plugin.status), plugin.displayName, antigravityPluginDetail(plugin)));
+    }
   }
 
   if (report.acceptedHooks.length > 0) {

@@ -317,6 +317,16 @@ export function resolveNativeCapabilities(options: ResolveNativeCapabilitiesOpti
       continue;
     }
 
+    if (entry.nativeInstall.kind === "antigravity-plugin") {
+      decisions.push({
+        ...base,
+        action: "use_existing_native",
+        smoke: skippedSmoke(`${entry.displayName} Antigravity plugin is managed by ${BINARY} check/update.`),
+        message: `${entry.displayName} uses a native Antigravity plugin managed by ${BINARY} check/update.`,
+      });
+      continue;
+    }
+
     nativePlugins.push(entry.nativeInstall.plugin);
     const pluginPackage = pluginPackageName(entry.nativeInstall.plugin);
     const pluginAlreadyConfigured = currentPackages.has(pluginPackage);

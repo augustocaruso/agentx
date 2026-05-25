@@ -127,8 +127,9 @@ function statusColor(status: RitualProgressStatus): string {
   return colorFromTone(toneFromProgress(status));
 }
 
-function visibleSteps(steps: LiveRitualStep[]): LiveRitualStep[] {
+function visibleSteps(steps: LiveRitualStep[], final = false): LiveRitualStep[] {
   const filtered = steps.filter((step) => !(step.optional && (step.status === "queued" || step.status === "skipped")));
+  if (final) return filtered;
   if (filtered.length <= 9) return filtered;
   const runningIndex = filtered.findIndex((step) => step.status === "running");
   if (runningIndex < 0) return filtered.slice(-9);
@@ -170,7 +171,7 @@ function BulletSection(props: { title: string; items: string[]; color?: string; 
     Box,
     { flexDirection: "column", marginTop: 1 },
     React.createElement(Text, { bold: true, color: props.color ?? "white" }, props.title),
-    ...props.items.slice(0, 5).map((item) => React.createElement(Text, { key: item, color: props.color ?? "gray" }, `• ${truncate(item, Math.max(20, props.width - 4))}`)),
+    ...props.items.map((item) => React.createElement(Text, { key: item, color: props.color ?? "gray" }, `• ${truncate(item, Math.max(20, props.width - 4))}`)),
   );
 }
 
@@ -202,7 +203,7 @@ function RitualInkApp(props: { store: RitualLiveStore; animate: boolean }) {
     React.createElement(
       Box,
       { flexDirection: "column", marginTop: 1 },
-      ...visibleSteps(model.steps).map((step) => React.createElement(RitualStepRow, {
+      ...visibleSteps(model.steps, model.final).map((step) => React.createElement(RitualStepRow, {
         key: step.stepId,
         step,
         frame,

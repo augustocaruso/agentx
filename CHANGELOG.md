@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - Antigravity plugin gerenciado e TUI sem cortes
+
+- Adiciona atualização gerenciada do plugin nativo Antigravity do Medical Notes Workbench durante `agentx check`/`agentx pass`, antes do sync.
+- Expõe `--no-antigravity-plugin-update` para pular esse reparo quando necessário, mantendo a etapa no progresso NDJSON e na TUI.
+- Mostra todos os blockers, próximos passos e detalhes de plugins Antigravity no resumo final, sem cortar listas importantes em cinco itens.
+- Ajusta a sidebar para escolher quota por modelo concreto quando o provider vem como Antigravity genérico, preservando OpenAI/Claude/Gemini corretamente.
+
 ## 0.2.23 - TUI de instalação força Ink em TTY humano
 
 - Faz o instalador POSIX ativar `AGENTX_RITUAL_UI=ink` quando está rodando em um terminal humano, mesmo em ambientes que herdam `TERM=dumb` ou variáveis de automação.
