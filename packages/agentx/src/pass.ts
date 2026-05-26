@@ -160,9 +160,12 @@ export interface PassReport {
 function actionForWarning(warning: string): string {
   if (/^Hook needs review:/.test(warning)) return "Known Gemini hooks sync automatically through the agentX OpenCode plugin; review only custom hook events that do not have a compatible OpenCode projection yet.";
   if (/Duplicate name/i.test(warning)) return "Run `agentx check --json` or open `.opencode/generated/agentx-inventory.json` to inspect duplicate paths; keep one copy.";
+  if (/model fallback config exists but is disabled/i.test(warning)) return "Enable the generated fallback config or disable `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc`.";
+  if (/model fallback.*plugin is not active/i.test(warning)) return "Run `agentx setup-ux`, then restart OpenCode so the managed fallback plugin is loaded.";
+  if (/model fallback/i.test(warning)) return "Review `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc` and the global OpenCode fallback plugin.";
   if (/opencode-auto-fallback config exists but is disabled/i.test(warning)) return "Enable the generated fallback config or disable `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc`.";
-  if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Install `opencode plugin opencode-auto-fallback@0.4.3 --global --force`, run `agentx sync`, then restart OpenCode.";
-  if (/opencode-auto-fallback/i.test(warning)) return "Review `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc` and the global OpenCode plugin.";
+  if (/opencode-auto-fallback.*plugin is not active/i.test(warning)) return "Run `agentx setup-ux`, then restart OpenCode so the managed fallback plugin is loaded.";
+  if (/opencode-auto-fallback/i.test(warning)) return "Review `externalPlugins.autoFallback` in `.opencode/agentx.config.jsonc` and the global OpenCode fallback plugin.";
   if (/Run agentx sync/i.test(warning)) return "`agentx check` already tried `agentx sync`; if this persists, review managed-file conflicts and rerun with `--force` only if safe.";
   if (/Model resolution warning/i.test(warning)) return "Review the models in `.opencode/agentx.config.jsonc` and compare them with `opencode models`.";
   if (/MCP command warning/i.test(warning)) return "Install the MCP command or remove/disable that MCP in the source configuration.";

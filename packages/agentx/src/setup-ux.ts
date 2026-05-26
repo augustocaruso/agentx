@@ -27,11 +27,17 @@ export const OGB_TUI_RUNTIME_DEPENDENCIES = { ...UX_PROFILE_PRESET.tuiRuntimeDep
 export const REMOVED_GLOBAL_UX_COMMANDS = [...UX_PROFILE_PRESET.removedGlobalCommands];
 const UX_PROFILE_COMMANDS: Record<string, string> = UX_PROFILE_PRESET.files.commands;
 const GLOBAL_STARTUP_PLUGIN_FILENAME = "ogb-startup-sync.js";
+const MANAGED_MODEL_FALLBACK_PLUGIN_FILENAME = "agentx-model-fallback.js";
 const AUTH_PROBE_TIMEOUT_MS = 8_000;
 export const LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC = "file:plugins/ogb-startup-sync.js";
 
 export function globalStartupPluginSpec(pluginPath?: string): string {
   const target = pluginPath ?? path.join(os.homedir(), ".config", "opencode", "plugins", GLOBAL_STARTUP_PLUGIN_FILENAME);
+  return pathToFileURL(path.resolve(target)).href;
+}
+
+export function managedModelFallbackPluginSpec(pluginPath?: string): string {
+  const target = pluginPath ?? path.join(os.homedir(), ".config", "opencode", "plugins", MANAGED_MODEL_FALLBACK_PLUGIN_FILENAME);
   return pathToFileURL(path.resolve(target)).href;
 }
 
@@ -47,6 +53,11 @@ const OGB_UX_WATCHER_IGNORE = UX_PROFILE_PRESET.globalConfig.watcherIgnore;
 
 function ogbStartupPluginSource(): string {
   return UX_PROFILE_PRESET.files.startupPlugin || STARTUP_SYNC_PLUGIN_SOURCE;
+}
+
+function agentxModelFallbackPluginSource(): string {
+  const pluginPath = fileURLToPath(new URL("../runtime-plugins/agentx-model-fallback.js", import.meta.url));
+  return fs.readFileSync(pluginPath, "utf8");
 }
 
 function ogbTuiSidebarPluginSource(): string {
@@ -346,6 +357,47 @@ function fallbackConfigFromProfile(config: OgbConfig): Record<string, unknown> {
     cooldownMs: fallback.cooldownMs ?? 60_000,
     maxRetries: fallback.maxRetries ?? 2,
     logging: fallback.logging === true,
+  };
+}
+
+function fallbackModelIdForManagedPlugin(entry: unknown): string | undefined {
+  if (typeof entry === "string") return entry.trim() || undefined;
+  const record = asRecord(entry);
+  if (typeof record.model === "string" && record.model.trim()) return record.model.trim();
+  return undefined;
+}
+
+function fallbackModelIdsForManagedPlugin(entries: unknown): string[] {
+  if (!Array.isArray(entries)) return [];
+  return [...new Set(entries
+    .map(fallbackModelIdForManagedPlugin)
+    .filter((item): item is string => Boolean(item)))];
+}
+
+function modelFallbackConfigFromProfile(config: Record<string, unknown>, primaryCompactionModel?: string): Record<string, unknown> {
+  const rawAgents = asRecord(config.agentFallbacks);
+  const agents: Record<string, Record<string, unknown>> = {};
+  for (const [agent, entries] of Object.entries(rawAgents)) {
+    const fallbackModels = fallbackModelIdsForManagedPlugin(entries);
+    if (fallbackModels.length === 0) continue;
+    const agentConfig: Record<string, unknown> = { fallbackModels };
+    if (agent === "compaction" && primaryCompactionModel) {
+      agentConfig.models = [...new Set([primaryCompactionModel, ...fallbackModels])];
+    }
+    agents[agent] = agentConfig;
+  }
+
+  return {
+    enabled: config.enabled === true,
+    defaults: {
+      fallbackOn: ["rate_limit", "quota_exceeded", "5xx", "timeout", "overloaded"],
+      cooldownMs: 300_000,
+      retryOriginalAfterMs: 900_000,
+      maxFallbackDepth: 3,
+    },
+    agents,
+    logging: config.logging !== false,
+    logLevel: "info",
   };
 }
 
@@ -712,7 +764,8 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   const commandsDir = adapter.join(root, "commands");
   const agentsDir = adapter.join(root, "agents");
   const dcpConfigPath = adapter.join(root, "dcp.jsonc");
-  const fallbackConfigPath = adapter.join(root, "plugins", "fallback.json");
+  const fallbackConfigPath = adapter.join(root, "model-fallback.json");
+  const managedModelFallbackPluginPath = adapter.join(root, "plugins", MANAGED_MODEL_FALLBACK_PLUGIN_FILENAME);
   const globalStartupPluginPath = adapter.join(root, "plugins", GLOBAL_STARTUP_PLUGIN_FILENAME);
   const globalStartupConfigPath = adapter.join(adapter.generatedDir, "agentx-startup-sync.json");
   const globalGeneratedDir = adapter.pathApi.dirname(globalStartupConfigPath);
@@ -804,9 +857,11 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
 
   const desiredPlugins = [
     ...OGB_UX_SAFE_PLUGINS,
+    managedModelFallbackPluginSpec(managedModelFallbackPluginPath),
     globalStartupPluginSpec(globalStartupPluginPath),
   ];
   const startupPluginSourceText = ogbStartupPluginSource();
+  const managedModelFallbackPluginSourceText = agentxModelFallbackPluginSource();
   const tuiSidebarPluginSourceText = ogbTuiSidebarPluginSource();
   const installablePlugins = desiredPlugins.filter((plugin) => !isLocalPluginSpec(plugin));
   const merged = mergeGlobalConfig(baseConfig, OGB_UX_PROJECT_CONFIG.openCode?.defaultAgent, desiredPlugins);
@@ -820,8 +875,23 @@ export function setupUx(options: SetupUxOptions = {}): SetupUxReport {
   }));
   writes.push(profileWriter.writeText({
     filePath: fallbackConfigPath,
-    text: `${JSON.stringify(UX_PROFILE_PRESET.fallbackConfig ?? fallbackConfigFromProfile(OGB_UX_PROJECT_CONFIG), null, 2)}\n`,
+    text: `${JSON.stringify(modelFallbackConfigFromProfile(
+      UX_PROFILE_PRESET.fallbackConfig ?? fallbackConfigFromProfile(OGB_UX_PROJECT_CONFIG),
+      typeof OGB_UX_PROJECT_CONFIG === "object" && typeof UX_PROFILE_PRESET.globalConfig.agent.compaction.model === "string"
+        ? UX_PROFILE_PRESET.globalConfig.agent.compaction.model
+        : undefined,
+    ), null, 2)}\n`,
   }));
+  writes.push(markOpenCodeExclusive(profileWriter.writeText({
+    filePath: managedModelFallbackPluginPath,
+    text: managedModelFallbackPluginSourceText,
+  }), "plugin", "ogb:managed-model-fallback"));
+  const fallbackPluginCheck = options.dryRun
+    ? checkPluginSyntax(undefined, managedModelFallbackPluginSourceText)
+    : checkPluginSyntax(managedModelFallbackPluginPath);
+  if (!fallbackPluginCheck.ok) {
+    warnings.push(fallbackPluginCheck.message);
+  }
   writes.push(runtimeWriter.writeText({
     filePath: globalStartupPluginPath,
     text: startupPluginSourceText,

@@ -159,21 +159,26 @@ Estado recomendado atual:
 Nesse modo, o OGB usa sua propria fonte de quota e renderiza a sidebar com o
 formatter compacto inspirado no plugin.
 
-### 3. `opencode-auto-fallback`
+### 3. `agentx-model-fallback`
 
 Estado atual:
 
-- Desabilitado no `ogb setup-ux` por incompatibilidade observada com OpenCode
-  1.14.39: o plugin tenta importar `@/core/plugin` e falha durante o load.
-- Pode voltar para o perfil padrao quando houver uma versao compativel validada.
+- Instalado pelo `agentx setup-ux` como plugin local gerenciado em
+  `~/.config/opencode/plugins/agentx-model-fallback.js`.
+- Usa `~/.config/opencode/model-fallback.json`.
+- Substitui o uso padrao de `opencode-auto-fallback` no perfil agentX porque a
+  compaction precisa de fallback automatico e de uma lista fechada com ordem
+  explicita.
 
 Uso:
 
 - Runtime fallback real: escuta erro/status da sessao, aplica retry/backoff,
   cooldown e troca para o proximo modelo.
 - Complementa o roteamento do OGB. OGB escolhe antes da chamada quando sabe que
-  um provider esta perto do limite; `opencode-auto-fallback` reage durante a
+  um provider esta perto do limite; `agentx-model-fallback` reage durante a
   chamada quando a API falha.
+- Para compaction, `agents.compaction.models` define a ordem fechada:
+  primario primeiro, depois cada fallback permitido.
 
 Licenca: MIT.
 
@@ -183,10 +188,11 @@ Config OGB:
 {
   "externalPlugins": {
     "autoFallback": {
-      "enabled": false,
-      "cooldownMs": 60000,
-      "maxRetries": 2,
-      "logging": false
+      "enabled": true,
+      "plugin": "agentx-model-fallback",
+      "cooldownMs": 300000,
+      "maxRetries": 3,
+      "logging": true
     }
   },
   "modelFallbacks": {
@@ -204,16 +210,16 @@ Config OGB:
 
 Quando habilitado manualmente, `ogb sync`:
 
-- adiciona `opencode-auto-fallback` ao `opencode.jsonc`;
+- espera que o plugin gerenciado global tenha sido instalado por `agentx setup-ux`;
 - converte as cadeias `modelFallbacks.*.fallback_models` do OGB para
-  `agentFallbacks`;
-- grava `~/.config/opencode/plugins/fallback.json`, que e o caminho lido pelo
+  `agents.*.fallbackModels`;
+- grava `~/.config/opencode/model-fallback.json`, que e o caminho lido pelo
   plugin.
 
 `ogb doctor` e `ogb bridge` tambem conferem essa camada:
 
-- se `opencode-auto-fallback` esta ativo no `opencode.jsonc`;
-- se o arquivo `fallback.json` existe e esta habilitado;
+- se `agentx-model-fallback.js` esta ativo no `opencode.jsonc`;
+- se o arquivo `model-fallback.json` existe e esta habilitado;
 - quantas cadeias de fallback por agente foram geradas;
 - se os modelos projetados aparecem em `opencode models`.
 
@@ -221,7 +227,7 @@ Mental model:
 
 ```text
 OGB model routing          = decisao antes da chamada
-opencode-auto-fallback     = reacao quando a chamada falha em runtime
+agentx-model-fallback      = reacao quando a chamada falha em runtime
 ```
 
 ### 4. Oh My OpenAgent / antigo oh-my-opencode

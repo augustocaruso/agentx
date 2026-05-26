@@ -1906,16 +1906,16 @@ test("syncToOpenCode can wire external quota UI and runtime fallback plugins", (
   const projectConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, "opencode.jsonc"), "utf8"));
   const tuiConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, ...TUI_CONFIG_PATH.split("/")), "utf8"));
   const ui = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-ui.json"), "utf8"));
-  const fallback = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode", "plugins", "fallback.json"), "utf8"));
+  const fallback = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode", "model-fallback.json"), "utf8"));
 
-  assert.deepEqual(projectConfig.plugin, ["opencode-auto-fallback", "@slkiser/opencode-quota"]);
+  assert.deepEqual(projectConfig.plugin, ["@slkiser/opencode-quota"]);
   assert.deepEqual(tuiConfig.plugin, ["@slkiser/opencode-quota", TUI_SIDEBAR_PLUGIN_SPEC]);
   assert.equal(ui.quotaPanel, "external");
   assert.equal(fallback.enabled, true);
-  assert.equal(fallback.cooldownMs, 45_000);
-  assert.equal(fallback.maxRetries, 1);
-  assert.deepEqual(fallback.agentFallbacks, { helper: ["openai/gpt-5.4-mini"] });
-  assert.ok(report.projectedExternalPlugins.includes("opencode-auto-fallback"));
+  assert.equal(fallback.defaults.cooldownMs, 45_000);
+  assert.equal(fallback.defaults.maxFallbackDepth, 1);
+  assert.deepEqual(fallback.agents, { helper: { fallbackModels: ["openai/gpt-5.4-mini"] } });
+  assert.equal(report.projectedExternalPlugins.includes("agentx-model-fallback"), false);
   assert.ok(report.projectedExternalPlugins.includes("@slkiser/opencode-quota"));
   assert.ok(report.projectedExternalIntegrationFiles.includes(".opencode/generated/agentx-ui.json"));
 });

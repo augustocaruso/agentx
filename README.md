@@ -310,10 +310,12 @@ O agentX preserva o modelo importado da extensao como primeira escolha quando el
 existe. Se voce colocar `model`, esse modelo vira a primeira escolha sem editar
 o subagente original. `variant`/`effort` aqui significam esforco de raciocinio;
 o agentX traduz isso para `reasoningEffort` nos agentes OpenCode, registra a
-decisao em `.opencode/generated/agentx-model-routing.json` e gera config opcional
-para `opencode-auto-fallback`, que faz retry/cooldown quando a chamada falha em
-runtime. O `doctor` e o `bridge` avisam se plugin, config ou modelo estiverem
-faltando.
+decisao em `.opencode/generated/agentx-model-routing.json` e gera
+`~/.config/opencode/model-fallback.json` para o plugin gerenciado
+`agentx-model-fallback.js`, que faz retry/cooldown quando a chamada falha em
+runtime. A compaction usa uma lista fechada com ordem explicita em
+`agents.compaction.models`; o `doctor` e o `bridge` avisam se plugin, config ou
+modelo estiverem faltando.
 
 A hierarquia e simples:
 

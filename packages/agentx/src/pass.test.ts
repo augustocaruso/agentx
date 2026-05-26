@@ -657,7 +657,7 @@ test("formatPassReport prints a compact human report", () => {
         source: "doctor",
         severity: "warn",
         message: "opencode-auto-fallback is enabled in OGB config, but the OpenCode plugin is not active; disable externalPlugins.autoFallback or install a compatible plugin version.",
-        action: "Desative `externalPlugins.autoFallback` em `.opencode/agentx.config.jsonc`.",
+        action: "Run `agentx setup-ux`, then restart OpenCode so the managed fallback plugin is loaded.",
       },
     ],
     sync: {

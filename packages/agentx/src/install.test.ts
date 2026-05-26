@@ -7,7 +7,7 @@ import { BINARY, DISPLAY } from "./brand.js";
 import { printInstallReport, runInstall } from "./install.js";
 import { enableMaintainerRole } from "./local-role.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
-import { globalStartupPluginSpec, OGB_UX_SAFE_PLUGINS } from "./setup-ux.js";
+import { globalStartupPluginSpec, managedModelFallbackPluginSpec, OGB_UX_SAFE_PLUGINS } from "./setup-ux.js";
 import { readStateRecord } from "./state-store.js";
 import { TUI_SIDEBAR_PLUGIN_SOURCE } from "./tui-sidebar.js";
 
@@ -184,8 +184,10 @@ test("runInstall keeps progress messages compact when OpenCode plugin commands a
   const projectRoot = path.join(root, "project");
   const binDir = path.join(homeDir, ".opencode", "bin");
   const startupPluginPath = path.join(homeDir, ".config", "opencode", "plugins", "ogb-startup-sync.js");
+  const modelFallbackPluginPath = path.join(homeDir, ".config", "opencode", "plugins", "agentx-model-fallback.js");
   const expectedPlugins = [
     ...OGB_UX_SAFE_PLUGINS,
+    managedModelFallbackPluginSpec(modelFallbackPluginPath),
     globalStartupPluginSpec(startupPluginPath),
   ];
   const events: RitualProgressEvent[] = [];

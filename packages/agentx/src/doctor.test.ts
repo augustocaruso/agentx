@@ -6,7 +6,7 @@ import test from "node:test";
 import { BINARY, DISPLAY } from "./brand.js";
 import { runDoctor } from "./doctor.js";
 import { STARTUP_SYNC_PLUGIN_SOURCE } from "./setup-opencode.js";
-import { globalStartupPluginSpec, LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC } from "./setup-ux.js";
+import { globalStartupPluginSpec, LEGACY_GLOBAL_STARTUP_PLUGIN_SPEC, managedModelFallbackPluginSpec } from "./setup-ux.js";
 import { syncToOpenCode } from "./sync.js";
 import { TUI_SIDEBAR_PLUGIN_SOURCE, TUI_SIDEBAR_PLUGIN_SPEC } from "./tui-sidebar.js";
 
@@ -144,6 +144,45 @@ test("runDoctor matches OpenCode plugins by package name across versions", () =>
 
   assert.equal(report.runtimeFallback.pluginActive, true);
   assert.equal(report.warnings.some((warning) => /opencode-auto-fallback.*plugin is not active/i.test(warning)), false);
+});
+
+test("runDoctor recognizes the managed agentX model fallback plugin and config", () => {
+  const projectRoot = tempRoot();
+  const homeDir = tempRoot();
+  const configDir = path.join(homeDir, ".config", "opencode");
+  fs.mkdirSync(path.join(projectRoot, ".opencode"), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), JSON.stringify({
+    externalPlugins: {
+      autoFallback: {
+        enabled: true,
+        plugin: "agentx-model-fallback",
+      },
+    },
+  }, null, 2), "utf8");
+  fs.mkdirSync(path.join(configDir, "plugins"), { recursive: true });
+  fs.writeFileSync(path.join(configDir, "opencode.json"), JSON.stringify({
+    plugin: [managedModelFallbackPluginSpec(path.join(configDir, "plugins", "agentx-model-fallback.js"))],
+  }, null, 2), "utf8");
+  fs.writeFileSync(path.join(configDir, "model-fallback.json"), JSON.stringify({
+    enabled: true,
+    agents: {
+      helper: { fallbackModels: ["openai/gpt-5.4-mini"] },
+      compaction: {
+        fallbackModels: ["anthropic-auth/claude-haiku-4-5"],
+        models: ["openai/gpt-5.4-mini", "anthropic-auth/claude-haiku-4-5"],
+      },
+    },
+    defaults: { cooldownMs: 300_000, maxFallbackDepth: 3 },
+    logging: true,
+  }), "utf8");
+
+  const report = runDoctor({ projectRoot, homeDir, silent: true });
+
+  assert.equal(report.runtimeFallback.pluginActive, true);
+  assert.equal(report.runtimeFallback.configPath, path.join(configDir, "model-fallback.json"));
+  assert.equal(report.runtimeFallback.agentFallbacks, 2);
+  assert.equal(report.runtimeFallback.maxRetries, 3);
+  assert.equal(report.warnings.some((warning) => /fallback.*plugin is not active/i.test(warning)), false);
 });
 
 test("runDoctor checks global OpenCode instructions when project root is home", () => {

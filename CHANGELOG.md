@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.4 - Fallback gerenciado para compaction
+
+- Substitui o fallback padrão por um plugin local gerenciado, `agentx-model-fallback.js`, instalado por `agentx setup-ux`.
+- Gera `~/.config/opencode/model-fallback.json` com cadeias por agente e uma lista fechada para `agents.compaction.models`.
+- Mantém `opencode-auto-fallback` desabilitado no perfil padrão, preservando compatibilidade apenas quando ele for configurado explicitamente.
+- Faz `doctor`, `sync`, `pass` e o pacote de release reconhecerem o novo plugin/config, incluindo regressões para subagentes e compaction.
+
 ## 0.3.2 - Update sem travar em extensoes Gemini
 
 - Faz o instalador de release chamar `agentx install --no-extension-update`, evitando que `agentx update` fique preso em `gemini extensions update --all`.

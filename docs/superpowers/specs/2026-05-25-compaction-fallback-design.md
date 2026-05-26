@@ -6,15 +6,15 @@ agentX currently configures OpenCode's internal `compaction` agent with a single
 model: `openai/gpt-5.4-mini`. If OpenAI quota is exhausted, context compaction can
 fail and leave the session unable to free context.
 
-The UX profile already includes the `opencode-auto-fallback` plugin in the
-installable global plugin list, but the generated fallback policy is disabled.
-That means several model-fallback flows can be present in configuration while not
-actually protecting the session at runtime.
+The initial design used `opencode-auto-fallback`, but live Windows validation
+showed that compaction needs a managed plugin with a `model-fallback.json`
+contract, BOM-tolerant config parsing, and an explicit closed chain for
+compaction.
 
 OpenCode's public config schema exposes `agent.<name>.model` as a single string;
-it does not expose a native fallback list on the agent itself. agentX already
-ships and generates `opencode-auto-fallback` configuration through
-`fallback.json`, including per-agent fallback lists under `agentFallbacks`.
+it does not expose a native fallback list on the agent itself. agentX now ships a
+managed local OpenCode plugin, `agentx-model-fallback.js`, and generates
+`~/.config/opencode/model-fallback.json` with per-agent `fallbackModels`.
 
 ## Goal
 
@@ -32,14 +32,18 @@ default for compaction and other configured fallback flows.
 
 ## Selected Approach
 
-Keep `agent.compaction.model = "openai/gpt-5.4-mini"`, enable the generated
-auto-fallback policy in the UX profile, and add `agentFallbacks.compaction` to
-the generated fallback profile.
+Keep `agent.compaction.model = "openai/gpt-5.4-mini"`, install
+`agentx-model-fallback.js` from the agentX release, and generate
+`agents.compaction.models` as the closed model chain. The plugin unpins the
+runtime compaction agent and routes compaction to the first healthy model in that
+closed list.
 
 Fallback activation changes:
 
-- Keep `opencode-auto-fallback@0.4.3` in `safePlugins` so setup installs it.
-- Set `fallbackConfig.enabled = true` so the generated `fallback.json` is active.
+- Remove `opencode-auto-fallback@0.4.3` from `safePlugins`; treat it as disabled
+  in the default profile.
+- Write `~/.config/opencode/plugins/agentx-model-fallback.js`.
+- Set fallback config `enabled = true` so `model-fallback.json` is active.
 - Set `projectConfig.externalPlugins.autoFallback.enabled = true` so project
   profile state reports and regenerates the fallback integration as enabled.
 
@@ -54,13 +58,17 @@ Fallback order:
 
 ## Implementation Notes
 
+- Include `packages/agentx/runtime-plugins/agentx-model-fallback.js` in the
+  release package.
 - Update `UX_PROFILE_PRESET.fallbackConfig.agentFallbacks` in
-  `packages/agentx/src/ux-profile.generated.ts`.
+  `packages/agentx/src/ux-profile.generated.ts`; setup converts it to
+  `model-fallback.json`.
 - Update the UX profile fallback enable flags in
   `packages/agentx/src/ux-profile.generated.ts`.
 - Add/adjust tests in `packages/agentx/src/setup-ux.test.ts` to assert that the
-  generated `fallback.json` is enabled and includes `agentFallbacks.compaction`
-  with exactly one entry for `anthropic-auth`, `gemini-cli`, and `antigravity`.
+  generated `model-fallback.json` is enabled and includes
+  `agents.compaction.models` with the primary model followed by exactly one entry
+  for `anthropic-auth`, `gemini-cli`, and `antigravity`.
 - Add/adjust tests to assert that `projectConfig.externalPlugins.autoFallback`
   is enabled in the generated project profile.
 - Preserve existing assertions for `agent.compaction.model`.
@@ -72,9 +80,9 @@ Fallback order:
 
 ## Risks
 
-- If `opencode-auto-fallback` does not intercept the internal `compaction` agent,
-  this config will be harmless but insufficient. The schema-compatible placement
-  still makes the intended fallback policy explicit and testable.
+- If OpenCode changes plugin event timing, compaction rerouting can still need a
+  runtime adjustment. The closed chain remains explicit and testable in
+  `model-fallback.json`.
 - Model IDs must match the provider catalogs that agentX configures. The selected
   IDs are already present in agentX's auth-provider catalogs.
 - Enabling fallback by default changes runtime behavior for users. This is an

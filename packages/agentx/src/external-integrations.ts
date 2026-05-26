@@ -9,7 +9,7 @@ import { fallbackModelId, type ModelFallbackEntry, type OgbConfig } from "./ogb-
 import { globalOpenCodeConfigDir } from "./opencode-paths.js";
 
 export const OPENCODE_QUOTA_PLUGIN = "@slkiser/opencode-quota";
-export const AUTO_FALLBACK_PLUGIN = "opencode-auto-fallback";
+export const AUTO_FALLBACK_PLUGIN = "agentx-model-fallback";
 export const OGB_UI_CONFIG_PATH = ".opencode/generated/agentx-ui.json";
 export const QUOTA_CONFIG_PATH = "opencode-quota/quota-toast.json";
 
@@ -32,11 +32,17 @@ function enabled(value: { enabled?: boolean } | undefined): boolean {
   return value?.enabled === true;
 }
 
+export function isManagedModelFallbackPlugin(plugin: string | undefined): boolean {
+  const trimmed = (plugin || AUTO_FALLBACK_PLUGIN).trim();
+  return trimmed === "agentx-model-fallback" || /(?:^|[/\\])agentx-model-fallback\.js$/i.test(trimmed);
+}
+
 export function externalOpenCodePlugins(config: OgbConfig): string[] {
   const plugins: string[] = [];
   const fallback = config.externalPlugins?.autoFallback;
   const quota = config.externalPlugins?.quotaUi;
-  if (enabled(fallback) && fallback?.installProjectPlugin !== false) plugins.push(fallback?.plugin || AUTO_FALLBACK_PLUGIN);
+  const fallbackPlugin = fallback?.plugin || AUTO_FALLBACK_PLUGIN;
+  if (enabled(fallback) && fallback?.installProjectPlugin !== false && !isManagedModelFallbackPlugin(fallbackPlugin)) plugins.push(fallbackPlugin);
   if (enabled(quota) && quota?.server !== false) plugins.push(quota?.plugin || OPENCODE_QUOTA_PLUGIN);
   return [...new Set(plugins)];
 }
@@ -55,6 +61,9 @@ export function usesExternalQuotaUi(config: OgbConfig): boolean {
 export function resolveFallbackConfigPath(config: OgbConfig, homeDir: string): string {
   const raw = config.externalPlugins?.autoFallback?.configPath;
   if (raw) return path.resolve(raw.replace(/^~(?=$|\/|\\)/, homeDir));
+  if (isManagedModelFallbackPlugin(config.externalPlugins?.autoFallback?.plugin)) {
+    return path.join(globalOpenCodeConfigDir({ homeDir }), "model-fallback.json");
+  }
   return path.join(globalOpenCodeConfigDir({ homeDir }), "plugins", "fallback.json");
 }
 
@@ -128,6 +137,27 @@ function normalizeAutoFallbackEntry(entry: ModelFallbackEntry): unknown {
 
 export function autoFallbackConfigFromProjection(config: OgbConfig, map: GeminiExtensionProjectionMap): Record<string, unknown> {
   const fallback = config.externalPlugins?.autoFallback ?? {};
+  if (isManagedModelFallbackPlugin(fallback.plugin)) {
+    const agents: Record<string, { fallbackModels: string[] }> = {};
+    for (const item of map.modelFallbacks) {
+      const fallbackModels = item.fallback_models.map(fallbackModelId);
+      if (fallbackModels.length === 0) continue;
+      agents[item.agent] = { fallbackModels };
+    }
+    return {
+      enabled: fallback.enabled === true,
+      defaults: {
+        fallbackOn: ["rate_limit", "quota_exceeded", "5xx", "timeout", "overloaded"],
+        cooldownMs: fallback.cooldownMs ?? 300_000,
+        retryOriginalAfterMs: 900_000,
+        maxFallbackDepth: fallback.maxRetries ?? 3,
+      },
+      agents,
+      logging: fallback.logging !== false,
+      logLevel: "info",
+    };
+  }
+
   const agentFallbacks: Record<string, unknown[]> = {};
 
   for (const item of map.modelFallbacks) {

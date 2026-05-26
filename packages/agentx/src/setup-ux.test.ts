@@ -9,6 +9,7 @@ import { enableMaintainerRole } from "./local-role.js";
 import {
   authProbeAvailableMethods,
   globalStartupPluginSpec,
+  managedModelFallbackPluginSpec,
   missingAuthProbeExpectations,
   missingGlobalTuiRuntimeDependencies,
   OGB_TUI_RUNTIME_DEPENDENCIES,
@@ -39,6 +40,7 @@ function setupUx(options: SetupUxOptions = {}) {
 function expectedGlobalPlugins(configDir: string): string[] {
   return [
     ...OGB_UX_PLUGINS,
+    managedModelFallbackPluginSpec(path.join(configDir, "plugins", "agentx-model-fallback.js")),
     globalStartupPluginSpec(path.join(configDir, "plugins", "ogb-startup-sync.js")),
   ];
 }
@@ -107,7 +109,11 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.equal(globalConfig.plugin.some((plugin: unknown) =>
     typeof plugin === "string" && plugin.startsWith("file:///") && plugin.includes("ogb-startup-sync.js")
   ), true);
+  assert.equal(globalConfig.plugin.includes("opencode-auto-fallback@0.4.3"), false);
   assert.equal(globalConfig.plugin.includes("opencode-auto-fallback@0.4.2"), false);
+  assert.equal(globalConfig.plugin.some((plugin: unknown) =>
+    typeof plugin === "string" && plugin.startsWith("file:///") && plugin.includes("agentx-model-fallback.js")
+  ), true);
   assert.equal(globalConfig.plugin.includes("opencode-websearch-cited@1.2.0"), false);
   assert.equal(globalConfig.share, "manual");
   assert.equal(globalConfig.default_agent, "YOLO");
@@ -160,32 +166,51 @@ test("setupUx writes global OpenCode UX profile and project fallback profile", (
   assert.match(yoloWorker, /external_directory: allow/);
   assert.equal(fs.readFileSync(path.join(configDir, "AGENTS.md"), "utf8"), GLOBAL_AGENTS_MD);
 
-  const fallback = readJson(path.join(configDir, "plugins", "fallback.json"));
+  const fallback = readJson(path.join(configDir, "model-fallback.json"));
   assert.equal(fallback.enabled, true);
-  assert.equal(fallback.cooldownMs, 60_000);
-  assert.equal(fallback.maxRetries, 2);
-  assert.equal(fallback.agentFallbacks["med-chat-triager"][0].model, "openai/gpt-5.4-mini");
-  assert.equal(fallback.agentFallbacks["med-chat-triager"][0].reasoningEffort, "medium");
-  assert.deepEqual(fallback.agentFallbacks.compaction, [
-    {
-      model: "anthropic-auth/claude-haiku-4-5",
-      reasoningEffort: "high",
-    },
-    {
-      model: "gemini-cli/gemini-3.1-flash-lite-preview",
-      reasoningEffort: "medium",
-    },
-    {
-      model: "antigravity/gemini-3.5-flash",
-      reasoningEffort: "medium",
-      variant: "medium",
-    },
+  assert.deepEqual(fallback.defaults, {
+    fallbackOn: ["rate_limit", "quota_exceeded", "5xx", "timeout", "overloaded"],
+    cooldownMs: 300_000,
+    retryOriginalAfterMs: 900_000,
+    maxFallbackDepth: 3,
+  });
+  assert.deepEqual(fallback.agents["med-chat-triager"].fallbackModels, [
+    "openai/gpt-5.4-mini",
+    "anthropic-auth/claude-haiku-4-5",
   ]);
+  assert.deepEqual(fallback.agents.compaction, {
+    fallbackModels: [
+      "anthropic-auth/claude-haiku-4-5",
+      "gemini-cli/gemini-3.1-flash-lite-preview",
+      "antigravity/gemini-3.5-flash",
+    ],
+    models: [
+      "openai/gpt-5.4-mini",
+      "anthropic-auth/claude-haiku-4-5",
+      "gemini-cli/gemini-3.1-flash-lite-preview",
+      "antigravity/gemini-3.5-flash",
+    ],
+  });
+  assert.equal(fallback.logging, true);
+  assert.equal(fallback.logLevel, "info");
+
+  const fallbackPlugin = fs.readFileSync(path.join(configDir, "plugins", "agentx-model-fallback.js"), "utf8");
+  assert.match(fallbackPlugin, /function decodeJsonFile/);
+  assert.match(fallbackPlugin, /compaction\.runtime\.model\.unpinned/);
+
+  assert.equal(fs.existsSync(path.join(configDir, "plugins", "fallback.json")), false);
+  assert.equal(report.writes.some((write) =>
+    pathEndsWith(write.path, "plugins/agentx-model-fallback.js")
+    && write.kind === "plugin"
+    && write.target === "opencode"
+    && write.exclusive === true
+    && write.origin === "ogb:managed-model-fallback"
+  ), true);
 
   const projectConfig = parseJsonc(fs.readFileSync(path.join(projectRoot, ".opencode", "agentx.config.jsonc"), "utf8"));
   assert.equal(projectConfig.openCode.defaultAgent, "YOLO");
   assert.equal(projectConfig.externalPlugins.autoFallback.enabled, true);
-  assert.equal(projectConfig.externalPlugins.autoFallback.plugin, "opencode-auto-fallback@0.4.3");
+  assert.equal(projectConfig.externalPlugins.autoFallback.plugin, "agentx-model-fallback");
   assert.equal(projectConfig.externalPlugins.autoFallback.installProjectPlugin, false);
   assert.equal(projectConfig.modelFallbacks.agents["med-knowledge-architect"].model.variant, "high");
   assert.equal(projectConfig.modelFallbacks.agents["med-chat-triager"].model.variant, "high");

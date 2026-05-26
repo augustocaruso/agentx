@@ -7,7 +7,7 @@ export interface ManagedFileState {
   path: string;
   sha256: string;
   source: "ogb" | "rulesync";
-  kind?: "agent" | "command" | "config" | "context" | "mcp" | "skill" | "tui" | "unknown" | "workflow";
+  kind?: "agent" | "command" | "config" | "context" | "mcp" | "plugin" | "skill" | "tui" | "unknown" | "workflow";
   projection?: "gemini" | "opencode" | "antigravity" | "rulesync";
   origin?: string;
 }

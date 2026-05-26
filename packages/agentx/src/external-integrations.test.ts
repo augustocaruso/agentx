@@ -38,7 +38,7 @@ function projectionMap(overrides: Partial<GeminiExtensionProjectionMap> = {}): G
   };
 }
 
-test("externalOpenCodePlugins keeps runtime fallback before quota server plugin", () => {
+test("externalOpenCodePlugins leaves managed runtime fallback global and keeps quota server plugin", () => {
   const config: OgbConfig = {
     externalPlugins: {
       autoFallback: { enabled: true },
@@ -46,7 +46,8 @@ test("externalOpenCodePlugins keeps runtime fallback before quota server plugin"
     },
   };
 
-  assert.deepEqual(externalOpenCodePlugins(config), [AUTO_FALLBACK_PLUGIN, OPENCODE_QUOTA_PLUGIN]);
+  assert.equal(AUTO_FALLBACK_PLUGIN, "agentx-model-fallback");
+  assert.deepEqual(externalOpenCodePlugins(config), [OPENCODE_QUOTA_PLUGIN]);
 });
 
 test("externalOpenCodePlugins can skip project fallback plugin when installed globally", () => {
@@ -60,7 +61,7 @@ test("externalOpenCodePlugins can skip project fallback plugin when installed gl
   assert.deepEqual(externalOpenCodePlugins(config), [OPENCODE_QUOTA_PLUGIN]);
 });
 
-test("autoFallbackConfigFromProjection converts OGB fallback chains to opencode-auto-fallback config", () => {
+test("autoFallbackConfigFromProjection converts OGB fallback chains to managed model-fallback config", () => {
   const config: OgbConfig = {
     externalPlugins: {
       autoFallback: {
@@ -86,6 +87,47 @@ test("autoFallbackConfigFromProjection converts OGB fallback chains to opencode-
   }));
 
   assert.equal(generated.enabled, true);
+  assert.deepEqual(generated.defaults, {
+    fallbackOn: ["rate_limit", "quota_exceeded", "5xx", "timeout", "overloaded"],
+    cooldownMs: 10_000,
+    retryOriginalAfterMs: 900_000,
+    maxFallbackDepth: 1,
+  });
+  assert.deepEqual(generated.agents, {
+    helper: {
+      fallbackModels: [
+        "openai/gpt-5.4-mini",
+        "anthropic-auth/claude-haiku-4-5",
+      ],
+    },
+  });
+});
+
+test("autoFallbackConfigFromProjection preserves opencode-auto-fallback config for explicit external plugin", () => {
+  const config: OgbConfig = {
+    externalPlugins: {
+      autoFallback: {
+        enabled: true,
+        plugin: "opencode-auto-fallback@0.4.3",
+        cooldownMs: 10_000,
+        maxRetries: 1,
+      },
+    },
+  };
+  const generated = autoFallbackConfigFromProjection(config, projectionMap({
+    modelFallbacks: [
+      {
+        agent: "helper",
+        extension: "study-pack",
+        fallback_models: [
+          { model: "openai/gpt-5.4-mini", variant: "medium", top_p: 0.8 },
+          "anthropic-auth/claude-haiku-4-5",
+        ],
+        source: "agent",
+      },
+    ],
+  }));
+
   assert.equal(generated.cooldownMs, 10_000);
   assert.equal(generated.maxRetries, 1);
   assert.deepEqual(generated.agentFallbacks, {
@@ -132,17 +174,17 @@ test("projectExternalIntegrations writes quota UI prefs and fallback runtime con
 
   assert.ok(report.writes.some((write) => write.relPath === ".opencode/generated/agentx-ui.json"));
   assert.ok(report.writes.some((write) => write.relPath === QUOTA_CONFIG_PATH));
-  assert.ok(report.writes.some((write) => write.relPath === ".config/opencode/plugins/fallback.json"));
+  assert.ok(report.writes.some((write) => write.relPath === ".config/opencode/model-fallback.json"));
 
   const ui = JSON.parse(fs.readFileSync(path.join(projectRoot, ".opencode", "generated", "agentx-ui.json"), "utf8"));
   const quota = JSON.parse(fs.readFileSync(path.join(projectRoot, ...QUOTA_CONFIG_PATH.split("/")), "utf8"));
-  const fallback = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode", "plugins", "fallback.json"), "utf8"));
+  const fallback = JSON.parse(fs.readFileSync(path.join(homeDir, ".config", "opencode", "model-fallback.json"), "utf8"));
 
   assert.equal(ui.quotaPanel, "external");
   assert.equal(quota.enabled, true);
   assert.equal(quota.enableToast, false);
   assert.equal(quota.onlyCurrentModel, true);
-  assert.deepEqual(fallback.agentFallbacks, { helper: ["openai/gpt-5.4-mini"] });
+  assert.deepEqual(fallback.agents, { helper: { fallbackModels: ["openai/gpt-5.4-mini"] } });
 });
 
 test("projectExternalIntegrations keeps quota UI unfiltered by default", () => {

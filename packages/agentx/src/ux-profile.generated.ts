@@ -10,13 +10,13 @@ export const UX_PROFILE_PRESET = {
     "opencode-antigravity-auth@1.6.0",
     "@ex-machina/opencode-anthropic-auth@1.8.1",
     "opencode-update-notifier@0.1.0",
-    "opencode-auto-fallback@0.4.3",
     "opencode-notify",
     "@tarquinen/opencode-dcp@3.1.9",
     "opencode-pty@0.3.4"
   ],
   "disabledPlugins": [
     "opencode-websearch-cited@1.2.0",
+    "opencode-auto-fallback@0.4.3",
     "opencode-auto-fallback@0.4.2"
   ],
   "removedGlobalCommands": [
@@ -271,7 +271,7 @@ export const UX_PROFILE_PRESET = {
     },
     "cooldownMs": 60000,
     "maxRetries": 2,
-    "logging": false
+    "logging": true
   },
   "tuiConfig": {
     "mouse": true,
@@ -301,11 +301,11 @@ export const UX_PROFILE_PRESET = {
       },
       "autoFallback": {
         "enabled": true,
-        "plugin": "opencode-auto-fallback@0.4.3",
+        "plugin": "agentx-model-fallback",
         "installProjectPlugin": false,
         "cooldownMs": 60000,
         "maxRetries": 2,
-        "logging": false
+        "logging": true
       }
     },
     "modelFallbacks": {
