@@ -127,6 +127,7 @@ test("posix installer installs agentx into a stable local folder instead of a gl
   assert.match(text, /cp -R "\$source_dir\/scripts" "\$target_dir\/scripts"/);
   assert.match(text, /npm --prefix "\$target_dir" install --omit=dev/);
   assert.match(text, /write_primary_binary "\$PRIMARY_BIN" "\$CLI_TARGET"/);
+  assert.match(text, /cp -R "\$source_dir\/runtime-plugins" "\$target_dir\/runtime-plugins"/);
   assert.doesNotMatch(text, /npm pack --pack-destination/);
   assert.doesNotMatch(text, /package_tgz/);
   assert.doesNotMatch(text, /npm install --prefix "\$PREFIX" -g/);
@@ -168,6 +169,10 @@ test("windows installer contract runs managed setup through agentx install", () 
   assert.match(
     text,
     /Copy-Item -Path \(Join-Path \$SourceDir "scripts"\) -Destination \(Join-Path \$TargetDir "scripts"\) -Recurse -Force/,
+  );
+  assert.match(
+    text,
+    /Copy-Item -Path \(Join-Path \$SourceDir "runtime-plugins"\) -Destination \(Join-Path \$TargetDir "runtime-plugins"\) -Recurse -Force/,
   );
   assert.match(text, /function Copy-StableCliPayload/);
   assert.match(text, /\$LockDir = Join-Path \$ParentDir "\.\$BaseName\.install\.lock"/);

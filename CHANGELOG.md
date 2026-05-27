@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.5 - Runtime plugins no instalador estável
+
+- Faz os instaladores POSIX e Windows copiarem `runtime-plugins/` para a pasta estável do CLI.
+- Fecha o erro pós-update em que `setup-ux` procurava `agentx-model-fallback.js` em `~/.ai/opencode-pack/agentx-cli/runtime-plugins/` e encontrava `ENOENT`.
+- Adiciona regressões de contrato para impedir release pack com `runtime-plugins` fora da instalação final.
+
 ## 0.3.4 - Fallback gerenciado para compaction
 
 - Substitui o fallback padrão por um plugin local gerenciado, `agentx-model-fallback.js`, instalado por `agentx setup-ux`.

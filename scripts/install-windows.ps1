@@ -351,6 +351,9 @@ function Copy-StableCliPayload($SourceDir, $TargetDir) {
   if (Test-Path (Join-Path $SourceDir "scripts")) {
     Copy-Item -Path (Join-Path $SourceDir "scripts") -Destination (Join-Path $TargetDir "scripts") -Recurse -Force
   }
+  if (Test-Path (Join-Path $SourceDir "runtime-plugins")) {
+    Copy-Item -Path (Join-Path $SourceDir "runtime-plugins") -Destination (Join-Path $TargetDir "runtime-plugins") -Recurse -Force
+  }
   Copy-Item -Path (Join-Path $SourceDir "dist") -Destination (Join-Path $TargetDir "dist") -Recurse -Force
 
   Invoke-NativeCommand $script:NpmCommand @("--prefix", $TargetDir, "install", "--omit=dev")

@@ -282,6 +282,9 @@ copy_stable_cli_payload() {
   if [[ -d "$source_dir/scripts" ]]; then
     cp -R "$source_dir/scripts" "$target_dir/scripts"
   fi
+  if [[ -d "$source_dir/runtime-plugins" ]]; then
+    cp -R "$source_dir/runtime-plugins" "$target_dir/runtime-plugins"
+  fi
   cp -R "$source_dir/dist" "$target_dir/dist"
 
   npm --prefix "$target_dir" install --omit=dev
