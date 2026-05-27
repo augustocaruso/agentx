@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.8 - Windows repassa skip-install-check
+
+- Faz o bootstrap Windows repassar `-SkipInstallCheck` para `install-windows.ps1`.
+- Evita o check interno duplicado no update iniciado pelo Windows depois de `0.3.6+`.
+- Mantem o check final completo com `gemini extensions update --all`.
+
 ## 0.3.7 - Primeiro update tambem atualiza extensoes
 
 - Remove a supressao de Gemini extension update do instalador interno.

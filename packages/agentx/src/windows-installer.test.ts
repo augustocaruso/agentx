@@ -18,6 +18,8 @@ test("Windows bootstrap normalizes quoted path arguments before forwarding them"
   assert.match(text, /\$Prefix = Normalize-PathArgument \$Prefix/);
   assert.match(text, /\$InstallerParams = @\{\}/);
   assert.match(text, /\$InstallerParams\["Project"\] = \$Project/);
+  assert.match(text, /\[switch\]\$SkipInstallCheck/);
+  assert.match(text, /\$InstallerParams\["SkipInstallCheck"\] = \$true/);
   assert.match(text, /& \$Installer\.FullName @InstallerParams/);
   assert.doesNotMatch(text, /@AllInstallerArgs/);
   assert.ok(text.indexOf("$Project = Normalize-PathArgument $Project") < text.indexOf('$InstallerParams["Project"] = $Project'));

@@ -9,6 +9,7 @@ param(
   [switch]$NoOpenCode,
   [switch]$Force,
   [switch]$KeepLegacy,
+  [switch]$SkipInstallCheck,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$InstallerArgs
 )
@@ -149,6 +150,7 @@ try {
   if ($NoOpenCode) { $InstallerParams["NoOpenCode"] = $true }
   if ($Force) { $InstallerParams["Force"] = $true }
   if ($KeepLegacy) { $InstallerParams["KeepLegacy"] = $true }
+  if ($SkipInstallCheck) { $InstallerParams["SkipInstallCheck"] = $true }
 
   Remove-LegacyInstall
   if ($InstallerArgs -and $InstallerArgs.Count -gt 0) {

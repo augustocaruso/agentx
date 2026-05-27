@@ -543,6 +543,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
     ["bootstrap-windows.ps1 clears read-only OpenCode config dir", scripts.windowsBootstrap, "Repair-ReadOnlyDirectory (Join-Path $HOME \".config\\opencode\") \"bootstrap\""],
     ["bootstrap-windows.ps1 uses named parameter splatting", scripts.windowsBootstrap, "$InstallerParams = @{}"],
     ["bootstrap-windows.ps1 forwards Project by name", scripts.windowsBootstrap, "$InstallerParams[\"Project\"] = $Project"],
+    ["bootstrap-windows.ps1 forwards SkipInstallCheck by name", scripts.windowsBootstrap, "$InstallerParams[\"SkipInstallCheck\"] = $true"],
     ["bootstrap-windows.ps1 invokes installer with named params", scripts.windowsBootstrap, "& $Installer.FullName @InstallerParams"],
     ["bootstrap-windows.ps1 legacy cleanup", scripts.windowsBootstrap, "Remove-LegacyInstall"],
     ["bootstrap-windows.ps1 keep legacy opt-in", scripts.windowsBootstrap, "[switch]$KeepLegacy"],
