@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.7 - Primeiro update tambem atualiza extensoes
+
+- Remove a supressao de Gemini extension update do instalador interno.
+- Mantem o update rapido novo usando `--skip-install-check`, mas deixa updates iniciados por versoes antigas rodarem um check interno completo.
+- Garante que o primeiro salto vindo de `0.3.5` tambem preserve `gemini extensions update --all`.
+
 ## 0.3.6 - Update mais rápido sem perder extensões
 
 - Mantém `gemini extensions update --all` no check final do `agentx update`.
