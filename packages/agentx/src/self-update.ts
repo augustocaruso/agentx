@@ -338,7 +338,7 @@ export function buildPostUpdateRitualCommand(options: SelfUpdateOptions = {}, pl
   const command = resolveCommand(BINARY, { homeDir: projectRoot, platform: adapter.platform, env: adapter.env })
     ?? resolveCommand(LEGACY_BINARY, { homeDir: projectRoot, platform: adapter.platform, env: adapter.env })
     ?? BINARY;
-  const args = ["--project", projectRoot, "check", "--force", "--no-extension-update"];
+  const args = ["--project", projectRoot, "check", "--force"];
   if (platform === "win32") args.push("--windows");
   return [command, ...args];
 }
@@ -492,7 +492,7 @@ function psQuote(value: string): string {
 }
 
 function bootstrapArgs(options: SelfUpdateOptions, repo: string, version: string, projectRoot: string): string[] {
-  const args = ["--repo", repo, "--version", version, "--project", projectRoot];
+  const args = ["--repo", repo, "--version", version, "--project", projectRoot, "--skip-install-check"];
   if (options.prefix) args.push("--prefix", normalizePathInput(options.prefix));
   if (options.rulesync) args.push("--rulesync", options.rulesync);
   if (options.setup === false) args.push("--no-setup");
@@ -503,7 +503,7 @@ function bootstrapArgs(options: SelfUpdateOptions, repo: string, version: string
 }
 
 function windowsBootstrapArgs(options: SelfUpdateOptions, repo: string, version: string, projectRoot: string): string[] {
-  const args = ["-Repo", psQuote(repo), "-Version", psQuote(version), "-Project", psQuote(projectRoot)];
+  const args = ["-Repo", psQuote(repo), "-Version", psQuote(version), "-Project", psQuote(projectRoot), "-SkipInstallCheck"];
   if (options.prefix) args.push("-Prefix", psQuote(normalizePathInput(options.prefix)));
   if (options.rulesync) args.push("-Rulesync", psQuote(options.rulesync));
   if (options.setup === false) args.push("-NoSetup");

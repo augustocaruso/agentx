@@ -103,7 +103,7 @@ export function buildInstallerPlan(input: InstallerPlanInput): InstallerPlan {
     steps.push(step("run-check", "check", writes, command));
   } else if (input.intent === "update") {
     steps.push(step("download-release-pack", "update", writes));
-    steps.push(step("run-post-update-check", "check", writes, { tool: BINARY, args: ["--project", projectRoot, "check", "--force", "--no-extension-update", ...(input.windows ? ["--windows"] : [])] }));
+    steps.push(step("run-post-update-check", "check", writes, { tool: BINARY, args: ["--project", projectRoot, "check", "--force", ...(input.windows ? ["--windows"] : [])] }));
   } else if (input.intent === "check") {
     steps.push(step("run-check", "check", writes, command));
   } else {

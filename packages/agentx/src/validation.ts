@@ -597,7 +597,7 @@ function validateReleaseBootstrap(projectRoot: string, checks: ValidationCheck[]
       scripts.windowsInstaller,
       "Copy-Item -Path (Join-Path $SourceDir \"scripts\") -Destination (Join-Path $TargetDir \"scripts\") -Recurse -Force",
     ],
-    ["install-windows.ps1 installs staged runtime dependencies", scripts.windowsInstaller, "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $TargetDir, \"install\", \"--omit=dev\")"],
+    ["install-windows.ps1 installs staged runtime dependencies", scripts.windowsInstaller, "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $TargetDir, \"install\", \"--omit=dev\", \"--no-audit\", \"--no-fund\", \"--prefer-offline\")"],
     ["install-windows.ps1 swaps staged CLI install", scripts.windowsInstaller, "Move-Item -LiteralPath $StagingDir -Destination $InstallDir -Force"],
   ] as const;
   const missing = required.filter(([, text, needle]) => !text.includes(needle)).map(([label]) => label);
@@ -644,7 +644,7 @@ function validateWindowsInstaller(projectRoot: string, checks: ValidationCheck[]
     "$LockDir = Join-Path $ParentDir \".$BaseName.install.lock\"",
     "New-Item -ItemType Directory -Path $LockDir -ErrorAction Stop",
     "Copy-Item -Path (Join-Path $SourceDir \"scripts\") -Destination (Join-Path $TargetDir \"scripts\") -Recurse -Force",
-    "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $TargetDir, \"install\", \"--omit=dev\")",
+    "Invoke-NativeCommand $script:NpmCommand @(\"--prefix\", $TargetDir, \"install\", \"--omit=dev\", \"--no-audit\", \"--no-fund\", \"--prefer-offline\")",
     "Copy-StableCliPayload $SourceDir $StagingDir",
     "Move-Item -LiteralPath $StagingDir -Destination $InstallDir -Force",
     "Install-StableCli $CliDir $CliInstallDir",

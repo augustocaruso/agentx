@@ -6,7 +6,8 @@ param(
   [switch]$NoUx,
   [switch]$NoOpenCode,
   [switch]$Force,
-  [switch]$KeepLegacy
+  [switch]$KeepLegacy,
+  [switch]$SkipInstallCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -331,7 +332,7 @@ function Repair-HomeCommandShim($CliTarget, [bool]$KeepLegacyAlias) {
   }
 }
 
-function Copy-StableCliPayload($SourceDir, $TargetDir) {
+function Copy-StableCliPayload($SourceDir, $TargetDir, $PreviousDir = "") {
   New-Item -ItemType Directory -Force $TargetDir | Out-Null
 
   Copy-Item -Path (Join-Path $SourceDir "package.json") -Destination $TargetDir -Force
@@ -355,8 +356,17 @@ function Copy-StableCliPayload($SourceDir, $TargetDir) {
     Copy-Item -Path (Join-Path $SourceDir "runtime-plugins") -Destination (Join-Path $TargetDir "runtime-plugins") -Recurse -Force
   }
   Copy-Item -Path (Join-Path $SourceDir "dist") -Destination (Join-Path $TargetDir "dist") -Recurse -Force
+  if ($PreviousDir -and (Test-Path (Join-Path $PreviousDir "node_modules"))) {
+    Write-Host "Reusing cached $ProductName dependencies from the previous install..."
+    try {
+      Copy-Item -Path (Join-Path $PreviousDir "node_modules") -Destination (Join-Path $TargetDir "node_modules") -Recurse -Force -ErrorAction Stop
+    } catch {
+      Remove-Item -Recurse -Force (Join-Path $TargetDir "node_modules") -ErrorAction SilentlyContinue
+      Write-Host "Cached dependencies could not be reused; installing fresh dependencies."
+    }
+  }
 
-  Invoke-NativeCommand $script:NpmCommand @("--prefix", $TargetDir, "install", "--omit=dev")
+  Invoke-NativeCommand $script:NpmCommand @("--prefix", $TargetDir, "install", "--omit=dev", "--no-audit", "--no-fund", "--prefer-offline")
   $ExpectedCliTarget = Join-Path $TargetDir "dist\cli.js"
   if (-not (Test-Path $ExpectedCliTarget)) {
     throw "Expected built CLI at $ExpectedCliTarget, but it was not found."
@@ -399,7 +409,7 @@ function Install-StableCli($SourceDir, $InstallDir) {
   $BackupDir = Join-Path $ParentDir ".$BaseName.previous.$PID"
 
   try {
-    Copy-StableCliPayload $SourceDir $StagingDir
+    Copy-StableCliPayload $SourceDir $StagingDir $InstallDir
     if (Test-Path -LiteralPath $InstallDir) {
       Move-Item -LiteralPath $InstallDir -Destination $BackupDir -Force
     }
@@ -547,7 +557,7 @@ if ($Force) {
     $InstallArgs += "--reset-global"
   }
 }
-if ($NoSetup -and (-not $RunHomeSync)) {
+if ($SkipInstallCheck -or ($NoSetup -and (-not $RunHomeSync))) {
   $InstallArgs += "--no-check"
 }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6 - Update mais rápido sem perder extensões
+
+- Mantém `gemini extensions update --all` no check final do `agentx update`.
+- Evita o check interno duplicado do instalador quando ele é chamado pelo fluxo de update.
+- Reaproveita dependências npm da instalação anterior e desliga audit/funding durante o install estável.
+
 ## 0.3.5 - Runtime plugins no instalador estável
 
 - Faz os instaladores POSIX e Windows copiarem `runtime-plugins/` para a pasta estável do CLI.

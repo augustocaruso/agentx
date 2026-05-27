@@ -15,7 +15,7 @@ WRITE_LEGACY_ALIAS="${AGENTX_WRITE_LEGACY_ALIAS:-0}"
 
 usage() {
   cat <<EOF
-Usage: install-posix.sh [--platform darwin|linux] [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [--no-opencode] [--force] [--keep-legacy] [--rulesync MODE]
+Usage: install-posix.sh [--platform darwin|linux] [--project PATH] [--prefix PATH] [--no-setup] [--no-ux] [--no-opencode] [--force] [--keep-legacy] [--rulesync MODE] [--skip-install-check]
 
 Installs the $PRODUCT_NAME CLI, then runs the managed setup through:
 $BINARY_NAME install
@@ -262,6 +262,7 @@ repair_broken_command_shim() {
 copy_stable_cli_payload() {
   local source_dir="$1"
   local target_dir="$2"
+  local previous_dir="${3:-}"
   local cli_target
 
   mkdir -p "$target_dir"
@@ -286,8 +287,15 @@ copy_stable_cli_payload() {
     cp -R "$source_dir/runtime-plugins" "$target_dir/runtime-plugins"
   fi
   cp -R "$source_dir/dist" "$target_dir/dist"
+  if [[ -n "$previous_dir" && -d "$previous_dir/node_modules" ]]; then
+    echo "Reusing cached $PRODUCT_NAME dependencies from the previous install..."
+    if ! cp -R "$previous_dir/node_modules" "$target_dir/node_modules" 2>/dev/null; then
+      rm -rf "$target_dir/node_modules"
+      echo "Cached dependencies could not be reused; installing fresh dependencies."
+    fi
+  fi
 
-  npm --prefix "$target_dir" install --omit=dev
+  npm --prefix "$target_dir" install --omit=dev --no-audit --no-fund --prefer-offline
   cli_target="$target_dir/dist/cli.js"
   if [[ ! -f "$cli_target" ]]; then
     echo "Expected built CLI at $cli_target, but it was not found." >&2
@@ -339,7 +347,7 @@ install_stable_cli() {
   staging_dir="$(mktemp -d "$parent_dir/.$base_name.install.XXXXXX")"
   backup_dir="$parent_dir/.$base_name.previous.$$"
 
-  if ! copy_stable_cli_payload "$source_dir" "$staging_dir"; then
+  if ! copy_stable_cli_payload "$source_dir" "$staging_dir" "$install_dir"; then
     status=$?
   elif [[ -e "$install_dir" || -L "$install_dir" ]] && ! mv "$install_dir" "$backup_dir"; then
     status=$?
@@ -385,6 +393,7 @@ RUN_HOME_SYNC=0
 INSTALL_OPENCODE=1
 FORCE=0
 RULESYNC_MODE="auto"
+SKIP_INSTALL_CHECK=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -422,6 +431,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep-legacy)
       WRITE_LEGACY_ALIAS=1
+      shift
+      ;;
+    --skip-install-check)
+      SKIP_INSTALL_CHECK=1
       shift
       ;;
     -h|--help)
@@ -515,7 +528,7 @@ if [[ "$FORCE" -eq 1 ]]; then
     INSTALL_ARGS+=(--reset-global)
   fi
 fi
-if [[ "$RUN_SETUP" -eq 0 && "$RUN_HOME_SYNC" -eq 0 ]]; then
+if [[ "$SKIP_INSTALL_CHECK" -eq 1 || ( "$RUN_SETUP" -eq 0 && "$RUN_HOME_SYNC" -eq 0 ) ]]; then
   INSTALL_ARGS+=(--no-check)
 fi
 

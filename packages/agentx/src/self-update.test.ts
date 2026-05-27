@@ -43,6 +43,7 @@ test("buildSelfUpdateCommand uses GitHub bootstrap on POSIX platforms", () => {
   assert.match(command[2], /latest/);
   assert.match(command[2], /--project/);
   assert.match(command[2], /ogb project/);
+  assert.match(command[2], /--skip-install-check/);
   assert.match(command[2], /--no-setup/);
   assert.match(command[2], /--no-ux/);
   assert.match(command[2], /--no-opencode/);
@@ -66,6 +67,7 @@ test("buildSelfUpdateCommand uses the Linux bootstrap on Linux", () => {
   assert.doesNotMatch(command[2], /bootstrap-mac\.sh/);
   assert.match(command[2], /--project/);
   assert.match(command[2], /ogb project/);
+  assert.match(command[2], /--skip-install-check/);
 });
 
 test("buildSelfUpdateCommand uses PowerShell bootstrap on Windows", () => {
@@ -84,6 +86,7 @@ test("buildSelfUpdateCommand uses PowerShell bootstrap on Windows", () => {
   assert.match(command.join(" "), /-Repo 'acme\/bridge'/);
   assert.match(command.join(" "), /-Version 'v9\.9\.9'/);
   assert.match(command.join(" "), /-Project 'C:\\Users\\Friend\\Project'/);
+  assert.match(command.join(" "), /-SkipInstallCheck/);
   assert.match(command.join(" "), /-NoSetup/);
   assert.match(command.join(" "), /-NoUx/);
   assert.match(command.join(" "), /-NoOpenCode/);
@@ -133,7 +136,8 @@ test("plain self-update report uses the current product brand", () => {
   assert.equal(output.split("\n")[0], `${DISPLAY} update: preview`);
   assert.match(report.message, new RegExp(`selected ${DISPLAY} release`));
   assert.match(output, new RegExp(`selected ${DISPLAY} release`));
-  assert.match(output, new RegExp(`${BINARY} .* check --force --no-extension-update`));
+  assert.match(output, new RegExp(`${BINARY} .* check --force`));
+  assert.doesNotMatch(output, /check --force --no-extension-update/);
   assert.doesNotMatch(output, /OGB update|selected OGB|OpenCode Gemini Bridge/);
 });
 
@@ -446,16 +450,12 @@ test("writeSelfUpdateSuccessStatus overwrites stale update errors", () => {
   assert.doesNotMatch(saved.message, /old failure/);
 });
 
-test("buildPostUpdateRitualCommand runs a focused forced check once after update", () => {
+test("buildPostUpdateRitualCommand runs a focused forced check with extension updates after update", () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ogb-post-update-"));
   const command = buildPostUpdateRitualCommand({ projectRoot }, "win32");
 
-  assert.equal(command.slice(-6)[0], "--project");
-  assert.equal(command.slice(-5)[0], projectRoot);
-  assert.equal(command.slice(-4)[0], "check");
-  assert.equal(command.slice(-3)[0], "--force");
-  assert.equal(command.slice(-2)[0], "--no-extension-update");
-  assert.equal(command.slice(-1)[0], "--windows");
+  assert.deepEqual(command.slice(-5), ["--project", projectRoot, "check", "--force", "--windows"]);
+  assert.equal(command.includes("--no-extension-update"), false);
 });
 
 test("buildSelfUpdateCommand rejects invalid repo names", () => {

@@ -31,6 +31,8 @@ test("posix installer contract runs managed setup through agentx install", () =>
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-extension-update/);
+  assert.match(text, /--skip-install-check/);
+  assert.match(text, /SKIP_INSTALL_CHECK=1/);
   assert.match(text, /--no-check/);
   assert.match(text, /--reset-global/);
   assert.match(text, /INSTALL_STATUS=\$\?/);
@@ -120,12 +122,13 @@ test("posix installer installs agentx into a stable local folder instead of a gl
   assert.match(text, /copy_stable_cli_payload\(\)/);
   assert.match(text, /lock_dir="\$parent_dir\/\.\$base_name\.install\.lock"/);
   assert.match(text, /staging_dir="\$\(mktemp -d "\$parent_dir\/\.\$base_name\.install\.XXXXXX"\)"/);
-  assert.match(text, /copy_stable_cli_payload "\$source_dir" "\$staging_dir"/);
+  assert.match(text, /copy_stable_cli_payload "\$source_dir" "\$staging_dir" "\$install_dir"/);
   assert.match(text, /mv "\$install_dir" "\$backup_dir"/);
   assert.match(text, /mv "\$staging_dir" "\$install_dir"/);
   assert.match(text, /rm -rf "\$backup_dir"/);
   assert.match(text, /cp -R "\$source_dir\/scripts" "\$target_dir\/scripts"/);
-  assert.match(text, /npm --prefix "\$target_dir" install --omit=dev/);
+  assert.match(text, /cp -R "\$previous_dir\/node_modules" "\$target_dir\/node_modules"/);
+  assert.match(text, /npm --prefix "\$target_dir" install --omit=dev --no-audit --no-fund --prefer-offline/);
   assert.match(text, /write_primary_binary "\$PRIMARY_BIN" "\$CLI_TARGET"/);
   assert.match(text, /cp -R "\$source_dir\/runtime-plugins" "\$target_dir\/runtime-plugins"/);
   assert.doesNotMatch(text, /npm pack --pack-destination/);
@@ -174,10 +177,11 @@ test("windows installer contract runs managed setup through agentx install", () 
     text,
     /Copy-Item -Path \(Join-Path \$SourceDir "runtime-plugins"\) -Destination \(Join-Path \$TargetDir "runtime-plugins"\) -Recurse -Force/,
   );
+  assert.match(text, /\[switch\]\$SkipInstallCheck/);
   assert.match(text, /function Copy-StableCliPayload/);
   assert.match(text, /\$LockDir = Join-Path \$ParentDir "\.\$BaseName\.install\.lock"/);
   assert.match(text, /New-Item -ItemType Directory -Path \$LockDir -ErrorAction Stop/);
-  assert.match(text, /Copy-StableCliPayload \$SourceDir \$StagingDir/);
+  assert.match(text, /Copy-StableCliPayload \$SourceDir \$StagingDir \$InstallDir/);
   assert.match(text, /Move-Item -LiteralPath \$InstallDir -Destination \$BackupDir -Force/);
   assert.match(text, /Move-Item -LiteralPath \$StagingDir -Destination \$InstallDir -Force/);
   assert.doesNotMatch(text, /& \$PrimaryBin @InstallArgs/);
@@ -188,6 +192,7 @@ test("windows installer contract runs managed setup through agentx install", () 
   assert.match(text, /--no-ux/);
   assert.match(text, /--no-install-opencode/);
   assert.match(text, /--no-extension-update/);
+  assert.match(text, /\$SkipInstallCheck/);
   assert.match(text, /--no-check/);
   assert.match(text, /--reset-global/);
   assert.match(text, /\$InstallStatus = \$LASTEXITCODE/);
