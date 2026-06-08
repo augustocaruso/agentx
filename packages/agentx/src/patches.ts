@@ -17,6 +17,11 @@ import {
 import { readStateRecord, stateRecordPath, writeStateRecord } from "./state-store.js";
 import { readTelemetryConfig } from "./telemetry.js";
 import { AGENTX_VERSION } from "./types.js";
+import {
+  ensureHermesAntigravityProvider,
+  hermesAntigravityProviderNeedsInstall,
+  HERMES_ANTIGRAVITY_PROVIDER_PATCH_ID,
+} from "./hermes-antigravity-provider.js";
 
 export const PATCH_STATE_SCHEMA = "agentx.patches.v2";
 
@@ -2107,6 +2112,37 @@ function resendMedicalNotesSnapshotsAfterExtensionUpdate(context: PatchContext):
 }
 
 export const OGB_PATCHES: readonly OgbPatch[] = [
+  {
+    id: HERMES_ANTIGRAVITY_PROVIDER_PATCH_ID,
+    title: "Install Hermes Antigravity provider profile",
+    description: "Installs the user-level Hermes model-provider plugin that exposes Antigravity OAuth models through the OpenCode Antigravity account pool.",
+    category: "compatibility",
+    reason: "Hermes updates replace runtime code, so Antigravity must be distributed as a persistent user plugin under ~/.hermes/plugins/model-providers.",
+    introducedIn: AGENTX_VERSION,
+    removalCondition: "Remove after Hermes ships native Antigravity provider discovery and account-pool integration.",
+    phase: "pre-sync",
+    platforms: ["all"],
+    runOnce: false,
+    destructive: true,
+    needsBackup: true,
+    required: false,
+    applies(context) {
+      return hermesAntigravityProviderNeedsInstall(context.homeDir);
+    },
+    run(context) {
+      const report = ensureHermesAntigravityProvider({
+        homeDir: context.homeDir,
+        dryRun: context.dryRun,
+        backupSession: context.backupSession,
+      });
+      return {
+        status: context.dryRun ? "preview" : "applied",
+        message: report.reason,
+        writes: report.writes,
+        backups: report.backups,
+      };
+    },
+  },
   {
     id: "medical-notes-workbench-pre-update-snapshot",
     title: "Snapshot Medical Notes Workbench drift before extension update",

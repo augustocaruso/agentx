@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.9 - Hermes Antigravity no check
+
+- Faz o `agentx check` instalar o provider Antigravity do Hermes como patch `pre-sync` quando `~/.hermes/hermes-agent` existe.
+- Registra `credential_pool.antigravity` apontando para o pool OAuth do Antigravity usado pelo OpenCode, sem criar provider custom duplicado na config do Hermes.
+- Adiciona regressões para Hermes instalado/ausente e mantém a instalação idempotente.
+
 ## 0.3.8 - Windows repassa skip-install-check
 
 - Faz o bootstrap Windows repassar `-SkipInstallCheck` para `install-windows.ps1`.

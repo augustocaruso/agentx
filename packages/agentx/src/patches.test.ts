@@ -206,6 +206,35 @@ test("dry-run patches preview writes without persisting state", () => {
   assert.equal(fs.existsSync(statePath), false);
 });
 
+test("pre-sync patches install Hermes Antigravity provider when Hermes is installed", () => {
+  const homeDir = tempRoot();
+  fs.mkdirSync(path.join(homeDir, ".hermes", "hermes-agent", "hermes_cli"), { recursive: true });
+
+  const report = runPatchesForPhase({ phase: "pre-sync", projectRoot: homeDir, homeDir, registry: OGB_PATCHES });
+  const result = report.results.find((item) => item.id === "hermes-antigravity-provider-profile");
+
+  assert.equal(result?.status, "applied");
+  assert.match(result?.message ?? "", /Hermes Antigravity provider installed/);
+  assert.equal(fs.existsSync(path.join(homeDir, ".hermes", "plugins", "model-providers", "antigravity", "__init__.py")), true);
+  assert.equal(fs.existsSync(path.join(homeDir, ".hermes", "plugins", "model-providers", "antigravity", "plugin.yaml")), true);
+
+  const auth = JSON.parse(fs.readFileSync(path.join(homeDir, ".hermes", "auth.json"), "utf8"));
+  const entries = auth.credential_pool?.antigravity;
+  assert.equal(Array.isArray(entries), true);
+  assert.equal(entries[0]?.auth_file, path.join(homeDir, ".config", "opencode", "antigravity-accounts.json"));
+  assert.equal(entries[0]?.base_url, "cloudcode-pa://antigravity");
+});
+
+test("pre-sync patches skip Hermes Antigravity provider when Hermes is absent", () => {
+  const homeDir = tempRoot();
+
+  const report = runPatchesForPhase({ phase: "pre-sync", projectRoot: homeDir, homeDir, registry: OGB_PATCHES });
+  const result = report.results.find((item) => item.id === "hermes-antigravity-provider-profile");
+
+  assert.equal(result, undefined);
+  assert.equal(fs.existsSync(path.join(homeDir, ".hermes")), false);
+});
+
 test("patch context exposes backup sessions before destructive writes", () => {
   const homeDir = tempRoot();
   const target = path.join(homeDir, "config.txt");
