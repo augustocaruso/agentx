@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.11 - Hermes Antigravity Claude tools
+
+- Corrige o provider Antigravity do Hermes para modelos Claude com tools, adicionando `functionCall.id` e reaproveitando esse id no `functionResponse`.
+- Replica os metadados essenciais do transformador Claude do plugin Antigravity do OpenCode: `requestType=agent`, `toolConfig.functionCallingConfig.mode=VALIDATED`, `userAgent`, `requestId`, `sessionId` e `anthropic-beta` para thinking.
+- Adiciona regressao que executa o plugin Python gerado e valida o payload Claude antes de chamar Code Assist.
+
 ## 0.3.10 - Hermes Antigravity usa account pool
 
 - Faz o provider Antigravity do Hermes corrigir tambem o cliente `cloudcode-pa://antigravity`, nao apenas o registro do provider.

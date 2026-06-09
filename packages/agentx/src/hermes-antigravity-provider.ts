@@ -182,6 +182,10 @@ def _model_family(model: str) -> str:
     return "gemini"
 
 
+def _is_claude_model(model: str) -> bool:
+    return _model_family(model) == "claude"
+
+
 def _select_account(data: dict[str, Any], model: str) -> dict[str, Any]:
     accounts = data.get("accounts")
     if not isinstance(accounts, list) or not accounts:
@@ -314,16 +318,90 @@ def _resolve_project_id(access_token: str, account: dict[str, Any]) -> str:
     return ANTIGRAVITY_DEFAULT_PROJECT_ID
 
 
-def _antigravity_headers(access_token: str, account: dict[str, Any]) -> dict[str, str]:
+def _antigravity_headers(access_token: str, account: dict[str, Any], model: str = "") -> dict[str, str]:
     fingerprint = account.get("fingerprint") if isinstance(account.get("fingerprint"), dict) else {}
     user_agent = str(fingerprint.get("userAgent") or "").strip() or "antigravity/1.18.3 linux/x64"
-    return {
+    headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Authorization": f"Bearer {access_token}",
         "User-Agent": user_agent,
         "x-activity-request-id": str(uuid.uuid4()),
+        "X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
+        "Client-Metadata": json.dumps(_metadata(), separators=(",", ":")),
     }
+    if _is_claude_model(model) and "thinking" in (model or "").lower():
+        headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
+    return headers
+
+
+def _ensure_claude_tool_config(inner_request: dict[str, Any]) -> None:
+    tool_config = inner_request.get("toolConfig")
+    if not isinstance(tool_config, dict):
+        tool_config = {}
+        inner_request["toolConfig"] = tool_config
+    function_config = tool_config.get("functionCallingConfig")
+    if not isinstance(function_config, dict):
+        function_config = {}
+        tool_config["functionCallingConfig"] = function_config
+    function_config["mode"] = "VALIDATED"
+
+
+def _antigravity_tool_call_id(name: str) -> str:
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", name or "tool").strip("_") or "tool"
+    return f"{safe}-{uuid.uuid4()}"
+
+
+def _add_claude_function_call_ids(inner_request: dict[str, Any]) -> None:
+    contents = inner_request.get("contents")
+    if not isinstance(contents, list):
+        return
+    id_queues: dict[str, list[str]] = {}
+    for content in contents:
+        if not isinstance(content, dict):
+            continue
+        parts = content.get("parts")
+        if not isinstance(parts, list):
+            continue
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            function_call = part.get("functionCall")
+            if isinstance(function_call, dict) and isinstance(function_call.get("name"), str):
+                name = str(function_call["name"])
+                call_id = str(function_call.get("id") or "").strip()
+                if not call_id:
+                    call_id = _antigravity_tool_call_id(name)
+                    function_call["id"] = call_id
+                id_queues.setdefault(name, []).append(call_id)
+
+            function_response = part.get("functionResponse")
+            if isinstance(function_response, dict) and isinstance(function_response.get("name"), str):
+                name = str(function_response["name"])
+                response_id = str(function_response.get("id") or "").strip()
+                if response_id:
+                    continue
+                queue = id_queues.get(name)
+                if queue:
+                    function_response["id"] = queue.pop(0)
+
+
+def _prepare_antigravity_request(*, project_id: str, model: str, inner_request: dict[str, Any]) -> dict[str, Any]:
+    request_id = str(uuid.uuid4())
+    inner_request["sessionId"] = inner_request.get("sessionId") or request_id
+    wrapped: dict[str, Any] = {
+        "project": project_id,
+        "model": model,
+        "user_prompt_id": str(uuid.uuid4()),
+        "request": inner_request,
+        "userAgent": "antigravity",
+        "requestId": request_id,
+    }
+    if _is_claude_model(model):
+        _ensure_claude_tool_config(inner_request)
+        _add_claude_function_call_ids(inner_request)
+        wrapped["requestType"] = "agent"
+    return wrapped
 
 
 def _patch_antigravity_cloudcode_client() -> None:
@@ -374,12 +452,12 @@ def _patch_antigravity_cloudcode_client() -> None:
                 stop=kwargs.get("stop"),
                 thinking_config=thinking_config,
             )
-            wrapped = adapter.wrap_code_assist_request(
+            wrapped = _prepare_antigravity_request(
                 project_id=project_id,
                 model=model,
                 inner_request=inner,
             )
-            headers = _antigravity_headers(access_token, account)
+            headers = _antigravity_headers(access_token, account, model)
             if kwargs.get("stream"):
                 return self._agentx_stream_completion(model=model, wrapped=wrapped, headers=headers)
 

@@ -17,6 +17,7 @@ import {
   type OgbPatch,
   type PatchContext,
 } from "./patches.js";
+import { HERMES_ANTIGRAVITY_PLUGIN_INIT } from "./hermes-antigravity-provider.js";
 import { stateRecordPath } from "./state-store.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
 
@@ -118,7 +119,15 @@ function hasGit(): boolean {
 }
 
 function pythonCommand(): string | undefined {
-  for (const command of ["python3", "python"]) {
+  for (const command of [
+    path.join(os.homedir(), ".hermes", "hermes-agent", ".venv", "bin", "python"),
+    path.join(os.homedir(), ".hermes", "hermes-agent", "venv", "bin", "python"),
+    "python3.13",
+    "python3.12",
+    "python3.11",
+    "python3",
+    "python",
+  ]) {
     const result = spawnSync(command, ["--version"], { encoding: "utf8" });
     if (!result.error && result.status === 0) return command;
   }
@@ -232,6 +241,59 @@ test("pre-sync patches install Hermes Antigravity provider when Hermes is instal
   assert.equal(Array.isArray(entries), true);
   assert.equal(entries[0]?.auth_file, path.join(homeDir, ".config", "opencode", "antigravity-accounts.json"));
   assert.equal(entries[0]?.base_url, "cloudcode-pa://antigravity");
+});
+
+test("Hermes Antigravity plugin adds Claude tool ids before Code Assist requests", { skip: !pythonCommand() }, () => {
+  const homeDir = tempRoot();
+  const scriptPath = path.join(homeDir, "check-antigravity-claude-transform.py");
+  const script = `
+import json
+import sys
+import types
+
+providers = types.ModuleType("providers")
+providers.register_provider = lambda profile: None
+base = types.ModuleType("providers.base")
+
+class ProviderProfile:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+base.ProviderProfile = ProviderProfile
+sys.modules["providers"] = providers
+sys.modules["providers.base"] = base
+
+ns = {}
+exec(${JSON.stringify(HERMES_ANTIGRAVITY_PLUGIN_INIT)}, ns)
+
+inner = {
+    "contents": [
+        {"role": "user", "parts": [{"text": "Use a tool"}]},
+        {"role": "model", "parts": [{"functionCall": {"name": "read_file", "args": {"path": "README.md"}}}]},
+        {"role": "user", "parts": [{"functionResponse": {"name": "read_file", "response": {"output": "ok"}}}]},
+    ],
+    "tools": [{"functionDeclarations": [{"name": "read_file", "parameters": {"type": "object", "properties": {}}}]}],
+}
+
+wrapped = ns["_prepare_antigravity_request"](
+    project_id="jumping-bird-x8khj",
+    model="claude-opus-4-6-thinking",
+    inner_request=inner,
+)
+contents = wrapped["request"]["contents"]
+call = contents[1]["parts"][0]["functionCall"]
+response = contents[2]["parts"][0]["functionResponse"]
+
+assert wrapped["requestType"] == "agent"
+assert wrapped["userAgent"] == "antigravity"
+assert wrapped["request"]["toolConfig"]["functionCallingConfig"]["mode"] == "VALIDATED"
+assert isinstance(call.get("id"), str) and call["id"].startswith("read_file-")
+assert response.get("id") == call["id"]
+print(json.dumps({"call_id": call["id"], "response_id": response["id"]}))
+`;
+  fs.writeFileSync(scriptPath, script, "utf8");
+  const result = spawnSync(pythonCommand()!, [scriptPath], { encoding: "utf8" });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
 
 test("pre-sync patches skip Hermes Antigravity provider when Hermes is absent", () => {
