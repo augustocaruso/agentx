@@ -215,8 +215,17 @@ test("pre-sync patches install Hermes Antigravity provider when Hermes is instal
 
   assert.equal(result?.status, "applied");
   assert.match(result?.message ?? "", /Hermes Antigravity provider installed/);
-  assert.equal(fs.existsSync(path.join(homeDir, ".hermes", "plugins", "model-providers", "antigravity", "__init__.py")), true);
+  const pluginInit = path.join(homeDir, ".hermes", "plugins", "model-providers", "antigravity", "__init__.py");
+  assert.equal(fs.existsSync(pluginInit), true);
   assert.equal(fs.existsSync(path.join(homeDir, ".hermes", "plugins", "model-providers", "antigravity", "plugin.yaml")), true);
+  const pluginSource = fs.readFileSync(pluginInit, "utf8");
+  assert.match(pluginSource, /def _patch_provider_resolver/);
+  assert.match(pluginSource, /model_switch\.resolve_provider_full = resolve_provider_full/);
+  assert.match(pluginSource, /def _patch_antigravity_cloudcode_client/);
+  assert.match(pluginSource, /class AntigravityAwareCloudCodeClient/);
+  assert.match(pluginSource, /def _antigravity_oauth_client/);
+  assert.match(pluginSource, /opencode-antigravity-auth/);
+  assert.equal(pluginSource.includes('tmp.write_text(json.dumps(data, indent=2) + "\\n")'), true);
 
   const auth = JSON.parse(fs.readFileSync(path.join(homeDir, ".hermes", "auth.json"), "utf8"));
   const entries = auth.credential_pool?.antigravity;

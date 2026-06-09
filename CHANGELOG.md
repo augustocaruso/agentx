@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.10 - Hermes Antigravity usa account pool
+
+- Faz o provider Antigravity do Hermes corrigir tambem o cliente `cloudcode-pa://antigravity`, nao apenas o registro do provider.
+- Reusa o account pool OAuth do OpenCode Antigravity para renovar token, escolher conta por familia de modelo e chamar o Code Assist sem cair no OAuth Gemini generico.
+- Adiciona regressao para garantir que o plugin instalado contem o resolver Hermes e o cliente Antigravity-aware.
+
 ## 0.3.9 - Hermes Antigravity no check
 
 - Faz o `agentx check` instalar o provider Antigravity do Hermes como patch `pre-sync` quando `~/.hermes/hermes-agent` existe.
