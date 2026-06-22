@@ -244,6 +244,10 @@ test("pre-sync patches install Hermes Antigravity provider when Hermes is instal
   assert.equal(Array.isArray(entries), true);
   assert.equal(entries[0]?.auth_file, path.join(homeDir, ".config", "opencode", "antigravity-accounts.json"));
   assert.equal(entries[0]?.base_url, "cloudcode-pa://antigravity");
+  assert.match(
+    fs.readFileSync(path.join(homeDir, ".hermes", "hermes-agent", ".env"), "utf8"),
+    /^ANTIGRAVITY_ACCOUNT_POOL=opencode-antigravity-account-pool$/m,
+  );
 });
 
 test("Hermes Antigravity plugin adds Claude tool ids before Code Assist requests", { skip: !pythonCommand() }, () => {

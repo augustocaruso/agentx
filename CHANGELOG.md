@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.14 - Hermes Antigravity env marker
+
+- Escreve `ANTIGRAVITY_ACCOUNT_POOL=opencode-antigravity-account-pool` no `.env` do Hermes para compatibilidade com Hermes v0.17, que exige marcador de provider mesmo quando o token real vem do `credential_pool`.
+- Mantém a escrita idempotente e preserva o restante do `.env`, com regressão cobrindo a instalação do marker.
+
 ## 0.3.13 - Hermes Antigravity fallback catalog
 
 - Corrige também o `fallback_models` gerado no plugin Python do Hermes para anunciar somente os modelos Antigravity validados.

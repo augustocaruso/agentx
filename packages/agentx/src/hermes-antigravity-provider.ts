@@ -6,6 +6,7 @@ export const HERMES_ANTIGRAVITY_PROVIDER_PATCH_ID = "hermes-antigravity-provider
 
 const ANTIGRAVITY_PROVIDER_DIR = path.join(".hermes", "plugins", "model-providers", "antigravity");
 const ANTIGRAVITY_BASE_URL = "cloudcode-pa://antigravity";
+const ANTIGRAVITY_ACCOUNT_POOL_ENV = "ANTIGRAVITY_ACCOUNT_POOL=opencode-antigravity-account-pool";
 
 export const HERMES_ANTIGRAVITY_MODELS = [
   "gemini-3.5-flash-low",
@@ -679,6 +680,7 @@ export interface HermesAntigravityProviderPaths {
   pluginInitPath: string;
   pluginYamlPath: string;
   authPath: string;
+  hermesAgentEnvPath: string;
   opencodeAccountsPath: string;
 }
 
@@ -711,6 +713,7 @@ export function hermesAntigravityProviderPaths(homeDir: string): HermesAntigravi
     pluginInitPath: path.join(pluginDir, "__init__.py"),
     pluginYamlPath: path.join(pluginDir, "plugin.yaml"),
     authPath: path.join(hermesHome, "auth.json"),
+    hermesAgentEnvPath: path.join(hermesAgentDir, ".env"),
     opencodeAccountsPath: path.join(homeDir, ".config", "opencode", "antigravity-accounts.json"),
   };
 }
@@ -741,11 +744,20 @@ function authPoolHasAntigravityEntry(authPath: string, opencodeAccountsPath: str
   );
 }
 
+function envHasAntigravityMarker(envPath: string): boolean {
+  try {
+    return fs.readFileSync(envPath, "utf8").split(/\r?\n/).includes(ANTIGRAVITY_ACCOUNT_POOL_ENV);
+  } catch {
+    return false;
+  }
+}
+
 export function hermesAntigravityProviderCurrent(homeDir: string): boolean {
   const paths = hermesAntigravityProviderPaths(homeDir);
   return textMatches(paths.pluginInitPath, HERMES_ANTIGRAVITY_PLUGIN_INIT)
     && textMatches(paths.pluginYamlPath, HERMES_ANTIGRAVITY_PLUGIN_YAML)
-    && authPoolHasAntigravityEntry(paths.authPath, paths.opencodeAccountsPath);
+    && authPoolHasAntigravityEntry(paths.authPath, paths.opencodeAccountsPath)
+    && envHasAntigravityMarker(paths.hermesAgentEnvPath);
 }
 
 export function hermesAntigravityProviderNeedsInstall(homeDir: string): boolean {
@@ -802,6 +814,29 @@ function ensureAuthPoolEntry(
   fs.writeFileSync(authPath, `${JSON.stringify(auth, null, 2)}\n`, "utf8");
 }
 
+function ensureHermesEnvMarker(
+  envPath: string,
+  options: { dryRun: boolean; backupSession?: BackupSession; backedUp: Set<string>; writes: string[] },
+): void {
+  if (envHasAntigravityMarker(envPath)) return;
+
+  let current = "";
+  try {
+    current = fs.readFileSync(envPath, "utf8");
+  } catch {
+    current = "";
+  }
+  const lines = current.split(/\r?\n/).filter((line) => !line.startsWith("ANTIGRAVITY_ACCOUNT_POOL="));
+  while (lines.length > 0 && lines.at(-1) === "") lines.pop();
+  const next = `${lines.join("\n")}${lines.length > 0 ? "\n" : ""}${ANTIGRAVITY_ACCOUNT_POOL_ENV}\n`;
+
+  options.writes.push(envPath);
+  if (options.dryRun) return;
+  backupIfNeeded(envPath, options.backupSession, options.backedUp);
+  fs.mkdirSync(path.dirname(envPath), { recursive: true });
+  fs.writeFileSync(envPath, next, "utf8");
+}
+
 export function ensureHermesAntigravityProvider(options: {
   homeDir: string;
   dryRun?: boolean;
@@ -836,6 +871,12 @@ export function ensureHermesAntigravityProvider(options: {
     writes,
   });
   ensureAuthPoolEntry(paths.authPath, paths.opencodeAccountsPath, {
+    dryRun,
+    backupSession: options.backupSession,
+    backedUp,
+    writes,
+  });
+  ensureHermesEnvMarker(paths.hermesAgentEnvPath, {
     dryRun,
     backupSession: options.backupSession,
     backedUp,
