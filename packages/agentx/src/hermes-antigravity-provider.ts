@@ -8,14 +8,12 @@ const ANTIGRAVITY_PROVIDER_DIR = path.join(".hermes", "plugins", "model-provider
 const ANTIGRAVITY_BASE_URL = "cloudcode-pa://antigravity";
 
 export const HERMES_ANTIGRAVITY_MODELS = [
+  "gemini-3.5-flash-low",
   "gemini-3.5-flash-medium",
   "gemini-3.5-flash-high",
-  "gemini-3.5-flash-low",
   "gemini-3.1-pro-low",
-  "gemini-3.1-pro-high",
   "claude-sonnet-4-6-thinking",
   "claude-opus-4-6-thinking",
-  "gpt-oss-120b-medium",
 ] as const;
 
 export const HERMES_ANTIGRAVITY_PLUGIN_INIT = `"""Antigravity Code Assist provider profile for Hermes.
@@ -184,6 +182,42 @@ def _model_family(model: str) -> str:
 
 def _is_claude_model(model: str) -> bool:
     return _model_family(model) == "claude"
+
+
+def _merge_thinking_config(existing: Any, updates: dict[str, Any]) -> dict[str, Any]:
+    """Merge model-level thinking defaults without discarding Hermes overrides."""
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    for key, value in updates.items():
+        if value is not None:
+            merged[key] = value
+    return merged
+
+
+def _resolve_antigravity_runtime_model(model: str, thinking_config: Any = None) -> tuple[str, Any]:
+    """Translate Hermes-facing model aliases into Code Assist model ids.
+
+    Antigravity's UI exposes names such as Gemini 3.5 Flash Low/Medium/High,
+    but Code Assist currently accepts the runtime model id \`\`gemini-3-flash\`\`
+    with a separate \`\`thinkingLevel\`\`. Keeping the alias at the Hermes layer
+    preserves user-facing model names while sending the endpoint the contract it
+    actually validates.
+    """
+    requested = str(model or "gemini-3.5-flash-low").strip() or "gemini-3.5-flash-low"
+    lowered = requested.lower()
+
+    flash_match = re.fullmatch(r"gemini-3(?:\\.5)?-flash(?:-(minimal|low|medium|high))?", lowered)
+    if flash_match:
+        level = flash_match.group(1) or "low"
+        return "gemini-3-flash", _merge_thinking_config(thinking_config, {"thinkingLevel": level})
+
+    pro_match = re.fullmatch(r"gemini-3\\.1-pro-(low|high)", lowered)
+    if pro_match and pro_match.group(1) == "low":
+        return requested, _merge_thinking_config(thinking_config, {"thinkingLevel": "low"})
+
+    if lowered == "claude-sonnet-4-6-thinking":
+        return "claude-sonnet-4-6", thinking_config
+
+    return requested, thinking_config
 
 
 def _select_account(data: dict[str, Any], model: str) -> dict[str, Any]:
@@ -434,14 +468,15 @@ def _patch_antigravity_cloudcode_client() -> None:
             if not self._agentx_is_antigravity:
                 return super()._create_chat_completion(**kwargs)
 
-            model = kwargs.get("model") or "gemini-3.5-flash-low"
+            requested_model = str(kwargs.get("model") or "gemini-3.5-flash-low")
             messages = kwargs.get("messages") or []
             extra_body = kwargs.get("extra_body")
             thinking_config = None
             if isinstance(extra_body, dict):
                 thinking_config = extra_body.get("thinking_config") or extra_body.get("thinkingConfig")
+            runtime_model, thinking_config = _resolve_antigravity_runtime_model(requested_model, thinking_config)
 
-            access_token, project_id, account = self._antigravity_context(model)
+            access_token, project_id, account = self._antigravity_context(requested_model)
             inner = adapter.build_gemini_request(
                 messages=messages,
                 tools=kwargs.get("tools"),
@@ -454,12 +489,12 @@ def _patch_antigravity_cloudcode_client() -> None:
             )
             wrapped = _prepare_antigravity_request(
                 project_id=project_id,
-                model=model,
+                model=runtime_model,
                 inner_request=inner,
             )
-            headers = _antigravity_headers(access_token, account, model)
+            headers = _antigravity_headers(access_token, account, runtime_model)
             if kwargs.get("stream"):
-                return self._agentx_stream_completion(model=model, wrapped=wrapped, headers=headers)
+                return self._agentx_stream_completion(model=requested_model, wrapped=wrapped, headers=headers)
 
             last_response = None
             for endpoint in ANTIGRAVITY_ENDPOINTS:
@@ -477,7 +512,7 @@ def _patch_antigravity_cloudcode_client() -> None:
                             f"Invalid JSON from Antigravity Code Assist: {exc}",
                             code="antigravity_code_assist_invalid_json",
                         ) from exc
-                    return adapter._translate_gemini_response(payload, model=model)
+                    return adapter._translate_gemini_response(payload, model=requested_model)
                 if response.status_code in {403, 404} or response.status_code >= 500:
                     continue
                 break

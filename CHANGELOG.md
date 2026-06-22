@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.12 - Hermes Antigravity model map
+
+- Mapeia os aliases Gemini 3.5 Flash Low/Medium/High do Hermes para o runtime `gemini-3-flash` com `thinkingLevel`, que é o contrato aceito pelo Code Assist.
+- Mapeia `claude-sonnet-4-6-thinking` para o runtime `claude-sonnet-4-6`, mantendo o nome de UI no Hermes e preservando `claude-opus-4-6-thinking`.
+- Remove do catálogo Hermes Antigravity os modelos que não passaram na validação real (`gemini-3.1-pro-high` e `gpt-oss-120b-medium`), evitando fallback ou downgrade silencioso.
+- Adiciona regressões para o catálogo anunciado e para o resolver Python gerado.
+
 ## 0.3.11 - Hermes Antigravity Claude tools
 
 - Corrige o provider Antigravity do Hermes para modelos Claude com tools, adicionando `functionCall.id` e reaproveitando esse id no `functionResponse`.

@@ -17,7 +17,7 @@ import {
   type OgbPatch,
   type PatchContext,
 } from "./patches.js";
-import { HERMES_ANTIGRAVITY_PLUGIN_INIT } from "./hermes-antigravity-provider.js";
+import { HERMES_ANTIGRAVITY_MODELS, HERMES_ANTIGRAVITY_PLUGIN_INIT } from "./hermes-antigravity-provider.js";
 import { stateRecordPath } from "./state-store.js";
 import type { RitualProgressEvent } from "./ritual-progress.js";
 
@@ -290,6 +290,63 @@ assert wrapped["request"]["toolConfig"]["functionCallingConfig"]["mode"] == "VAL
 assert isinstance(call.get("id"), str) and call["id"].startswith("read_file-")
 assert response.get("id") == call["id"]
 print(json.dumps({"call_id": call["id"], "response_id": response["id"]}))
+`;
+  fs.writeFileSync(scriptPath, script, "utf8");
+  const result = spawnSync(pythonCommand()!, [scriptPath], { encoding: "utf8" });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
+test("Hermes Antigravity model catalog only advertises validated Gemini and Claude models", () => {
+  assert.deepEqual(HERMES_ANTIGRAVITY_MODELS, [
+    "gemini-3.5-flash-low",
+    "gemini-3.5-flash-medium",
+    "gemini-3.5-flash-high",
+    "gemini-3.1-pro-low",
+    "claude-sonnet-4-6-thinking",
+    "claude-opus-4-6-thinking",
+  ]);
+  assert.equal(HERMES_ANTIGRAVITY_MODELS.includes("gemini-3.1-pro-high" as any), false);
+  assert.equal(HERMES_ANTIGRAVITY_MODELS.includes("gpt-oss-120b-medium" as any), false);
+});
+
+test("Hermes Antigravity plugin maps UI model names to Code Assist runtime ids", { skip: !pythonCommand() }, () => {
+  const homeDir = tempRoot();
+  const scriptPath = path.join(homeDir, "check-antigravity-model-map.py");
+  const script = `
+import json
+import sys
+import types
+
+providers = types.ModuleType("providers")
+providers.register_provider = lambda profile: None
+base = types.ModuleType("providers.base")
+
+class ProviderProfile:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+base.ProviderProfile = ProviderProfile
+sys.modules["providers"] = providers
+sys.modules["providers.base"] = base
+
+ns = {}
+exec(${JSON.stringify(HERMES_ANTIGRAVITY_PLUGIN_INIT)}, ns)
+
+cases = {
+    "gemini-3.5-flash-low": ("gemini-3-flash", {"thinkingLevel": "low"}),
+    "gemini-3.5-flash-medium": ("gemini-3-flash", {"thinkingLevel": "medium"}),
+    "gemini-3.5-flash-high": ("gemini-3-flash", {"thinkingLevel": "high"}),
+    "gemini-3.1-pro-low": ("gemini-3.1-pro-low", {"thinkingLevel": "low"}),
+    "claude-sonnet-4-6-thinking": ("claude-sonnet-4-6", None),
+    "claude-opus-4-6-thinking": ("claude-opus-4-6-thinking", None),
+}
+
+resolved = {}
+for requested, expected in cases.items():
+    resolved[requested] = ns["_resolve_antigravity_runtime_model"](requested, None)
+    assert resolved[requested] == expected, (requested, resolved[requested], expected)
+
+print(json.dumps({key: [value[0], value[1]] for key, value in resolved.items()}, sort_keys=True))
 `;
   fs.writeFileSync(scriptPath, script, "utf8");
   const result = spawnSync(pythonCommand()!, [scriptPath], { encoding: "utf8" });
