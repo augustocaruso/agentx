@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.13 - Hermes Antigravity fallback catalog
+
+- Corrige também o `fallback_models` gerado no plugin Python do Hermes para anunciar somente os modelos Antigravity validados.
+- Adiciona regressão garantindo que o template instalado não contenha `gemini-3.1-pro-high` nem `gpt-oss-120b-medium`.
+
 ## 0.3.12 - Hermes Antigravity model map
 
 - Mapeia os aliases Gemini 3.5 Flash Low/Medium/High do Hermes para o runtime `gemini-3-flash` com `thinkingLevel`, que é o contrato aceito pelo Code Assist.

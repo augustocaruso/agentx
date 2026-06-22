@@ -234,6 +234,9 @@ test("pre-sync patches install Hermes Antigravity provider when Hermes is instal
   assert.match(pluginSource, /class AntigravityAwareCloudCodeClient/);
   assert.match(pluginSource, /def _antigravity_oauth_client/);
   assert.match(pluginSource, /opencode-antigravity-auth/);
+  assert.match(pluginSource, /fallback_models=\(\s*"gemini-3\.5-flash-low",\s*"gemini-3\.5-flash-medium",\s*"gemini-3\.5-flash-high",\s*"gemini-3\.1-pro-low",\s*"claude-sonnet-4-6-thinking",\s*"claude-opus-4-6-thinking",/s);
+  assert.equal(pluginSource.includes("gemini-3.1-pro-high"), false);
+  assert.equal(pluginSource.includes("gpt-oss-120b-medium"), false);
   assert.equal(pluginSource.includes('tmp.write_text(json.dumps(data, indent=2) + "\\n")'), true);
 
   const auth = JSON.parse(fs.readFileSync(path.join(homeDir, ".hermes", "auth.json"), "utf8"));

@@ -649,14 +649,12 @@ antigravity = AntigravityProfile(
     auth_type="api_key",
     supports_health_check=False,
     fallback_models=(
+        "gemini-3.5-flash-low",
         "gemini-3.5-flash-medium",
         "gemini-3.5-flash-high",
-        "gemini-3.5-flash-low",
         "gemini-3.1-pro-low",
-        "gemini-3.1-pro-high",
         "claude-sonnet-4-6-thinking",
         "claude-opus-4-6-thinking",
-        "gpt-oss-120b-medium",
     ),
     default_aux_model="gemini-3.5-flash-low",
 )
